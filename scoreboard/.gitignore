@@ -1,0 +1,5 @@
+#ignore generated results
+*
+*/
+!.gitignore
+!readme_score.txt
