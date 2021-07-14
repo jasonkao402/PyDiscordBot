@@ -74,7 +74,7 @@ class mainbot(commands.Cog):
         '''randomly select one item from your inputs'''
         TGTMEME = random.choice(args)
         await ctx.send(TGTMEME)
-        print(TGTMEME, '\n',*args)
+        print('\n', *args)
 
 def setup(bot):
     bot.add_cog(mainbot(bot))
