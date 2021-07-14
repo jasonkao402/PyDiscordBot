@@ -4,6 +4,8 @@ import itertools
 import discord
 from discord.ext import commands
 
+TITLE = ['真正的砍頭王者', '無頭騎士', '砍頭大師', '專業送頭', '獻上頭顱']
+
 class headCounter(commands.Cog):
     """scoreboard of lame jokes, suggested by 黑醬"""
     __slots__ = ('bot')
@@ -11,8 +13,27 @@ class headCounter(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name = 'sb', aliases = ['記分板'])
+    @commands.command(name = 'sb', aliases = ['記分板', '排行榜'])
     async def _sb(self, ctx):
+        top5 = list(itertools.islice(headCounter.score, 0, 5), start=1)
+        
+        fmt = '\n'.join(f"[**{t}**] {self.bot.get_user(i[0])} ({i[1]}pt)" for (t, i) in zip(TITLE, top5))
+        embed = discord.Embed(title=f'排行榜前 5 名', description=fmt)
+
+        await ctx.send(embed=embed)
+        print(fmt)
+
+    @commands.command(name = 'mybad')
+    async def _mybad(self, ctx):
+        user = ctx.message.author
+        uid = user.id
+        d = {int(i[0]):int(i[1]) for i in headCounter.score}
+        d[uid] = ((d[uid]+1 if uid in d else 1))
+
+        headCounter.score = [(k, v)for k,v in d.items()]
+
+        await ctx.send(f'{user.mention}, 現在有 {d[uid]} 顆頭')
+        '''
         top5 = enumerate(itertools.islice(headCounter.score, 0, 5), start=1)
         
         fmt = '\n'.join(f"[Rank {r}] {self.bot.get_user(i[0])} ({i[1]}pt) : \"{i[2]}\"" for r, i in top5)
@@ -20,14 +41,20 @@ class headCounter(commands.Cog):
 
         await ctx.send(embed=embed)
         print(fmt)
+        '''
 
-    @commands.command(name = 'mybad')
-    async def _mybad(self, ctx, *args):
-        USER = ctx.author.id
-        d = {int(i[0]):(int(i[1]),i[2]) for i in headCounter.score}
-        d[USER] = ((d[USER][0]+1 if USER in d else 1), ''.join(args))
+    @commands.command(name = 'rev')
+    async def _rev(self, ctx):
+        user = ctx.message.author
+        uid = user.id
+        d = {int(i[0]):int(i[1]) for i in headCounter.score}
 
-        headCounter.score = [[k, v[0], v[1]]for k,v in d.items()]
+        if uid in d:
+            d[uid] -= 1
+
+        headCounter.score = [(k, v)for k,v in d.items()]
+
+        await ctx.send(f'{user.mention}, 現在有{d[uid]}顆頭')
 
 absFilePath = os.path.abspath(__file__)
 os.chdir( os.path.dirname(absFilePath))
