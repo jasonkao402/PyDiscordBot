@@ -1,6 +1,7 @@
 from discord.ext import commands
 from pixivpy3 import AppPixivAPI
 import random
+import os
 
 POSINT = '正整數啦!  (´_ゝ`)\n'
 BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
@@ -8,9 +9,12 @@ BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
 class pixivRec(commands.Cog):
     """Main functions."""
     __slots__ = ('bot', "papi")
-
+    
     def __init__(self, bot):
         self.bot = bot
+        
+        absFilePath = os.path.abspath(__file__)
+        os.chdir( os.path.dirname(absFilePath))
         with open('./acc/tokenPX.txt', 'r') as acc_file:
             acc_data = acc_file.read().splitlines()
             REFRESH_TOKEN = acc_data[0]
