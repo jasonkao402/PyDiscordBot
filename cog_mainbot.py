@@ -15,7 +15,7 @@ class mainbot(commands.Cog):
     @commands.command(name = 'hello', aliases = ['greet'])
     async def _hello(self, ctx):
         user = ctx.message.author
-        await ctx.send(f'{user.mention}主人您好 ฅ>ω<ฅ\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscord_chat_bot')
+        await ctx.send(f'{user.mention}主人您好 ฅ>ω<ฅ\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
         print(f'hi, {user.name}')
  
     @commands.command(name = 'ping')
