@@ -25,9 +25,9 @@ def main():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         client.load_extension("cog_mainbot")
         #client.load_extension("cog_trigger_meme")
-        #client.load_extension("cog_ytdl")
+        client.load_extension("cog_ytdl")
         #client.load_extension("cog_pixivrec")
-        client.load_extension("cog_headCounter")
+        #client.load_extension("cog_headCounter")
         print('\nBot is now online.')
 
     @client.command()  
@@ -37,8 +37,8 @@ def main():
         #client.reload_extension("cog_trigger_meme")
         #client.reload_extension("cog_pixivrec")
         #await ctx.send('reloading...50%', delete_after=1)
-        #client.reload_extension("cog_ytdl")
-        client.reload_extension("cog_headCounter")
+        client.reload_extension("cog_ytdl")
+        #client.reload_extension("cog_headCounter")
         await ctx.send('reload completed')
         print('\nBot cog reloaded')
 

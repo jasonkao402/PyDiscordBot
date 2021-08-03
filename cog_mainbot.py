@@ -12,10 +12,19 @@ class mainbot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx, err):
+        if hasattr(ctx.command, 'on_error'):
+            return
+        await ctx.send(f'```{err}```')
+
     @commands.command(name = 'hello', aliases = ['greet'])
     async def _hello(self, ctx):
         user = ctx.message.author
-        await ctx.send(f'{user.mention}主人您好 ฅ>ω<ฅ\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
+        if (user.id == 225833749156331520):
+            await ctx.send(f'{user.mention}主人我來了 ฅ(>ω<)ฅ\n我是只屬於主人的呦~\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
+        else:
+            await ctx.send(f'{user.mention}主人您好，很榮幸能為你服務 <(✿◡‿◡)>\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
         print(f'hi, {user.name}')
  
     @commands.command(name = 'ping')

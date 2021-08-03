@@ -416,11 +416,15 @@ class Music(commands.Cog):
         await player.queue.put(source)
 
     @commands.command(name = 'guess')
-    async def _guess(self, ctx, ans):
+    async def _guess(self, ctx, *args):
         vc = ctx.voice_client
 
-        if not ans:
+        await ctx.send(f'**`{ctx.author}`**: guessed {" ".join(args)}')
+        if not args:
             return await ctx.send('隨便猜也好嘛(´・ω・`)', delete_after=20)
+        elif len(args) > 1:
+            args = args[0]
+            await ctx.send('一次只能猜一個(´・ω・`)，只看第一個囉', delete_after=20)
         if not vc or not vc.is_connected():
             return await ctx.send('I am not currently playing anything!', delete_after=20)
 
@@ -431,7 +435,7 @@ class Music(commands.Cog):
 
         player = self.get_player(ctx)
         player.nans = await player.ans_que.get()
-        if ans in player.nans:
+        if args in player.nans:
             await ctx.send(f'**`{ctx.author}`**: is correct!, next song!')
             vc.stop()
         else:
