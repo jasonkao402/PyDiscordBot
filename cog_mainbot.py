@@ -24,14 +24,14 @@ class mainbot(commands.Cog):
         if (user.id == 225833749156331520):
             await ctx.send(f'{user.mention}主人我來了 ฅ(>ω<)ฅ\n我是只屬於主人的呦~\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
         else:
-            await ctx.send(f'{user.mention}主人您好，很榮幸能為你服務 <(✿◡‿◡)>\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
+            await ctx.send(f'{user.mention}主人您好，很榮幸能為您服務 <(✿◡‿◡)>\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
         print(f'hi, {user.name}')
  
     @commands.command(name = 'ping')
     async def _ping(self, ctx):
         PINGT = round(self.bot.latency*1000)
-        await ctx.send(f'時間線誤差 : {PINGT} ms')
-        print(f'ping : {PINGT}')
+        await ctx.send(f'pong : {PINGT} ms')
+        print(f'pong : {PINGT}')
     
     @commands.command(name = 'dice', aliases = ['亂數'])
     async def _dice(self, ctx, rpt : int = 1):

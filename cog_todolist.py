@@ -1,6 +1,8 @@
 import asyncio
+from discord.ext import commands
+import random
 
-class TestList:
+class TestList(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.queue = asyncio.Queue()
