@@ -9,6 +9,8 @@ NOTPLAYING = '前提是我有播東西啊~(っ・д・)っ\n'
 MISSINGARG = '求後續(´・ω・`)\n'
 POSINT = '正整數啦!  (´_ゝ`)\n'
 MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
+COG_LIST = ['cog_trigger_meme', 'cog_ytdl', 'cog_pixivrec', 'cog_headCounter', 'cog_todolist']
+CUR_LOADED = []
 
 def main():
     absFilePath = os.path.abspath(__file__)
@@ -24,24 +26,70 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         client.load_extension("cog_mainbot")
-        #client.load_extension("cog_trigger_meme")
-        client.load_extension("cog_ytdl")
-        #client.load_extension("cog_pixivrec")
-        #client.load_extension("cog_headCounter")
         print('\nBot is now online.')
 
-    @client.command()  
+    @client.command()
     async def reload(ctx):
-        client.reload_extension("cog_mainbot")
-        await ctx.send('reloading...0%', delete_after=1)
-        #client.reload_extension("cog_trigger_meme")
-        #client.reload_extension("cog_pixivrec")
-        #await ctx.send('reloading...50%', delete_after=1)
-        client.reload_extension("cog_ytdl")
-        #client.reload_extension("cog_headCounter")
-        await ctx.send('reload completed')
-        print('\nBot cog reloaded')
+        #main doesnt need reload = =
+        #client.reload_extension("cog_mainbot")
+        suc = 0
+        for c in COG_LIST:
+            try:
+                client.reload_extension(c)
+                suc += 1
+            except:
+                pass
+        await ctx.send(f'reload {suc} cog done')
+        print(f'reloaded {suc}')
 
+    @client.command()
+    async def load(ctx, *args):
+        suc = 0
+        fal = 0
+        if '-l' in args:
+            await ctx.send(', '.join(COG_LIST))
+            return
+        elif '-a' in args:
+            for cl in COG_LIST:
+                suc+=1
+                client.load_extension(cl)
+            #await ctx.send('full load completed')
+            #return
+        else:
+            for cog in args:
+                if cog in COG_LIST:
+                    suc+=1
+                    CUR_LOADED.append(cog)
+                    client.load_extension(cog)
+                    print(f"{cog} load done")
+                else:
+                    fal+=1
+                    print(f"{cog} not exist")
+        await ctx.send(f'load {suc} done\nload {fal} failed')
+        print('\nBot cog loaded')
+
+    @client.command()
+    async def unload(ctx, *args):
+        suc = 0
+        fal = 0
+        if '-l' in args:
+            await ctx.send(f"current loaded : {', '.join(CUR_LOADED)}")
+            return
+        elif '-a' in args:
+            for cl in CUR_LOADED:
+                client.unload_extension(cl)
+            await ctx.send('full unload completed')
+        try:
+            for cog in args:
+                if cog in COG_LIST:
+                    suc+=1
+                    client.unload_extension(cog)
+                    print(f"{cog} unload done")
+                else:
+                    fal+=1
+                    print(f"{cog} not loaded")
+        except:
+            raise 
     client.run(TOKEN)
 
 if __name__ == "__main__":
