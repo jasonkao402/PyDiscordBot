@@ -9,7 +9,7 @@ NOTPLAYING = '前提是我有播東西啊~(っ・д・)っ\n'
 MISSINGARG = '求後續(´・ω・`)\n'
 POSINT = '正整數啦!  (´_ゝ`)\n'
 MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
-COG_LIST = {'cog_trigger_meme', 'cog_ytdl', 'cog_pixivrec', 'cog_headCounter', 'cog_todolist'}
+COG_LIST = {'cog_trigger_meme', 'cog_ytdl', 'cog_temp', 'cog_pixivrec', 'cog_headCounter', 'cog_todolist'}
 
 def main():
     absFilePath = os.path.abspath(__file__)
@@ -24,17 +24,13 @@ def main():
     @client.event
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
-        # do NOT remove cog_mainbot
-        client.load_extension("cog_mainbot")
-        client.load_extension("cog_todolist")
-        client.load_extension("cog_ytdl")
-        client.LOADED_COG = {'cog_todolist', 'cog_ytdl'}
+        client.LOADED_COG = {'cog_todolist', 'cog_mainbot'}
+        for c in client.LOADED_COG:
+            client.load_extension(c)
         print('\nBot is now online.')
 
     @client.command()
     async def reload(ctx):
-        # main doesnt need reload = =
-        #client.reload_extension("cog_mainbot")
         suc = 0
         for c in client.LOADED_COG:
             client.reload_extension(c)
@@ -47,7 +43,7 @@ def main():
         suc = 0
         fal = 0
         if (not args) or '-l' in args:
-            await ctx.send(',  '.join(COG_LIST))
+            await ctx.send(f"available cogs : {',  '.join(COG_LIST)}")
             return
 
         elif '-a' in args:
@@ -68,7 +64,7 @@ def main():
                 else:
                     fal+=1
                     print(f"{cog} not exist")
-        await ctx.send(f'load {suc} done\nload {fal} failed')
+        await ctx.send(f'load {suc} done,  load {fal} failed')
         print('[C] loaded, now : ', client.LOADED_COG)
 
     @client.command()
@@ -95,7 +91,7 @@ def main():
             else:
                 fal+=1
                 print(f"{cog} not exist")
-        await ctx.send(f'unload {suc} done\nunload {fal} failed')
+        await ctx.send(f'unload {suc} done,  unload {fal} failed')
         print('[C] unloaded, now : ', client.LOADED_COG)
 
     # Game Start!

@@ -9,27 +9,43 @@ from async_timeout import timeout
 from functools import partial
 import youtube_dl
 
+class Song:
+    '''song data object'''
 
-ytdlopts = {
-    'format': 'bestaudio/best',
-    'outtmpl': 'downloads/%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
-    'noplaylist': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0'  # ipv6 addresses cause issues sometimes
-}
+    def __init__(self, title : str, url, source):
+        self.title = title
+        self.url = url
+        self.source = source
 
-ffmpegopts = {
-    'before_options': '-nostdin',
-    'options': '-vn'
-}
+class Loader:
+    '''Retrieves song data via youtube dl'''
+    
+    async def load_song(self, search : str):
+        results = await self._load_from_url(search, noplaylist=True)
+        title, source = results[0]
+        return Song(title, search, source)
 
-ytdl = youtube_dl.YoutubeDL(ytdlopts)
+    async def load_playlist(self, search : str):
+        results = await self._load_from_url(search)
+        return [Song(title, search, source) for (title, source) in results]
+
+    async def _load_from_url(self, url: str, *, noplaylist=False):
+        '''
+        Retrieves one or more songs
+        return (title, source)
+        '''
+
+        ydl = youtube_dl.YoutubeDL({
+            'format': 'bestaudio/best',
+            'noplaylist': noplaylist,
+            'ignoreerrors': True,
+            'nocheckcertificate': True,
+            'logtostderr': False,
+            'quiet': True
+        })
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._extract_songs, ydl, url)
 
 
 class VoiceConnectionError(commands.CommandError):
@@ -38,59 +54,6 @@ class VoiceConnectionError(commands.CommandError):
 
 class InvalidVoiceChannel(VoiceConnectionError):
     """Exception for cases of invalid Voice Channels."""
-
-
-class YTDLSource(discord.PCMVolumeTransformer):
-
-    def __init__(self, source, *, data, requester):
-        super().__init__(source)
-        self.requester = requester
-
-        self.title = data.get('title')
-        self.web_url = data.get('webpage_url')
-
-        # YTDL info dicts (data) have other useful information you might want
-        # https://github.com/rg3/youtube-dl/blob/master/README.md
-
-    def __getitem__(self, item: str):
-        """Allows us to access attributes similar to a dict.
-        This is only useful when you are NOT downloading.
-        """
-        return self.__getattribute__(item)
-
-    @classmethod
-    async def create_source(cls, ctx, search: str, *, loop, download=True):
-        loop = loop or asyncio.get_event_loop()
-
-        to_run = partial(ytdl.extract_info, url=search, download=download)
-        data = await loop.run_in_executor(None, to_run)
-
-        if 'entries' in data:
-            # take first item from a playlist
-            for entry in data['entries']:
-                print(f"Video #{entry['playlist_index']}: {entry['title']}")
-            data = data['entries'][0]
-
-        await ctx.send(f'```ini\n[Added {data["title"]} to the Queue.]\n```', delete_after=15)
-
-        if download:
-            source = ytdl.prepare_filename(data)
-        else:
-            return {'webpage_url': data['webpage_url'], 'requester': ctx.author, 'title': data['title']}
-
-        return cls(discord.FFmpegPCMAudio(source), data=data, requester=ctx.author)
-
-    @classmethod
-    async def regather_stream(cls, data, *, loop):
-        """Used for preparing a stream, instead of downloading.
-        Since Youtube Streaming links expire."""
-        loop = loop or asyncio.get_event_loop()
-        requester = data['requester']
-
-        to_run = partial(ytdl.extract_info, url=data['webpage_url'], download=False)
-        data = await loop.run_in_executor(None, to_run)
-
-        return cls(discord.FFmpegPCMAudio(data['url']), data=data, requester=requester)
 
 
 class MusicPlayer:
@@ -116,7 +79,7 @@ class MusicPlayer:
         self.nans = set()
         self.volume = .5
         self.current = None
-
+        
         ctx.bot.loop.create_task(self.player_loop())
 
     async def player_loop(self):
@@ -128,10 +91,11 @@ class MusicPlayer:
 
             try:
                 # Wait for the next song. If we timeout cancel the player and disconnect...
-                async with timeout(300):  # 5 minutes...
+                async with timeout(400):  # 5 minutes...
                     source = await self.queue.get()
                     self.nans = await self.ans_que.get()
             except asyncio.TimeoutError:
+                print("loop ended")
                 return self.destroy(self._guild)
 
             if not isinstance(source, YTDLSource):
@@ -167,13 +131,14 @@ class MusicPlayer:
         return self.bot.loop.create_task(self._cog.cleanup(guild))
 
 
-class Music(commands.Cog):
+class Musicv2(commands.Cog):
     """Music related commands."""
 
-    __slots__ = ('bot', 'players')
+    __slots__ = ('bot', 'loader', 'players')
 
     def __init__(self, bot):
         self.bot = bot
+        self.loader = Loader()
         self.players = {}
 
     async def cleanup(self, guild):
@@ -271,9 +236,9 @@ class Music(commands.Cog):
 
         # If download is False, source will be a dict which will be used later to regather the stream.
         # If download is True, source will be a discord.FFmpegPCMAudio with a VolumeTransformer.
-        source = await YTDLSource.create_source(ctx, search, loop=self.bot.loop, download=False)
+        await player.loader.load_song(search)
 
-        await player.queue.put(source)
+        #await player.queue.put(song)
 
     @commands.command(name='pause')
     async def pause_(self, ctx):
@@ -434,7 +399,6 @@ class Music(commands.Cog):
             return
 
         player = self.get_player(ctx)
-        print(player.nans)
         if args in player.nans:
             await ctx.send(f'**`{ctx.author}`**: is correct!, next song!')
             vc.stop()
@@ -461,4 +425,4 @@ class Music(commands.Cog):
         #await ctx.send(embed=embed)
 
 def setup(bot):
-    bot.add_cog(Music(bot))
+    bot.add_cog(Musicv2(bot))
