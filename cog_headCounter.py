@@ -1,6 +1,6 @@
 import csv
 import os
-import itertools
+from itertools import islice
 import discord
 from discord.ext import commands
 
@@ -15,9 +15,8 @@ class headCounter(commands.Cog):
 
     @commands.command(name = 'sb', aliases = ['記分板', '排行榜'])
     async def _sb(self, ctx):
-        top5 = list(itertools.islice(headCounter.score, 0, 5), start=1)
-        
-        fmt = '\n'.join(f"[**{t}**] {self.bot.get_user(i[0])} ({i[1]}pt)" for (t, i) in zip(TITLE, top5))
+        top5 = list(islice(headCounter.score, 0, 5))
+        fmt = '\n'.join(f"[**{t}**] {self.bot.get_user(i[0])} ({i[1]} pt)" for (t, i) in zip(TITLE, top5))
         embed = discord.Embed(title=f'排行榜前 5 名', description=fmt)
 
         await ctx.send(embed=embed)
@@ -33,15 +32,6 @@ class headCounter(commands.Cog):
         headCounter.score = [(k, v)for k,v in d.items()]
 
         await ctx.send(f'{user.mention}, 現在有 {d[uid]} 顆頭')
-        '''
-        top5 = enumerate(itertools.islice(headCounter.score, 0, 5), start=1)
-        
-        fmt = '\n'.join(f"[Rank {r}] {self.bot.get_user(i[0])} ({i[1]}pt) : \"{i[2]}\"" for r, i in top5)
-        embed = discord.Embed(title=f'排行榜前 5 名', description=fmt)
-
-        await ctx.send(embed=embed)
-        print(fmt)
-        '''
 
     @commands.command(name = 'rev')
     async def _rev(self, ctx):
@@ -55,6 +45,23 @@ class headCounter(commands.Cog):
         headCounter.score = [(k, v)for k,v in d.items()]
 
         await ctx.send(f'{user.mention}, 現在有{d[uid]}顆頭')
+
+    @commands.command(name = 'save')
+    async def _save(self, ctx):
+        userid = ctx.message.author.id
+        if (userid == 225833749156331520):
+            with open('./scoreboard/score.csv', 'w+', newline='', encoding='utf-8-sig') as output:
+                writer = csv.writer(output, delimiter=',')
+                for i in headCounter.score:
+                    writer.writerow(i)
+            await ctx.send(f'Save done.')
+        else:
+            await ctx.send(f'No permission, bot dev only func.')
+
+    @commands.command(name = 'testuser')
+    async def _testUser(self, ctx, arg):
+        await ctx.send(f"Found {self.bot.get_user(arg)}")
+
 
 absFilePath = os.path.abspath(__file__)
 os.chdir( os.path.dirname(absFilePath))

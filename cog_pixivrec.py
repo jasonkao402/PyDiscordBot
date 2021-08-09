@@ -49,7 +49,7 @@ class pixivRec(commands.Cog):
         
     @commands.command(name = 'psearch')
     async def _psearch(self, ctx, tgt):
-        poll = 34
+        poll = 39
         offset = 0
         accepted = []
         json_result = self.papi.search_illust(tgt, search_target='partial_match_for_tags')

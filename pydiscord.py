@@ -19,7 +19,9 @@ def main():
         acc_data = acc_file.read().splitlines()
         TOKEN = acc_data[0]
     
-    client = commands.Bot(command_prefix='%')
+    intents = discord.Intents.default()
+    intents.members = True
+    client = commands.Bot(command_prefix='%', intents=intents)
 
     @client.event
     async def on_ready():

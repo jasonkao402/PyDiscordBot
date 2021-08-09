@@ -4,7 +4,7 @@ from discord.ext import commands
 class EXT_COG(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
+    
     @commands.Cog.listener()
     async def on_message(self, message):
         USER = message.author
@@ -23,6 +23,6 @@ class EXT_COG(commands.Cog):
         if 'peko' in message.content:
             await message.channel.send(f'{USER.mention} 哈↗哈↗哈↗哈↗哈↗哈↗')
             print(f'{USER.name} peko peko')
-
+    
 def setup(bot):
     bot.add_cog(EXT_COG(bot))
