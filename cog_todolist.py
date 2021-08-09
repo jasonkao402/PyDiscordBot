@@ -70,6 +70,8 @@ class TestList(commands.Cog):
         
         if not self.hnd_que:
             await ctx.send(f"{user.mention}  你是第一個舉手的 好耶!")
+        else:
+            await ctx.message.add_reaction('\U0001F44D')
         self.hnd_que.append(user)
         print(f"{user} hand")
 
