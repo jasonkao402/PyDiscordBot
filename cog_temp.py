@@ -56,7 +56,7 @@ class GuildMusicPlayer:
             source = await self.sngQueue.get()
             await self._channel.send(f'Now Playing: {source.title}')
 
-            self._guild.voice_client.play(discord.FFmpegPCMAudio(source.url, **ffmpeg_opts), after=lambda _: self.bot.loop.call_soon_threadsafe(self.toggleNext.set))
+            self._guild.voice_client.play(discord.FFmpegPCMAudio(source.source, **ffmpeg_opts), after=lambda _: self.bot.loop.call_soon_threadsafe(self.toggleNext.set))
             
             await self.toggleNext.wait()
 
