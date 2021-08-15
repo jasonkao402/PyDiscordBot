@@ -227,7 +227,7 @@ class Musicv2(commands.Cog):
         # Grab up to 5 entries from the queue...
         upcoming = list(itertools.islice(player.sngQueue._queue, 0, 10))
 
-        fmt = '\n'.join(f'**`{i["title"]}`**' for i in upcoming)
+        fmt = '\n'.join(f'**`{i.title}`**' for i in upcoming)
         embed = discord.Embed(title=f'Upcoming - Next {len(upcoming)}', description=fmt)
 
         await ctx.send(embed=embed)
