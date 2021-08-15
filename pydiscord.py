@@ -26,7 +26,7 @@ def main():
     @client.event
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
-        client.LOADED_COG = {'cog_todolist', 'cog_mainbot'}
+        client.LOADED_COG = {'cog_mainbot', 'cog_todolist', 'cog_temp'}
         for c in client.LOADED_COG:
             client.load_extension(c)
         print('\nBot is now online.')

@@ -7,46 +7,13 @@ import sys
 import traceback
 from async_timeout import timeout
 from functools import partial
+from SongData import Loader, Song
 import youtube_dl
 
-class Song:
-    '''song data object'''
-
-    def __init__(self, title : str, url, source):
-        self.title = title
-        self.url = url
-        self.source = source
-
-class Loader:
-    '''Retrieves song data via youtube dl'''
-    
-    async def load_song(self, search : str):
-        results = await self._load_from_url(search, noplaylist=True)
-        title, source = results[0]
-        return Song(title, search, source)
-
-    async def load_playlist(self, search : str):
-        results = await self._load_from_url(search)
-        return [Song(title, search, source) for (title, source) in results]
-
-    async def _load_from_url(self, url: str, *, noplaylist=False):
-        '''
-        Retrieves one or more songs
-        return (title, source)
-        '''
-
-        ydl = youtube_dl.YoutubeDL({
-            'format': 'bestaudio/best',
-            'noplaylist': noplaylist,
-            'ignoreerrors': True,
-            'nocheckcertificate': True,
-            'logtostderr': False,
-            'quiet': True
-        })
-
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._extract_songs, ydl, url)
-
+ffmpeg_opts = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    'options': '-vn'
+}
 
 class VoiceConnectionError(commands.CommandError):
     """Custom Exception class for connection errors."""
@@ -56,14 +23,14 @@ class InvalidVoiceChannel(VoiceConnectionError):
     """Exception for cases of invalid Voice Channels."""
 
 
-class MusicPlayer:
+class GuildMusicPlayer:
     """A class which is assigned to each guild using the bot for Music.
     This class implements a queue and loop, which allows for different guilds to listen to different playlists
     simultaneously.
     When the bot disconnects from the Voice it's instance will be destroyed.
     """
 
-    __slots__ = ('bot', '_guild', '_channel', '_cog', 'queue', 'ans_que', 'next', 'current', 'np', 'nans', 'volume')
+    __slots__ = ('bot', '_guild', '_channel', '_cog', 'queue', 'next', 'current', 'np', 'nans', 'volume')
 
     def __init__(self, ctx):
         self.bot = ctx.bot
@@ -72,7 +39,6 @@ class MusicPlayer:
         self._cog = ctx.cog
 
         self.queue = asyncio.Queue()
-        self.ans_que = asyncio.Queue()
         self.next = asyncio.Event()
 
         self.np = None  # Now playing message
@@ -93,7 +59,6 @@ class MusicPlayer:
                 # Wait for the next song. If we timeout cancel the player and disconnect...
                 async with timeout(400):  # 5 minutes...
                     source = await self.queue.get()
-                    self.nans = await self.ans_que.get()
             except asyncio.TimeoutError:
                 print("loop ended")
                 return self.destroy(self._guild)
@@ -177,7 +142,7 @@ class Musicv2(commands.Cog):
         try:
             player = self.players[ctx.guild.id]
         except KeyError:
-            player = MusicPlayer(ctx)
+            player = GuildMusicPlayer(ctx)
             self.players[ctx.guild.id] = player
 
         return player
@@ -232,11 +197,11 @@ class Musicv2(commands.Cog):
         if not vc:
             await ctx.invoke(self.connect_)
 
-        player = self.get_player(ctx)
+        gplayer = self.get_player(ctx)
 
         # If download is False, source will be a dict which will be used later to regather the stream.
         # If download is True, source will be a discord.FFmpegPCMAudio with a VolumeTransformer.
-        await player.loader.load_song(search)
+        await gplayer.loader.load_song(search)
 
         #await player.queue.put(song)
 

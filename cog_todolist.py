@@ -90,7 +90,7 @@ class TestList(commands.Cog):
     async def _handClear(self, ctx):
         """clear hand queue"""
 
-        firstOne = self.hnd_que.clear()
+        self.hnd_que.clear()
         await ctx.send(f"清空等待列囉~")
         print(f"Cleared queue")
 
