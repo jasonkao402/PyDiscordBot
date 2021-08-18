@@ -10,9 +10,6 @@ class TestList(commands.Cog):
         self.hnd_que = collections.deque()
         self.now_ans = None
 
-    def _updateAns(self):
-        pass
-
     @commands.command(name = 'quiz', aliases=['qz'])
     async def _quiz(self, ctx, *args):
         '''make a quiz'''
@@ -72,7 +69,7 @@ class TestList(commands.Cog):
         if not self.hnd_que:
             await ctx.send(f"{user.mention}  你是第一個舉手的 好耶!")
         else:
-            await ctx.message.add_reaction('\U0001F44D')
+            await ctx.message.add_reaction('👌')
         print(f"{user} hand")
 
     @commands.command(name = 'hf')

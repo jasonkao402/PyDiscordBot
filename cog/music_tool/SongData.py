@@ -37,12 +37,12 @@ class SongRequest:
 class Loader:
     '''Retrieves song data via youtube dl'''
 
-    async def load_song(self, lookup : str):
+    async def load_song(self, lookup : str) -> Song:
         results = await self._load_from_url(lookup, noplaylist=True)
         title, source = results[0]
         return Song(title, lookup, source)
 
-    async def load_playlist(self, lookup : str):
+    async def load_playlist(self, lookup : str) -> list:
         results = await self._load_from_url(lookup)
         return [Song(title, lookup, source) for (title, source) in results]
 
@@ -57,7 +57,8 @@ class Loader:
             'ignoreerrors': True,
             'nocheckcertificate': True,
             'logtostderr': False,
-            'quiet': True
+            'quiet': True,
+            'default_search': 'ytsearch',
         })
 
         loop = asyncio.get_event_loop()
@@ -67,7 +68,7 @@ class Loader:
         info = ydl.extract_info(url, download=False)
         if not info:
             raise DownloadError('Data could not be retrieved')
-            
+        
         if '_type' in info and info['_type'] == 'playlist':
             entries = info['entries']
         else:

@@ -1,5 +1,4 @@
 import csv
-import os
 from itertools import islice
 import discord
 from discord.ext import commands
@@ -61,10 +60,6 @@ class headCounter(commands.Cog):
     @commands.command(name = 'testuser')
     async def _testUser(self, ctx, arg):
         await ctx.send(f"Found {self.bot.get_user(arg)}")
-
-
-absFilePath = os.path.abspath(__file__)
-os.chdir( os.path.dirname(absFilePath))
 
 def setup(bot):
     with open('./scoreboard/score.csv', mode='r', encoding='utf-8-sig') as sco_file:

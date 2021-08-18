@@ -5,7 +5,7 @@ import asyncio
 import itertools
 import sys
 import traceback
-from music_tool.SongData import *
+from cog.music_tool.SongData import *
 
 ffmpeg_opts = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -51,7 +51,7 @@ class GuildMusicPlayer:
         while not self.bot.is_closed():
             self.toggleNext.clear()
             source = await self.sngQueue.get()
-            await self._channel.send(f'Now Playing: {source.title}')
+            self.current = await self._channel.send(f'Now Playing: {source.title}')
 
             self._guild.voice_client.play(discord.FFmpegPCMAudio(source.source, **ffmpeg_opts), after=lambda _: self.bot.loop.call_soon_threadsafe(self.toggleNext.set))
             
@@ -146,16 +146,9 @@ class Musicv2(commands.Cog):
 
         await ctx.send(f'Connected to: **{channel}**', delete_after=20)
 
-    @commands.command(name='play', aliases=['sing', 'yt', 'push', 'p'])
+    @commands.command(name='play', aliases=['yt', 'push'])
     async def play_(self, ctx, *, search: str):
-        """Request a song and add it to the queue.
-        This command attempts to join a valid voice channel if the bot is not already in one.
-        Uses YTDL to automatically search and retrieve a song.
-        Parameters
-        ------------
-        search: str [Required]
-            The song to search and retrieve using YTDL. This could be a simple search, an ID or URL.
-        """
+        """Request a song and add it to the queue."""
         await ctx.trigger_typing()
 
         vc = ctx.voice_client
@@ -164,8 +157,15 @@ class Musicv2(commands.Cog):
             await ctx.invoke(self.connect_)
 
         gplayer = self.get_player(ctx)
-        strmSong = await self.loader.load_song(search)
-        await gplayer.sngQueue.put(strmSong)
+        if 'playlist?list=' in search:
+            strmList = await self.loader.load_playlist(search)
+            for song in strmList:
+                await gplayer.sngQueue.put(song)
+            await ctx.invoke(self.queue_info)
+        else:
+            strmSong = await self.loader.load_song(search)
+            await ctx.send(f'**{strmSong.title}** now in queue!')
+            await gplayer.sngQueue.put(strmSong)
 
     @commands.command(name='pause')
     async def pause_(self, ctx):

@@ -1,7 +1,6 @@
 from discord.ext import commands
 from pixivpy3 import AppPixivAPI
 import random
-import os
 
 POSINT = '正整數啦!  (´_ゝ`)\n'
 BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
@@ -12,9 +11,6 @@ class pixivRec(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
-        
-        absFilePath = os.path.abspath(__file__)
-        os.chdir( os.path.dirname(absFilePath))
         with open('./acc/tokenPX.txt', 'r') as acc_file:
             acc_data = acc_file.read().splitlines()
             REFRESH_TOKEN = acc_data[0]
@@ -63,7 +59,7 @@ class pixivRec(commands.Cog):
             print('[searching...]')
             await ctx.send('[searching...]', delete_after = 5)
             for i in range(poll):
-                print('\r%.2f%%' % (100*(i+1)/poll), end = '')
+                print('\r%.1f%%' % (100*(i+1)/poll), end = '')
                 next_qs = self.papi.parse_qs(json_result.next_url)
                 if not next_qs:
                     print('\n[Stopped]')

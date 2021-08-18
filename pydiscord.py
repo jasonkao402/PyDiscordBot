@@ -28,7 +28,7 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        client.LOADED_COG = {'mainbot', 'queueSys', 'cog_temp'}
+        client.LOADED_COG = {'mainbot', 'queueSys', 'musicV2'}
         for c in client.LOADED_COG:
             client.load_extension(f'cog.{c}')
         print('\nBot is now online.')
