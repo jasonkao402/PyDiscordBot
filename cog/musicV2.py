@@ -5,10 +5,7 @@ import asyncio
 import itertools
 import sys
 import traceback
-from async_timeout import timeout
-from functools import partial
-from SongData import *
-import youtube_dl
+from music_tool.SongData import *
 
 ffmpeg_opts = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -254,7 +251,7 @@ class Musicv2(commands.Cog):
                                    f'requested by `{vc.source.requester}`')
 
     @commands.command(name='volume', aliases=['vol'])
-    async def change_volume(self, ctx, *, vol: float):
+    async def change_volume(self, ctx, *, vol: int):
         """Change the player volume.
         Parameters
         ------------
@@ -272,9 +269,9 @@ class Musicv2(commands.Cog):
         player = self.get_player(ctx)
 
         if vc.source:
-            vc.source.volume = vol / 100
+            vc.source.volume = vol // 100
 
-        player.volume = vol / 100
+        player.volume = vol // 100
         await ctx.send(f'**`{ctx.author}`**: Set the volume to **{vol}%**')
 
     @commands.command(name='stop')

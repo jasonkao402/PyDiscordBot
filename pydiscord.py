@@ -9,7 +9,8 @@ NOTPLAYING = '前提是我有播東西啊~(っ・д・)っ\n'
 MISSINGARG = '求後續(´・ω・`)\n'
 POSINT = '正整數啦!  (´_ゝ`)\n'
 MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
-COG_LIST = {'cog_trigger_meme', 'cog_ytdl', 'cog_temp', 'cog_pixivrec', 'cog_headCounter', 'cog_todolist'}
+
+COG_LIST = {'headCounter', 'mainbot', 'musicV2', 'old_ytdl', 'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme'}
 
 def main():
     absFilePath = os.path.abspath(__file__)
@@ -26,16 +27,17 @@ def main():
     @client.event
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
-        client.LOADED_COG = {'cog_mainbot', 'cog_todolist', 'cog_temp'}
+        # PreLoad
+        client.LOADED_COG = {'mainbot', 'queueSys', 'cog_temp'}
         for c in client.LOADED_COG:
-            client.load_extension(c)
+            client.load_extension(f'cog.{c}')
         print('\nBot is now online.')
 
     @client.command()
     async def reload(ctx):
         suc = 0
         for c in client.LOADED_COG:
-            client.reload_extension(c)
+            client.reload_extension(f'cog.{c}')
             suc += 1
         await ctx.send(f'reload {suc} cog done')
         print(f'[C] reloaded {suc}')
@@ -49,23 +51,23 @@ def main():
             return
 
         elif '-a' in args:
-            for cl in COG_LIST:
+            for c in COG_LIST:
                 suc+=1
-                client.load_extension(cl)
+                client.load_extension(f'cog.{c}')
 
         else:
-            for cog in args:
-                if cog in client.LOADED_COG:
+            for c in args:
+                if c in client.LOADED_COG:
                     fal+=1
-                    print(f"{cog} already loaded")
-                elif cog in COG_LIST:
+                    print(f"{c} already loaded")
+                elif c in COG_LIST:
                     suc+=1
-                    client.LOADED_COG.add(cog)
-                    client.load_extension(cog)
-                    print(f"{cog} load done")
+                    client.LOADED_COG.add(c)
+                    client.load_extension(f'cog.{c}')
+                    print(f"{c} load done")
                 else:
                     fal+=1
-                    print(f"{cog} not exist")
+                    print(f"{c} not exist")
         await ctx.send(f'load {suc} done,  load {fal} failed')
         print('[C] loaded, now : ', client.LOADED_COG)
 
@@ -78,21 +80,21 @@ def main():
             return
 
         elif '-a' in args:
-            for cl in client.LOADED_COG:
-                client.unload_extension(cl)
+            for c in client.LOADED_COG:
+                client.unload_extension(f'cog.{c}')
             # reset loaded set
             client.LOADED_COG = set()
             await ctx.send('full unload completed')
         
-        for cog in args:
-            if cog in client.LOADED_COG:
+        for c in args:
+            if c in client.LOADED_COG:
                 suc+=1
-                client.LOADED_COG.remove(cog)
-                client.unload_extension(cog)
-                print(f"{cog} unload done")
+                client.LOADED_COG.remove(c)
+                client.unload_extension(f'cog.{c}')
+                print(f"{c} unload done")
             else:
                 fal+=1
-                print(f"{cog} not exist")
+                print(f"{c} not exist")
         await ctx.send(f'unload {suc} done,  unload {fal} failed')
         print('[C] unloaded, now : ', client.LOADED_COG)
 

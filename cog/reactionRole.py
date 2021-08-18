@@ -1,17 +1,14 @@
 import discord
 from discord.ext import commands
 
-from extension.cog import CogExtension
-from tools import message
-
-KEYWORD = "[直接不用粗體不是更快嗎] 找我領取身分組"
+KEYWORD = "[⚡] 找我領取身分組 [⚡]"
 roleDict = {"❔": "A", "⚡": "B", "<:nsysu_isc:877159351272493058>": "資安社", "<:nsysu_cc:877159351582871552>": "程式研習社" }
 
-class React(CogExtension):
+class React(commands.Cog):
     __slots__ = ('bot')
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, bot):
+        self.bot = bot
 
     @commands.command(name = 'lrole')
     @commands.has_any_role('botMaster', '社團幹部')
@@ -23,7 +20,7 @@ class React(CogExtension):
     @commands.has_any_role('botMaster', '社團幹部')
     async def _reactionRole(self, ctx):
         await ctx.message.delete()
-        msg = await ctx.send(message.codeblock(KEYWORD))
+        msg = await ctx.send(KEYWORD)
         for k in roleDict:
             try   : await msg.add_reaction(k)
             except: pass

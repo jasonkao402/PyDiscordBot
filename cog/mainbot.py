@@ -58,6 +58,7 @@ class mainbot(commands.Cog):
         print(f'{user.name[:16]}... generated {rpt} numbers')
 
     @commands.command(name = 'clear')
+    @commands.has_permissions(manage_messages=True)
     async def _clear(self, ctx, rpt : int = 1):
         try:
             rpt = int(rpt)
