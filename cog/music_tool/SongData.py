@@ -39,14 +39,21 @@ class Loader:
 
     async def load_song(self, lookup : str) -> Song:
         results = await self._load_from_url(lookup, noplaylist=True)
-        title, source = results[0]
-        return Song(title, lookup, source)
+        title, streamurl = results[0]
+        return Song(title, lookup, streamurl)
 
     async def load_playlist(self, lookup : str) -> list:
-        results = await self._load_from_url(lookup)
-        return [Song(title, lookup, source) for (title, source) in results]
+        return await self._load_from_url(lookup, isProc=False)
+        '''
+        r2 = []
+        for k in results:
+            r2 += await self._load_from_url(f"https://www.youtube.com/watch?v={k[1]}", noplaylist=True)
+            print (r2[-1])
+        
+        return [Song(title, lookup, weburl) for (title, weburl) in results]
+        '''
 
-    async def _load_from_url(self, url: str, *, noplaylist=False):
+    async def _load_from_url(self, url: str, *, noplaylist=False, isProc=True):
         '''Retrieves one or more songs for a url. If its a playlist, returns multiple
         The results are (title, source) pairs
         '''
@@ -62,10 +69,10 @@ class Loader:
         })
 
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._extract_songs, ydl, url)
+        return await loop.run_in_executor(None, self._extract_songs, ydl, url, isProc)
 
-    def _extract_songs(self, ydl: youtube_dl.YoutubeDL, url: str):
-        info = ydl.extract_info(url, download=False)
+    def _extract_songs(self, ydl: youtube_dl.YoutubeDL, url: str, isProc):
+        info = ydl.extract_info(url, download=False, process=isProc)
         if not info:
             raise DownloadError('Data could not be retrieved')
         
@@ -73,6 +80,5 @@ class Loader:
             entries = info['entries']
         else:
             entries = [info]
-
         results = [(e['title'], e['url']) for e in entries]
         return results

@@ -2,9 +2,10 @@ import discord
 from discord.ext import commands
 
 import asyncio
-import itertools
+from itertools import islice
 import sys
 import traceback
+import collections
 from cog.music_tool.SongData import *
 
 ffmpeg_opts = {
@@ -27,7 +28,7 @@ class GuildMusicPlayer:
     When the bot disconnects from the Voice it's instance will be destroyed.
     """
 
-    __slots__ = ('bot', '_guild', '_channel', '_cog', 'sngQueue', 'toggleNext', 'current', 'np', 'nans', 'volume')
+    __slots__ = ('bot', '_guild', '_channel', '_cog', 'sngQueue', 'toggleNext', 'np', 'volume', 'ans_que')
 
     def __init__(self, ctx):
         self.bot = ctx.bot
@@ -37,10 +38,9 @@ class GuildMusicPlayer:
 
         self.sngQueue = asyncio.Queue()
         self.toggleNext = asyncio.Event()
-
+        self.ans_que = collections.deque()
         self.np = None  # Now playing message
         self.volume = .5
-        self.current = None
         
         ctx.bot.loop.create_task(self.player_loop())
 
@@ -51,9 +51,12 @@ class GuildMusicPlayer:
         while not self.bot.is_closed():
             self.toggleNext.clear()
             source = await self.sngQueue.get()
-            self.current = await self._channel.send(f'Now Playing: {source.title}')
+            #self.np = await self._channel.send(f'Now Playing: {source.title}')
 
-            self._guild.voice_client.play(discord.FFmpegPCMAudio(source.source, **ffmpeg_opts), after=lambda _: self.bot.loop.call_soon_threadsafe(self.toggleNext.set))
+            self._guild.voice_client.play(
+                discord.FFmpegPCMAudio(source.source, **ffmpeg_opts),
+                after=lambda _: self.bot.loop.call_soon_threadsafe(self.toggleNext.set)
+            )
             
             await self.toggleNext.wait()
 
@@ -149,7 +152,7 @@ class Musicv2(commands.Cog):
     @commands.command(name='play', aliases=['yt', 'push'])
     async def play_(self, ctx, *, search: str):
         """Request a song and add it to the queue."""
-        await ctx.trigger_typing()
+        
 
         vc = ctx.voice_client
 
@@ -158,10 +161,14 @@ class Musicv2(commands.Cog):
 
         gplayer = self.get_player(ctx)
         if 'playlist?list=' in search:
+            await ctx.trigger_typing()
+            # (0 -> title, 1 -> weburl)
             strmList = await self.loader.load_playlist(search)
-            for song in strmList:
-                await gplayer.sngQueue.put(song)
+            for entry in strmList:
+                tmp = await self.loader.load_song(f"https://www.youtube.com/watch?v={entry[1]}")
+                await gplayer.sngQueue.put(tmp)
             await ctx.invoke(self.queue_info)
+
         else:
             strmSong = await self.loader.load_song(search)
             await ctx.send(f'**{strmSong.title}** now in queue!')
@@ -222,7 +229,7 @@ class Musicv2(commands.Cog):
             return await ctx.send('There are currently no more queued songs.')
 
         # Grab up to 5 entries from the queue...
-        upcoming = list(itertools.islice(player.sngQueue._queue, 0, 10))
+        upcoming = list(islice(player.sngQueue._queue, 0, 10))
 
         fmt = '\n'.join(f'**`{i.title}`**' for i in upcoming)
         embed = discord.Embed(title=f'Upcoming - Next {len(upcoming)}', description=fmt)
@@ -238,8 +245,6 @@ class Musicv2(commands.Cog):
             return await ctx.send('I am not currently connected to voice!', delete_after=20)
 
         player = self.get_player(ctx)
-        if not player.current:
-            return await ctx.send('I am not currently playing anything!')
 
         try:
             # Remove our previous now_playing message.
@@ -286,6 +291,81 @@ class Musicv2(commands.Cog):
             return await ctx.send('I am not currently playing anything!', delete_after=20)
 
         await self.cleanup(ctx.guild)
+
+    @commands.command(name='setlist')
+    async def setlist_(self, ctx):
+
+        player = self.get_player(ctx)
+        qlen = 0
+        with open('./songData/answer.txt', mode='r', encoding='utf-8-sig') as ans_file:
+            acc_data = ans_file.read().splitlines()
+            q = [set(e.split()) for e in acc_data]
+            qlen = len(q)
+            player.ans_que.extend(q)
+
+        await ctx.send(f"loaded {qlen} answers")
+
+    @commands.command(name='noans')
+    async def noans_(self, ctx):
+        player = self.get_player(ctx)
+        if not player.ans_que:
+            print('queue empty')
+            return await ctx.send('queue empty')
+
+        tmp = player.ans_que.popleft()
+        await ctx.send(f'The answer was {tmp}')
+            
+
+    @commands.command(name = 'quiz', aliases=['qz'])
+    async def _quiz(self, ctx, *args):
+        '''make a quiz'''
+        player = self.get_player(ctx)
+        args = set(args)
+        if not args:
+            print("Answer cannot be none")
+            return await ctx.send(f"Answer cannot be none")
+            
+        player.ans_que.append(args)
+        await ctx.send(f"preview ans = {args}")
+        print(f"preview ans = {args}")
+
+    @commands.command(name = 'guess', aliases=['gs'])
+    async def _guess(self, ctx, *args):
+        '''guess the answer'''
+
+        #await ctx.send(f'**`{ctx.author}`**: guessed {"  ".join(args)}')
+        player = self.get_player(ctx)
+        if not player.ans_que:
+            print('queue empty')
+            return await ctx.send('queue empty')
+        elif not args:
+            return await ctx.send('隨便猜也好嘛(´・ω・`)', delete_after=20)
+        elif len(args) > 1:
+            await ctx.send('一次只能猜一個(´・ω・`)，只看第一個囉', delete_after=20)
+        args = args[0].lower()
+        
+        print("corr ans : ", player.ans_que[0], "your ans : ", args)
+
+        if args in player.ans_que[0]:
+            await ctx.send(f'**`{ctx.author}`** guessed {args}: Correct, next!')
+            player.ans_que.popleft()
+        else:
+            await ctx.send(f'**`{ctx.author}`** guessed {args}: Wrong~ Try again?')
+
+    @commands.command(name = 'ans_queue', aliases=['aq'])
+    async def _ans_queue(self, ctx):
+        """get answer queue"""
+        player = self.get_player(ctx)
+        if not player.ans_que:
+            print('queue empty')
+            return await ctx.send('queue empty')
+
+        upcoming = list(islice(player.ans_que, 0, 10))
+        print(*upcoming, sep = '\n')
+        fmt = '\n'.join(str(i) for i in upcoming)
+
+        await ctx.send(embed=discord.Embed(title=f'Next {len(upcoming)} Answer', description=fmt))
+    
 
 def setup(bot):
     bot.add_cog(Musicv2(bot))

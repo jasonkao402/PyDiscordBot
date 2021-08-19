@@ -28,10 +28,14 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        client.LOADED_COG = {'mainbot', 'queueSys', 'musicV2'}
+        client.LOADED_COG = {'mainbot', 'musicV2'}
         for c in client.LOADED_COG:
             client.load_extension(f'cog.{c}')
-        print('\nBot is now online.')
+        print('\nBot ready.\n')
+
+    @client.event
+    async def on_connect():
+        print(f'Discord latency: {round(client.latency*1000)} ms')
 
     @client.command()
     async def reload(ctx):
