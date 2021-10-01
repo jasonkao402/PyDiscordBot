@@ -37,6 +37,11 @@ class SongRequest:
 class Loader:
     '''Retrieves song data via youtube dl'''
 
+    async def load_local_song(self, lookup : str) -> Song:
+        #results = await self._load_from_url(lookup, noplaylist=True)
+        title, streamurl = lookup, lookup
+        return Song(title, lookup, streamurl)
+
     async def load_song(self, lookup : str) -> Song:
         results = await self._load_from_url(lookup, noplaylist=True)
         title, streamurl = results[0]
@@ -61,11 +66,13 @@ class Loader:
         ydl = youtube_dl.YoutubeDL({
             'format': 'bestaudio/best',
             'noplaylist': noplaylist,
-            'ignoreerrors': True,
-            'nocheckcertificate': True,
-            'logtostderr': False,
-            'quiet': True,
             'default_search': 'ytsearch',
+            'outtmpl': '/data/music/%(title)s.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }]
         })
 
         loop = asyncio.get_event_loop()

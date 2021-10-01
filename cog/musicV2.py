@@ -40,7 +40,7 @@ class GuildMusicPlayer:
         self.toggleNext = asyncio.Event()
         self.ans_que = collections.deque()
         self.np = None  # Now playing message
-        self.volume = .5
+        self.volume = .2
         
         ctx.bot.loop.create_task(self.player_loop())
 
@@ -52,7 +52,7 @@ class GuildMusicPlayer:
             self.toggleNext.clear()
             source = await self.sngQueue.get()
             #self.np = await self._channel.send(f'Now Playing: {source.title}')
-
+            print(f"trying to play {source.source}")
             self._guild.voice_client.play(
                 discord.FFmpegPCMAudio(source.source, **ffmpeg_opts),
                 after=lambda _: self.bot.loop.call_soon_threadsafe(self.toggleNext.set)
@@ -165,15 +165,18 @@ class Musicv2(commands.Cog):
             # (0 -> title, 1 -> weburl)
             strmList = await self.loader.load_playlist(search)
             for entry in strmList:
-                tmp = await self.loader.load_song(f"https://www.youtube.com/watch?v={entry[1]}")
-                await gplayer.sngQueue.put(tmp)
+                await gplayer.sngQueue.put(await self.loader.load_song(f"https://www.youtube.com/watch?v={entry[1]}"))
             await ctx.invoke(self.queue_info)
 
         else:
             strmSong = await self.loader.load_song(search)
             await ctx.send(f'**{strmSong.title}** now in queue!')
             await gplayer.sngQueue.put(strmSong)
-
+        '''
+        strmSong = await self.loader.load_local_song(search)
+        await ctx.send(f'**{strmSong.title}** now in queue!')
+        await gplayer.sngQueue.put(strmSong)
+        '''
     @commands.command(name='pause')
     async def pause_(self, ctx):
         """Pause the currently playing song."""
@@ -231,7 +234,7 @@ class Musicv2(commands.Cog):
         # Grab up to 5 entries from the queue...
         upcoming = list(islice(player.sngQueue._queue, 0, 10))
 
-        fmt = '\n'.join(f'**`{i.title}`**' for i in upcoming)
+        fmt = '\n'.join(f'`{i.title} | request by - {ctx.author}\n`' for i in upcoming)
         embed = discord.Embed(title=f'Upcoming - Next {len(upcoming)}', description=fmt)
 
         await ctx.send(embed=embed)
@@ -246,14 +249,7 @@ class Musicv2(commands.Cog):
 
         player = self.get_player(ctx)
 
-        try:
-            # Remove our previous now_playing message.
-            await player.np.delete()
-        except discord.HTTPException:
-            pass
-
-        player.np = await ctx.send(f'**Now Playing:** `{vc.source.title}` '
-                                   f'requested by `{vc.source.requester}`')
+        await ctx.send(f'**Now Playing:** `{vc.source.title}`requested by `{vc.source.requester}`')
 
     @commands.command(name='volume', aliases=['vol'])
     async def change_volume(self, ctx, *, vol: int):
