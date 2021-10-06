@@ -1,6 +1,13 @@
 import asyncio
 import youtube_dl
+import collections
+import discord
 from youtube_dl.utils import DownloadError
+
+ffmpeg_opts = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    'options': '-vn'
+}
 
 class Song:
     '''song data object'''
@@ -89,3 +96,46 @@ class Loader:
             entries = [info]
         results = [(e['title'], e['url']) for e in entries]
         return results
+
+class GuildMusicPlayer:
+    """A class which is assigned to each guild using the bot for Music.
+    This class implements a queue and loop, which allows for different guilds to listen to different playlists
+    simultaneously.
+    When the bot disconnects from the Voice it's instance will be destroyed.
+    """
+
+    __slots__ = ('bot', '_guild', '_channel', '_cog', 'sngQueue', 'toggleNext', 'np', 'volume', 'ans_que')
+
+    def __init__(self, ctx):
+        self.bot = ctx.bot
+        self._guild = ctx.guild
+        self._channel = ctx.channel
+        self._cog = ctx.cog
+
+        self.sngQueue = asyncio.Queue()
+        self.toggleNext = asyncio.Event()
+        self.ans_que = collections.deque()
+        self.np = None  # Now playing message
+        self.volume = .2
+        
+        ctx.bot.loop.create_task(self.player_loop())
+
+    async def player_loop(self):
+        """Our main player loop."""
+        await self.bot.wait_until_ready()
+
+        while not self.bot.is_closed():
+            self.toggleNext.clear()
+            s = await self.sngQueue.get()
+            #self.np = await self._channel.send(f'Now Playing: {source.title}')
+            print(f"trying to play {s.source}")
+            self._guild.voice_client.play(
+                discord.FFmpegPCMAudio(source=s.source, **ffmpeg_opts),
+                after=lambda _: self.bot.loop.call_soon_threadsafe(self.toggleNext.set)
+            )
+            
+            await self.toggleNext.wait()
+
+    def destroy(self, guild):
+        """Disconnect and cleanup the player."""
+        return self.bot.loop.create_task(self._cog.cleanup(guild))
