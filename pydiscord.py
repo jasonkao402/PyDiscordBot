@@ -28,7 +28,7 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        client.LOADED_COG = {'mainbot', 'musicV2'}
+        client.LOADED_COG = {'mainbot', 'queueSys'}
         for c in client.LOADED_COG:
             client.load_extension(f'cog.{c}')
         print('\nBot ready.\n')
