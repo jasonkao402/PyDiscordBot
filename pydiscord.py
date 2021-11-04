@@ -102,6 +102,12 @@ def main():
         await ctx.send(f'unload {suc} done,  unload {fal} failed')
         print('[C] unloaded, now : ', client.LOADED_COG)
 
+    @client.command()
+    @commands.has_role('botMaster')
+    async def close(ctx):
+        await ctx.send('Bye bye.')
+        await client.close()
+
     # Game Start!
     client.run(TOKEN)
 

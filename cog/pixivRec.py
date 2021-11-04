@@ -59,7 +59,7 @@ class pixivRec(commands.Cog):
             print('[searching...]')
             await ctx.send('[searching...]', delete_after = 5)
             for i in range(poll):
-                print('\r%.1f%%' % (100*(i+1)/poll), end = '')
+                print(f'{i}/{poll}', end = '\r')
                 next_qs = self.papi.parse_qs(json_result.next_url)
                 if not next_qs:
                     print('\n[Stopped]')

@@ -79,7 +79,7 @@ class mainbot(commands.Cog):
         await ctx.send(TGTMEME)
         print(f'{userName} : {TGTMEME}')
     
-    @commands.command(name = 'sel', aliases = ['rnd', 'rs'])
+    @commands.command(name = 'sel', aliases = ['rnd', 'rs', '幫我選一個'])
     async def _sel(self, ctx, *args):
         '''randomly select one item from your inputs'''
         TGTMEME = random.choice(args)
