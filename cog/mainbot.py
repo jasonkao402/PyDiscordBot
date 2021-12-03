@@ -5,6 +5,9 @@ POSINT = '正整數啦!  (´_ゝ`)\n'
 BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
 MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
 
+def clamp(n, minn=0, maxn=100):
+    return max(min(maxn, n), minn)
+
 class mainbot(commands.Cog):
     """Main functions."""
     __slots__ = ('bot')
@@ -34,27 +37,29 @@ class mainbot(commands.Cog):
         print(f'pong : {PINGT}')
     
     @commands.command(name = 'dice', aliases = ['亂數'])
-    async def _dice(self, ctx, rpt : int = 1):
+    async def _dice(self, ctx, rpt):
         user = ctx.message.author
-        s = ''
+        #s = ''
         try:
-            rpt = int(rpt)
+            a, b = map(clamp, map(int, rpt.split("d", 1)))
+            s = sum(( random.randint(1, b) for _ in range(a)))
+            await ctx.send(f"{rpt} = {s}")
         except:
             await ctx.send(BADARGUMENT, delete_after=20)
             print('dice cmd error')
             return
 
-        if rpt <= 0 : 
-            s += self.POSINT
-        elif rpt <= 10 :
-            for _ in rpt:
-                r = random.randint(1,6)
-                s += (('非洲酋長' if r < 5 else '恭喜歐皇') + f', 抽出 {r} 星卡\n')
-        else :
-            s += ('抽那麼多不怕沒錢嗎? Σ(O△O)\n提示 : 最多10抽\n')
-        s += (f'繼續敗家, {user.name}?')
-        #await ctx.send(content=s, file=discord.File('fbk_question.gif'))
-        await ctx.send(content=s)
+        # if rpt <= 0 : 
+        #     s += self.POSINT
+        # elif rpt <= 10 :
+        #     for _ in rpt:
+        #         r = random.randint(1,6)
+        #         s += (('非洲酋長' if r < 5 else '恭喜歐皇') + f', 抽出 {r} 星卡\n')
+        # else :
+        #     s += ('抽那麼多不怕沒錢嗎? Σ(O△O)\n提示 : 最多10抽\n')
+        # s += (f'繼續敗家, {user.name}?')
+        # await ctx.send(content=s, file=discord.File('fbk_question.gif'))
+        # await ctx.send(content=s)
         print(f'{user.name[:16]}... generated {rpt} numbers')
 
     @commands.command(name = 'clear')
