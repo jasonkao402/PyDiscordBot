@@ -10,7 +10,7 @@ MISSINGARG = '求後續(´・ω・`)\n'
 POSINT = '正整數啦!  (´_ゝ`)\n'
 MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
 
-COG_LIST = {'headCounter', 'mainbot', 'musicV2', 'old_ytdl', 'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme'}
+COG_LIST = {'headCounter', 'mainbot', 'musicV2', 'old_ytdl', 'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 'dice_detect'}
 
 def main():
     absFilePath = os.path.abspath(__file__)
@@ -28,7 +28,7 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        client.LOADED_COG = {'mainbot', 'queueSys'}
+        client.LOADED_COG = {'mainbot', 'queueSys', 'dice_detect'}
         for c in client.LOADED_COG:
             client.load_extension(f'cog.{c}')
         print('\nBot ready.\n')

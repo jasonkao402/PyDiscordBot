@@ -36,32 +36,6 @@ class mainbot(commands.Cog):
         await ctx.send(f'pong : {PINGT} ms')
         print(f'pong : {PINGT}')
     
-    @commands.command(name = 'dice', aliases = ['亂數'])
-    async def _dice(self, ctx, rpt):
-        user = ctx.message.author
-        #s = ''
-        try:
-            a, b = map(clamp, map(int, rpt.split("d", 1)))
-            s = sum(( random.randint(1, b) for _ in range(a)))
-            await ctx.send(f"{rpt} = {s}")
-        except:
-            await ctx.send(BADARGUMENT, delete_after=20)
-            print('dice cmd error')
-            return
-
-        # if rpt <= 0 : 
-        #     s += self.POSINT
-        # elif rpt <= 10 :
-        #     for _ in rpt:
-        #         r = random.randint(1,6)
-        #         s += (('非洲酋長' if r < 5 else '恭喜歐皇') + f', 抽出 {r} 星卡\n')
-        # else :
-        #     s += ('抽那麼多不怕沒錢嗎? Σ(O△O)\n提示 : 最多10抽\n')
-        # s += (f'繼續敗家, {user.name}?')
-        # await ctx.send(content=s, file=discord.File('fbk_question.gif'))
-        # await ctx.send(content=s)
-        print(f'{user.name[:16]}... generated {rpt} numbers')
-
     @commands.command(name = 'clear')
     @commands.has_permissions(manage_messages=True)
     async def _clear(self, ctx, rpt : int = 1):
