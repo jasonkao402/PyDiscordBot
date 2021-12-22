@@ -13,7 +13,7 @@ class dicebot(commands.Cog):
         if USER.bot:
             return
 
-        if re.match('([1-9]\d*)?[Dd]?[1-9]\d*', s):
+        if re.match('([1-9]\d*)?[Dd][1-9]\d*', s):
             a, b = map(clamp, map(int, s.split("d", 1)))
             if a > 1 and a < 10:
                 ans = ", ".join([str(random.randint(1, b)) for _ in range(a)])
