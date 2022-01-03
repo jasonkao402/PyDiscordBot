@@ -16,10 +16,12 @@ class dicebot(commands.Cog):
         if re.match('([1-9]\d*)?[Dd][1-9]\d*', s):
             a, b = map(clamp, map(int, s.split("d", 1)))
             if a > 1 and a < 10:
-                ans = ", ".join([str(random.randint(1, b)) for _ in range(a)])
+                tmp = [random.randint(1, b) for _ in range(a)]
+                detail = f'[{", ".join(map(str, tmp))}] = '
+                ans = sum(tmp)
             else:
-                ans = sum(random.randint(1, b) for _ in range(a))
-            await message.channel.send(f"{s} = [{ans}]")
+                detail, ans = '', sum(random.randint(1, b) for _ in range(a))
+            await message.channel.send(f"{s} = {detail}{ans}")
 
 def setup(bot):
     bot.add_cog(dicebot(bot))
