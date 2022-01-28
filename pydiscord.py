@@ -11,7 +11,10 @@ MISSINGARG = '求後續(´・ω・`)\n'
 POSINT = '正整數啦!  (´_ゝ`)\n'
 MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
 
-COG_LIST = {'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl', 'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 'dice_detect'}
+COG_LIST = {
+    'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl',
+    'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 'trpgUtil'
+}
 
 def main():
     absFilePath = os.path.abspath(__file__)
@@ -21,15 +24,14 @@ def main():
         acc_data = acc_file.read().splitlines()
         TOKEN = acc_data[0]
     
-    intents = discord.Intents.default()
-    intents.members = True
+    intents = discord.Intents.all()
     botCli = commands.Bot(command_prefix='%', intents=intents)
     slash = SlashCommand(botCli, override_type = True, sync_commands = True)
     @botCli.event
     async def on_ready():
         await botCli.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        botCli.LOADED_COG = {'mainbot', 'queueSys', 'dice_detect', 'slash'}
+        botCli.LOADED_COG = {'mainbot', 'queueSys', 'trpgUtil', 'slash'}
         for c in botCli.LOADED_COG:
             botCli.load_extension(f'cog.{c}')
         print('\nBot ready.\n')

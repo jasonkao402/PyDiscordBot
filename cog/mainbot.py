@@ -1,12 +1,10 @@
 from discord.ext import commands
 import random
+from cog.utilFunc import *
 
 POSINT = '正整數啦!  (´_ゝ`)\n'
 BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
 MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
-
-def clamp(n, minn=0, maxn=100):
-    return max(min(maxn, n), minn)
 
 class mainbot(commands.Cog):
     """Main functions."""
