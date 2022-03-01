@@ -4,6 +4,7 @@ import re
 from cog.utilFunc import *
 
 class trpgUtil(commands.Cog):
+    
     @commands.Cog.listener()
     async def on_message(self, message):
         USER = message.author
@@ -20,8 +21,8 @@ class trpgUtil(commands.Cog):
             else:
                 detail, ans = '', sum(random.randint(1, b) for _ in range(a))
             await message.channel.send(f"{s} = {detail}{ans}")
-
-    @commands.command(name = 'delComment')
+    
+    @commands.command(name = 'delComment', aliases = ['dc'])
     @commands.has_permissions(manage_messages=True)
     async def _delComment(self, ctx, rpt=16):
         '''delete comments'''
@@ -31,9 +32,9 @@ class trpgUtil(commands.Cog):
             await ctx.send('錯誤 : 參數異常。', delete_after=20)
             print('clear cmd error')
 
-        has_any = lambda b: lambda a: any(map(lambda x:x in b, a))
-        f1 = has_any(['//', '\\', '# '])
-        deleted = await ctx.channel.purge(limit=rpt+1, check=lambda msg: f1(msg.content))
+        #has_any = lambda b: lambda a: any(map(lambda x:x in b, a))
+        #f1 = has_any(['//', '\\', '# '])
+        deleted = await ctx.channel.purge(limit=rpt+1, check=lambda msg: '//' in msg.content or '\\\\' in msg.content)
         await ctx.send(f'Delete {len(deleted)} message(s).', delete_after=10)
         print(f'{ctx.message.author.name[:16]} tried removed {len(deleted)} messages')
         

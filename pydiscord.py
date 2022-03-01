@@ -4,13 +4,6 @@ import os
 from discord.ext import commands
 from discord_slash import SlashCommand
 
-ERRORMSG = '我把你當朋友，你卻想玩壞我...  。･ﾟ･(つд`ﾟ)･ﾟ･\n'
-BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
-NOTPLAYING = '前提是我有播東西啊~(っ・д・)っ\n'
-MISSINGARG = '求後續(´・ω・`)\n'
-POSINT = '正整數啦!  (´_ゝ`)\n'
-MEME = ['不要停下來阿', '卡其脫離太', '穿山甲', '卡打掐', '豆花', '阿姨壓一壓', 'Daisuke']
-
 COG_LIST = {
     'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl',
     'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 'trpgUtil'
@@ -41,6 +34,7 @@ def main():
         print(f'Discord latency: {round(botCli.latency*1000)} ms')
 
     @botCli.command()
+    @commands.has_permissions(manage_guild=True)
     async def reload(ctx):
         suc = 0
         for c in botCli.LOADED_COG:
@@ -50,6 +44,7 @@ def main():
         print(f'[C] reloaded {suc}')
 
     @botCli.command()
+    @commands.has_permissions(manage_guild=True)
     async def load(ctx, *args):
         suc = 0
         fal = 0
@@ -79,6 +74,7 @@ def main():
         print('[C] loaded, now : ', botCli.LOADED_COG)
 
     @botCli.command()
+    @commands.has_permissions(manage_guild=True)
     async def unload(ctx, *args):
         suc = 0
         fal = 0
@@ -106,7 +102,7 @@ def main():
         print('[C] unloaded, now : ', botCli.LOADED_COG)
 
     @botCli.command()
-    @commands.has_role('botMaster')
+    @commands.has_permissions(manage_guild=True)
     async def close(ctx):
         await ctx.send('Bye bye.')
         await botCli.close()
