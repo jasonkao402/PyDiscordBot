@@ -1,7 +1,7 @@
 from discord.ext import commands
 from pixivpy3 import AppPixivAPI
 import random
-
+from math import log
 POSINT = '正整數啦!  (´_ゝ`)\n'
 BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
 
@@ -29,14 +29,21 @@ class pixivRec(commands.Cog):
             return
         if rpt <= 0 :
             await ctx.send(POSINT)
-        elif rpt <= 10 :
+        elif rpt <= 5 :
             json_result = self.papi.user_bookmarks_illust(26019898)
-            illusts = json_result.illusts
-
-            await ctx.send(f'{USER.mention}, fetched {len(illusts)}', delete_after=20)
-            print(f'fetched {len(illusts)}')
-            if(len(illusts) > 0) : 
-                for i in random.sample(illusts, rpt):
+            mybook = json_result.illusts
+            for i in range(4):
+                next_qs = self.papi.parse_qs(json_result.next_url)
+                if not next_qs:
+                    print('\n[Stopped]')
+                    break
+                json_result = self.papi.user_bookmarks_illust(**next_qs)
+                mybook+=json_result.illusts
+            print(len(mybook))
+            await ctx.send(f'{USER.mention}, fetched {len(mybook)}', delete_after=20)
+            print(f'fetched {len(mybook)}')
+            if(len(mybook) > 0) : 
+                for i in random.sample(mybook, rpt):
                     #papi.download(i.image_urls.large, fname='i_%s.jpg' % (i.id))
                     #await ctx.send(content = 'https://www.pixiv.net/artworks/%s' % (i.id), file = discord.File('i_%s.jpg' % (i.id) ))
                     await ctx.send(content = 'https://www.pixiv.net/artworks/%s' % (i.id))
@@ -44,9 +51,11 @@ class pixivRec(commands.Cog):
             await ctx.send(f'{USER.mention}, 太...太多了啦! (> д <)', delete_after=20)
         
     @commands.command(name = 'psearch')
-    async def _psearch(self, ctx, tgt):
+    async def _psearch(self, ctx, *tgt):
+        tgt = " ".join(tgt)
+        print(f'{ctx.author} : {tgt}')
+        coeffs = [-5.6, 1.33, -0.095]
         poll = 24
-        offset = 0
         accepted = []
         json_result = self.papi.search_illust(tgt, search_target='partial_match_for_tags')
         illusts = json_result.illusts
@@ -70,28 +79,28 @@ class pixivRec(commands.Cog):
                 illusts+=json_result.illusts
 
             ilen = len(illusts)
-            for i in illusts:
-                offset += max(1500, i.total_bookmarks)
-            offset /= ilen
 
-            print('\n[pick from : %d, offset : %d]\n' % (ilen, offset))
-            print('last : %s' % illusts[ilen-1].create_date)
+            print(f'\n[pick from : {ilen}]\n')
+            print(f'last : {illusts[ilen-1].create_date}')
 
-            idx = 1
-            for i in illusts:
-                if ((i.total_bookmarks > offset and i.total_view/i.total_bookmarks < 4) or i.total_bookmarks > 9000) and i.x_restrict == 0:
-                    accepted.append(i)
-                    print('(%4d/%4d)    [%s]' % (idx, ilen, i.title))
-                    print('like :%6d   view :%6d   1 : %.3f   %9d' % (i.total_bookmarks, i.total_view, i.total_view/i.total_bookmarks, i.id))
-                idx+=1
+            for ilu in illusts:
+                if ilu.total_bookmarks < 100: continue
+                x = log(ilu.total_view)
+                y = log(ilu.total_bookmarks) - x
+
+                if y > sum(coeffs[j]*( x**j) for j in range(len(coeffs))) and x > 6:
+                    accepted.append(ilu)
+                    print('(%4d/%4d)    [%s]' % (i, ilen, ilu.title))
+                    print('like :%6d   view :%6d   1 : %.3f   %9d' % (ilu.total_bookmarks, ilu.total_view, ilu.total_view/ilu.total_bookmarks, ilu.id))
+                i+=1
 
             alen = len(accepted)
-            print('\n[accepted : %d, offset : %d]\n' % (alen,offset))
+            print(f'\n[accepted : {alen}]\n')
 
-            await ctx.send('from %d picked %d, offset : %d.' % (ilen, alen, offset), delete_after=30)
+            await ctx.send(f'from {ilen} picked {alen}.', delete_after=30)
             if alen:
                 a = random.choice(accepted)
-                print('(%2d/%2d)       [%s]' % (idx, alen, a.title))
+                print('(%2d/%2d)       [%s]' % (i, alen, a.title))
                 print('like:%6d   view:%6d   1 : %.3f   ID = %9d' % (a.total_bookmarks, a.total_view, a.total_view/a.total_bookmarks, a.id))
                 #papi.download(a.image_urls.medium, fname='i_%d.jpg' % (a.id))
                 #await ctx.send(content = 'PixivID : %d' % (a.id), file = discord.File('i_%s.jpg' % (a.id) ))

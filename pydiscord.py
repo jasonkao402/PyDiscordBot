@@ -24,7 +24,7 @@ def main():
     async def on_ready():
         await botCli.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        botCli.LOADED_COG = {'mainbot', 'queueSys', 'trpgUtil', 'slash', 'reactionRole'}
+        botCli.LOADED_COG = {'mainbot', 'queueSys', 'trpgUtil', 'slash', 'pixivRec'}
         for c in botCli.LOADED_COG:
             botCli.load_extension(f'cog.{c}')
         print('\nBot ready.\n')
