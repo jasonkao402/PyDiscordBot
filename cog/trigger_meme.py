@@ -23,6 +23,10 @@ class EXT_COG(commands.Cog):
         if 'peko' in message.content:
             await message.channel.send(f'{USER.mention} 哈↗哈↗哈↗哈↗哈↗哈↗')
             print(f'{USER.name} peko peko')
+
+        if '傲嬌' in message.content:
+            await message.channel.send(f'{USER.mention} 哈↗哈↗哈↗哈↗哈↗哈↗')
+            print(f'{USER.name} peko peko')
     
 def setup(bot):
     bot.add_cog(EXT_COG(bot))

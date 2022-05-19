@@ -3,10 +3,12 @@ import discord
 import os
 from discord.ext import commands
 from discord_slash import SlashCommand
+from discord_components import DiscordComponents
 
 COG_LIST = {
     'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl',
-    'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 'trpgUtil'
+    'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 
+    'trpgUtil', 'selectRoleV2',
 }
 
 def main():
@@ -19,12 +21,13 @@ def main():
     
     intents = discord.Intents.all()
     botCli = commands.Bot(command_prefix='%', intents=intents)
-    slash = SlashCommand(botCli, override_type = True, sync_commands = True)
+    # slash = SlashCommand(botCli, override_type = True, sync_commands = True)
+    DiscordComponents(botCli)
     @botCli.event
     async def on_ready():
         await botCli.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        botCli.LOADED_COG = {'mainbot', 'queueSys', 'trpgUtil', 'slash', 'pixivRec'}
+        botCli.LOADED_COG = {'mainbot', 'trpgUtil', 'pixivRec', 'selectRoleV2'}
         for c in botCli.LOADED_COG:
             botCli.load_extension(f'cog.{c}')
         print('\nBot ready.\n')

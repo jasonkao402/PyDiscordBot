@@ -43,7 +43,7 @@ class headCounter(commands.Cog):
 
         headCounter.score = [(k, v)for k,v in d.items()]
 
-        await ctx.send(f'{user.mention}, 現在有{d[uid]}顆頭')
+        await ctx.send(f'{user.mention}, 現在有 {d[uid]} 顆頭')
 
     @commands.command(name = 'save')
     async def _save(self, ctx):
