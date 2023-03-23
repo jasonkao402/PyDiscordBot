@@ -1,7 +1,7 @@
-from discord.ext import commands
 import random
 import re
 from cog.utilFunc import *
+from discord.ext import commands
 
 class trpgUtil(commands.Cog):
     
@@ -39,5 +39,5 @@ class trpgUtil(commands.Cog):
         print(f'{ctx.message.author.name[:16]} tried removed {len(deleted)} messages')
         
 
-def setup(bot):
-    bot.add_cog(trpgUtil(bot))
+async def setup(bot):
+    await bot.add_cog(trpgUtil(bot))
