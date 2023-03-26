@@ -37,7 +37,6 @@ class trpgUtil(commands.Cog):
         deleted = await ctx.channel.purge(limit=rpt+1, check=lambda msg: '//' in msg.content or '\\\\' in msg.content)
         await ctx.send(f'Delete {len(deleted)} message(s).', delete_after=10)
         print(f'{ctx.message.author.name[:16]} tried removed {len(deleted)} messages')
-        
 
 async def setup(bot):
     await bot.add_cog(trpgUtil(bot))

@@ -3,6 +3,8 @@ import discord
 import os
 from discord.ext import commands
 
+from cog.utilFunc import devChk
+
 COG_LIST = {
     'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl',
     'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 
@@ -42,17 +44,18 @@ def main():
     async def on_connect():
         print(f'Connected, discord latency: {round(client.latency*1000)} ms')
 
-    @client.command(aliases = ['rl'])
-    @commands.has_permissions(manage_guild=True)
-    async def reload(ctx):
-        suc = 0
-        for c in client.LOADED_COG:
-            await client.reload_extension(f'cog.{c}')
-            suc += 1
-        
-        await client.tree.sync()
-        await ctx.send(f'reload {suc} cog and sync done')
-        print(f'[C] reloaded {suc}')
+    @client.hybrid_command(name = 'reload')
+    # @commands.has_permissions(manage_guild=True)
+    async def _reload(ctx):
+        if devChk(ctx.author.id):
+            suc = 0
+            for c in client.LOADED_COG:
+                await client.reload_extension(f'cog.{c}')
+                suc += 1
+            
+            await client.tree.sync()
+            await ctx.send(f'{suc} reloaded and sync done')
+            print(f'[C] {suc} reloaded')
 
     @client.command()
     @commands.has_permissions(manage_guild=True)

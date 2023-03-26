@@ -23,7 +23,7 @@ class mainbot(commands.Cog):
     @commands.hybrid_command(name = 'hello')
     async def _hello(self, ctx):
         user = ctx.author
-        if (user.id == 225833749156331520):
+        if devChk(user.id):
             await ctx.send(f'{user.mention}主人我來了 ฅ(>ω<)ฅ\n我是只屬於主人的呦~\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
         else:
             await ctx.send(f'{user.mention}主人您好，很榮幸能為您服務 <(✿◡‿◡)>\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
