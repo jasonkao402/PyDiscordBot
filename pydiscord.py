@@ -5,21 +5,21 @@ from discord.ext import commands
 
 from cog.utilFunc import devChk
 
-COG_LIST = {
-    'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl',
-    'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 
-    'trpgUtil', 'selectRoleV2', 'askAI', 
-}
+# COG_LIST = {
+#     'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl',
+#     'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 
+#     'trpgUtil', 'selectRoleV2', 'askAI', 
+# }
+COG_LIST = {'mainbot', 'askAI'}
 
 with open('./acc/tokenDC.txt', 'r') as acc_file:
     acc_data = acc_file.read().splitlines()
     TOKEN = acc_data[0]
-with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
-    setsys_extra = set1_file.read()
+
 with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
     setsys_base = set2_file.read()
     # setsys = {'role': 'system', 'content': acc_data}
-    setsys = {'role': 'system', 'content': setsys_base + setsys_extra}
+    setsys = {'role': 'system', 'content': setsys_base}
     
 def main():
     absFilePath = os.path.abspath(__file__)
@@ -28,9 +28,7 @@ def main():
     intents = discord.Intents.all()
     global client
     client = commands.Bot(command_prefix='%', intents=intents)
-    # atree = app_commands.CommandTree(client)
-    # slash = SlashCommand(client, override_type = True, sync_commands = True)
-    # DiscordComponents(client)
+    
     @client.event
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))

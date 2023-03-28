@@ -3,8 +3,5 @@ def clamp(n, minn=0, maxn=100) -> float:
     return max(min(maxn, n), minn)
 
 def devChk(id) -> bool:
-    return int(id) == 225833749156331520
-
-def nameChk(s) -> bool:
-    illya = ('伊莉亞', '伊利亞', 'illya')
-    return any(i in s for i in illya)
+    admin = [225833749156331520, 316141566173642752, 304589833484107786, 619168250487504916]
+    return int(id) in admin
