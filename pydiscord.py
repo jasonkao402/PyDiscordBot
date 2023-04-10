@@ -15,11 +15,6 @@ COG_LIST = {'mainbot', 'askAI'}
 with open('./acc/tokenDC.txt', 'r') as acc_file:
     acc_data = acc_file.read().splitlines()
     TOKEN = acc_data[0]
-
-with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
-    setsys_base = set2_file.read()
-    # setsys = {'role': 'system', 'content': acc_data}
-    setsys = {'role': 'system', 'content': setsys_base}
     
 def main():
     absFilePath = os.path.abspath(__file__)
