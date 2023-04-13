@@ -7,7 +7,8 @@ from aiohttp import ClientSession, TCPConnector, ClientTimeout
 import asyncio
 from asyncio.exceptions import TimeoutError
 from cog.utilFunc import devChk
-tempFix = [1, 0, 0, 1, 0]
+import pandas as pd
+
 memLen = 12
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
@@ -17,23 +18,26 @@ with open('./acc/aiKey.txt', 'r') as acc_file:
     
 with open('./acc/banList.txt', 'r') as acc_file:
     banList = [int(id) for id in acc_file.readlines()]
+
+scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid')
+# with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
+#     setsys_base = set2_file.read()
+#     # setsys = {'role': 'system', 'content': acc_data}
+#     setsys = {'role': 'system', 'content': setsys_base}
     
-with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
-    setsys_base = set2_file.read()
-    # setsys = {'role': 'system', 'content': acc_data}
-    setsys = {'role': 'system', 'content': setsys_base}
-    
-def localRead() -> None:
+def localRead(resetMem = False) -> None:
     with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
-        global setsys_extra, name2ID, chatMem, chatTok
+        global setsys_extra, name2ID, id2name, chatMem, chatTok
         setsys_tmp = set1_file.readlines()
         setsys_extra = []
-        name2ID = {}
+        name2ID, id2name = {}, []
         for i in range(len(setsys_tmp)//2):
+            id2name.append(setsys_tmp[2*i].split(maxsplit=1)[0])
             name2ID.update((alias, i) for alias in setsys_tmp[2*i].split())
             setsys_extra.append(setsys_tmp[2*i+1])
-        chatMem = [deque(maxlen=memLen) for _ in range(len(setsys_extra))]
-        chatTok = [0 for _ in range(len(setsys_extra))]
+        if resetMem:
+            chatMem = [deque(maxlen=memLen) for _ in range(len(setsys_extra))]
+            chatTok = [0 for _ in range(len(setsys_extra))]
         print(name2ID)
 
 def nameChk(s) -> tuple:
@@ -59,12 +63,12 @@ headers = {
 url = "https://api.openai.com/v1/chat/completions"
 cc = OpenCC('s2twp')
 
-async def aiaiv2(msgs, id, tokens=600) -> dict:
+async def aiaiv2(msgs, botid, tokens=680) -> dict:
     async def Chat_Result(session, msgs, url=url, headers=headers):
         data = {
             "model": "gpt-3.5-turbo",
             "messages": msgs,
-            "max_tokens": min(tokens, 4096-chatTok[id]),
+            "max_tokens": min(tokens, 4096-chatTok[botid]),
             "temperature": 0.8,
             "frequency_penalty": 0.4,
             "presence_penalty": 0.4
@@ -81,10 +85,10 @@ async def aiaiv2(msgs, id, tokens=600) -> dict:
     if 'error' in response:
         # print(response)
         return replydict(rol='error', msg=response['error'])
-    chatTok[id] = response['usage']['total_tokens']
-    if chatTok[id] > 3000:
-        chatMem[id].popleft()
-        chatMem[id].popleft()
+    chatTok[botid] = response['usage']['total_tokens']
+    if chatTok[botid] > 3200:
+        chatMem[botid].popleft()
+        chatMem[botid].popleft()
         print(f"token warning:{response['usage']['total_tokens']}, popped last msg.")
     return response['choices'][0]['message']
     
@@ -99,9 +103,10 @@ class askAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         user = message.author
+        uid = user.id
         n = min(len(message.content), 10)
         
-        if user.id == self.bot.user.id:
+        if uid == self.bot.user.id:
             return
         
         elif (aiInfo:=nameChk(message.content[:n])) != (-1, ''):
@@ -109,10 +114,11 @@ class askAI(commands.Cog):
             # logging 
             print(f'{user.name: <10}[{aiNam}]: {message.content}')
             # hehe
-            if user.id in banList:
+            if uid in banList:
                 if random() < self.ignore:
                     if random() < 0.9:
-                        await asyncio.sleep(randint(5, 15))
+                        async with message.channel.typing():
+                            await asyncio.sleep(randint(5, 15))
                         await message.channel.send(choice(whatever))
                     print("已敷衍.")
                     return
@@ -120,33 +126,37 @@ class askAI(commands.Cog):
                     print("嘖")
                     
             elif ('洗腦' in message.content[:n]):
-                if devChk(user.id):
+                if devChk(uid):
                     chatMem[aiNum].clear()
                     return await message.channel.send(f'阿 {aiNam} 被洗腦了 🫠')
                 else:
                     return await message.channel.send('客官不可以')
-            elif ('人設' in message.content[:n]) and devChk(user.id):
+                
+            elif ('人設' in message.content[:n]) and devChk(uid):
                 if ('更新人設' in message.content[:n]):
                     msg = message.content
                     setsys_extra[aiNum] = msg[msg.find('更新人設')+4:]
                 return await message.channel.send(setsys_extra[aiNum])
-            elif ('-t' in message.content[:n]) and devChk(user.id):
+            
+            elif ('-t' in message.content[:n]) and devChk(uid):
                 return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
-            elif ('-log' in message.content[:n]) and devChk(user.id):
+            
+            elif ('-log' in message.content[:n]) and devChk(uid):
                 tmp = '\n'.join((m['content'] for m in chatMem[aiNum]))
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
-            elif ('-err' in message.content[:n]) and devChk(user.id):
+            
+            elif ('-err' in message.content[:n]) and devChk(uid):
                 prompt = replydict('user'  , f'{user.name} said {message.content}' )
                 reply  = await aiaiv2([prompt], aiNum, 99999)
                 reply2 = '\n'.join((f'{k}: {v}' for k, v in reply["content"].items()))
                 print(f'{aiNam}:\n{reply2}')
-                return await message.channel.send(f'Debugging {aiNam}:\n{reply2}') 
+                return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
+            
             try:
-                prompt = replydict('user'  , f'{user.name} said {message.content}' )
-                monkeyfix = setsys_base+setsys_extra[aiNum] if tempFix[aiNum] != 0 else setsys_extra[aiNum]
-                setup  = replydict('system', monkeyfix)
-                
-                reply  = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum)
+                prompt = replydict('user'  , f'{user.name} said {message.content}')
+                setup  = replydict('system', setsys_extra[aiNum])
+                async with message.channel.typing():
+                    reply  = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum)
                 
                 assert reply['role'] != 'error'
                 
@@ -163,6 +173,21 @@ class askAI(commands.Cog):
             else:
                 chatMem[aiNum].append(prompt)
                 chatMem[aiNum].append(reply)
+                if uid not in scoreArr.index:
+                    scoreArr.loc[uid] = 0
+                scoreArr.loc[uid].iloc[aiNum] += 1
+    
+    @commands.hybrid_command(name = 'scoreboard')
+    async def _scoreboard(self, ctx):
+        user = ctx.author
+        uid = user.id
+        arr = scoreArr.loc[uid]
+        m = arr.max()
+        i = int(arr.idxmax())
+        t = arr.sum()
+        print(m, i, t, sep='\n')
+        await ctx.send(f'{user.name}最常找{id2name[i]}互動 ({m} 次)，共對話 {t} 次')
+        
     
     @commands.hybrid_command(name = 'localread')
     async def _cmdlocalRead(self, ctx):
@@ -175,37 +200,44 @@ class askAI(commands.Cog):
 
     @commands.hybrid_command(name = 'listbot')
     async def _listbot(self, ctx):
-        l = '\n'.join(n for n in set(name2ID))
+        l = '\n'.join(n for n in id2name)
         await ctx.send(f'List:\n{l}')
             
     @commands.command(name = 'bl')
-    async def _blacklist(self, ctx, id):
+    async def _blacklist(self, ctx, uid):
         user = ctx.author
         # hehe
         if user.id in banList:
             return
         try:
-            id = int(id)
-            if id not in banList:
-                banList.append(id)
+            uid = int(uid)
+            if uid not in banList and devChk(user.id):
+                banList.append(uid)
                 with open('./acc/banList.txt', 'a') as bfile:
-                    bfile.write(str(id))
-                print(f'Added to bList: {id}')
+                    bfile.write(str(uid))
+                print(f'Added to bList: {uid}')
             else:
-                print(f'Already banned: {id}')
+                print(f'Already banned: {uid}')
         except:
-            print(f'ban error: {id}')
+            print(f'ban error: {uid}')
     
     @commands.command(name = 'ig')
     async def _ignore(self, ctx, num):
         user = ctx.author
         # hehe
-        if user.id in banList:
+        if user.id in banList or not devChk(user.id):
             return
         num = float(num)
         self.ignore = num
         print(f'忽略率： {num}')
-            
+
 async def setup(bot):
-    localRead()
+    localRead(True)
+    global scoreArr
+    if scoreArr is None:
+        scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid')
     await bot.add_cog(askAI(bot))
+
+async def teardown():
+    global scoreArr
+    scoreArr.to_csv('./acc/score.csv')
