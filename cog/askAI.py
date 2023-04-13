@@ -6,7 +6,7 @@ from opencc import OpenCC
 from aiohttp import ClientSession, TCPConnector, ClientTimeout
 import asyncio
 from asyncio.exceptions import TimeoutError
-from cog.utilFunc import devChk
+from cog.utilFunc import devChk, iterLines
 import pandas as pd
 
 memLen = 12
@@ -19,7 +19,7 @@ with open('./acc/aiKey.txt', 'r') as acc_file:
 with open('./acc/banList.txt', 'r') as acc_file:
     banList = [int(id) for id in acc_file.readlines()]
 
-scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid')
+scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=int)
 # with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
 #     setsys_base = set2_file.read()
 #     # setsys = {'role': 'system', 'content': acc_data}
@@ -142,13 +142,13 @@ class askAI(commands.Cog):
                 return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
             
             elif ('-log' in message.content[:n]) and devChk(uid):
-                tmp = '\n'.join((m['content'] for m in chatMem[aiNum]))
+                tmp = iterLines((m['content'] for m in chatMem[aiNum]))
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
             elif ('-err' in message.content[:n]) and devChk(uid):
                 prompt = replydict('user'  , f'{user.name} said {message.content}' )
                 reply  = await aiaiv2([prompt], aiNum, 99999)
-                reply2 = '\n'.join((f'{k}: {v}' for k, v in reply["content"].items()))
+                reply2 = iterLines((f'{k}: {v}' for k, v in reply["content"].items()))
                 print(f'{aiNam}:\n{reply2}')
                 return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
             
@@ -166,7 +166,7 @@ class askAI(commands.Cog):
                 print(f'{aiNam} timeout 了')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
             except AssertionError:
-                reply2 = '\n'.join((f'{k}: {v}' for k, v in reply["content"].items()))
+                reply2 = iterLines((f'{k}: {v}' for k, v in reply["content"].items()))
                 print(f'{aiNam}:\n{reply2}')
                 
                 await message.channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}') 
@@ -181,13 +181,15 @@ class askAI(commands.Cog):
     async def _scoreboard(self, ctx):
         user = ctx.author
         uid = user.id
+        if uid not in scoreArr.index: 
+            return await ctx.send(f'{user.name} 尚未和AI們對話過')
         arr = scoreArr.loc[uid]
         m = arr.max()
         i = int(arr.idxmax())
-        t = arr.sum()
-        print(m, i, t, sep='\n')
-        await ctx.send(f'{user.name}最常找{id2name[i]}互動 ({m} 次)，共對話 {t} 次')
-        
+        s = arr.sum()
+        t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
+        sb = iterLines((f'{self.bot.get_user(i).name: <10}: {v}'for i, v in zip(t.index, t.values)))
+        await ctx.send(f'{sb}\n{user.name}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
     
     @commands.hybrid_command(name = 'localread')
     async def _cmdlocalRead(self, ctx):
@@ -200,7 +202,7 @@ class askAI(commands.Cog):
 
     @commands.hybrid_command(name = 'listbot')
     async def _listbot(self, ctx):
-        l = '\n'.join(n for n in id2name)
+        l = iterLines(n for n in id2name)
         await ctx.send(f'List:\n{l}')
             
     @commands.command(name = 'bl')
@@ -233,11 +235,9 @@ class askAI(commands.Cog):
 
 async def setup(bot):
     localRead(True)
-    global scoreArr
-    if scoreArr is None:
-        scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid')
     await bot.add_cog(askAI(bot))
 
-async def teardown():
-    global scoreArr
-    scoreArr.to_csv('./acc/score.csv')
+async def teardown(bot):
+    print('saved')
+    print(scoreArr)
+    scoreArr.to_csv('./acc/scoreArr.csv')
