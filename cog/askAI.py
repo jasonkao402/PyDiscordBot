@@ -6,10 +6,12 @@ from opencc import OpenCC
 from aiohttp import ClientSession, TCPConnector, ClientTimeout
 import asyncio
 from asyncio.exceptions import TimeoutError
-from cog.utilFunc import devChk, iterLines
+from cog.utilFunc import devChk, iterLines, wcformat
 import pandas as pd
+from time import localtime, strftime
 
-memLen = 12
+MEMOLEN = 12
+READLEN = 30
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
     k, o = acc_file.read().splitlines()
@@ -34,9 +36,9 @@ def localRead(resetMem = False) -> None:
         for i in range(len(setsys_tmp)//2):
             id2name.append(setsys_tmp[2*i].split(maxsplit=1)[0])
             name2ID.update((alias, i) for alias in setsys_tmp[2*i].split())
-            setsys_extra.append(setsys_tmp[2*i+1])
+            setsys_extra.append(setsys_tmp[2*i+1]+f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
         if resetMem:
-            chatMem = [deque(maxlen=memLen) for _ in range(len(setsys_extra))]
+            chatMem = [deque(maxlen=MEMOLEN) for _ in range(len(setsys_extra))]
             chatTok = [0 for _ in range(len(setsys_extra))]
         print(name2ID)
 
@@ -63,7 +65,7 @@ headers = {
 url = "https://api.openai.com/v1/chat/completions"
 cc = OpenCC('s2twp')
 
-async def aiaiv2(msgs, botid, tokens=680) -> dict:
+async def aiaiv2(msgs, botid, tokens=700) -> dict:
     async def Chat_Result(session, msgs, url=url, headers=headers):
         data = {
             "model": "gpt-3.5-turbo",
@@ -104,15 +106,24 @@ class askAI(commands.Cog):
     async def on_message(self, message):
         user = message.author
         uid = user.id
-        n = min(len(message.content), 10)
+        n = min(len(message.content), READLEN)
         
         if uid == self.bot.user.id:
             return
         
         elif (aiInfo:=nameChk(message.content[:n])) != (-1, ''):
             aiNum, aiNam = aiInfo
+            # TESTING
+            # TESTING
+            # TESTING
+            if aiNum == 2:
+                return
+            # TESTING
+            # TESTING
+            # TESTING
+            
             # logging 
-            print(f'{user.name: <10}[{aiNam}]: {message.content}')
+            print(f'{wcformat(user.name)}[{aiNam}]: {message.content}')
             # hehe
             if uid in banList:
                 if random() < self.ignore:
@@ -161,7 +172,8 @@ class askAI(commands.Cog):
                 assert reply['role'] != 'error'
                 
                 reply2 = reply["content"]
-                await message.channel.send(f'{cc.convert(reply2.replace("JailBreak", aiNam))}') 
+                # await message.channel.send(f'{cc.convert(reply2.replace("JailBreak", aiNam))}')
+                await message.channel.send(f'{cc.convert(reply2)}')
             except TimeoutError:
                 print(f'{aiNam} timeout 了')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
@@ -188,8 +200,8 @@ class askAI(commands.Cog):
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = iterLines((f'{self.bot.get_user(i).name: <10}: {v}'for i, v in zip(t.index, t.values)))
-        await ctx.send(f'{sb}\n{user.name}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
+        sb = iterLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
+        await ctx.send(f'```{sb}```\n{user.name}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
     
     @commands.hybrid_command(name = 'localread')
     async def _cmdlocalRead(self, ctx):
@@ -202,8 +214,10 @@ class askAI(commands.Cog):
 
     @commands.hybrid_command(name = 'listbot')
     async def _listbot(self, ctx):
-        l = iterLines(n for n in id2name)
-        await ctx.send(f'List:\n{l}')
+        t = scoreArr.sum(axis=0).sort_values(ascending=False)
+        s = scoreArr.sum().sum()
+        l = iterLines(f'{wcformat(id2name[int(i)], w=8)}{v : <8}{ v/s :<2.3%}' for i, v in zip(t.index, t.values))
+        await ctx.send(f'Bot List:\n```{l}```')
             
     @commands.command(name = 'bl')
     async def _blacklist(self, ctx, uid):
