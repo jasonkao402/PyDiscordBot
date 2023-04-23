@@ -36,7 +36,7 @@ def localRead(resetMem = False) -> None:
         for i in range(len(setsys_tmp)//2):
             id2name.append(setsys_tmp[2*i].split(maxsplit=1)[0])
             name2ID.update((alias, i) for alias in setsys_tmp[2*i].split())
-            setsys_extra.append(setsys_tmp[2*i+1]+f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
+            setsys_extra.append(setsys_tmp[2*i+1])
         if resetMem:
             chatMem = [deque(maxlen=MEMOLEN) for _ in range(len(setsys_extra))]
             chatTok = [0 for _ in range(len(setsys_extra))]
@@ -66,7 +66,7 @@ url = "https://api.openai.com/v1/chat/completions"
 cc = OpenCC('s2twp')
 
 async def aiaiv2(msgs, botid, tokens=700) -> dict:
-    async def Chat_Result(session, msgs, url=url, headers=headers):
+    async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
         data = {
             "model": "gpt-3.5-turbo",
             "messages": msgs,
@@ -165,9 +165,9 @@ class askAI(commands.Cog):
             
             try:
                 prompt = replydict('user'  , f'{user.name} said {message.content}')
-                setup  = replydict('system', setsys_extra[aiNum])
+                setup  = replydict('system', setsys_extra[aiNum]+f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
                 async with message.channel.typing():
-                    reply  = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum)
+                    reply = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum)
                 
                 assert reply['role'] != 'error'
                 
