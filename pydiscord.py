@@ -10,7 +10,7 @@ from cog.utilFunc import devChk
 #     'pixivRec', 'queueSys', 'reactionRole', 'trigger_meme', 
 #     'trpgUtil', 'selectRoleV2', 'askAI', 
 # }
-COG_LIST = {'mainbot', 'askAI'}
+COG_LIST = {'mainbot', 'askAI', 'okgoodjoke'}
 
 with open('./acc/tokenDC.txt', 'r') as acc_file:
     acc_data = acc_file.read().splitlines()
@@ -28,7 +28,7 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        client.LOADED_COG = {'mainbot', 'askAI'}
+        client.LOADED_COG = {'mainbot', 'askAI', 'okgoodjoke'}
         for c in client.LOADED_COG:
             await client.load_extension(f'cog.{c}')
         print('Bot is online.')

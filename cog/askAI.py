@@ -1,4 +1,5 @@
 import openai
+from discord import Client as DC_Client
 from discord.ext import commands
 from collections import deque
 from random import choice, random, randint
@@ -6,7 +7,7 @@ from opencc import OpenCC
 from aiohttp import ClientSession, TCPConnector, ClientTimeout
 import asyncio
 from asyncio.exceptions import TimeoutError
-from cog.utilFunc import devChk, iterLines, wcformat
+from cog.utilFunc import devChk, sepLines, wcformat
 import pandas as pd
 from time import localtime, strftime
 
@@ -97,7 +98,7 @@ async def aiaiv2(msgs, botid, tokens=700) -> dict:
 class askAI(commands.Cog):
     __slots__ = ('bot')
     
-    def __init__(self, bot):
+    def __init__(self, bot: DC_Client):
         self.bot = bot
         self.ignore = 0.5
         # self.last_reply = replydict()
@@ -113,14 +114,6 @@ class askAI(commands.Cog):
         
         elif (aiInfo:=nameChk(message.content[:n])) != (-1, ''):
             aiNum, aiNam = aiInfo
-            # TESTING
-            # TESTING
-            # TESTING
-            if aiNum == 2:
-                return
-            # TESTING
-            # TESTING
-            # TESTING
             
             # logging 
             print(f'{wcformat(user.name)}[{aiNam}]: {message.content}')
@@ -153,13 +146,13 @@ class askAI(commands.Cog):
                 return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
             
             elif ('-log' in message.content[:n]) and devChk(uid):
-                tmp = iterLines((m['content'] for m in chatMem[aiNum]))
+                tmp = sepLines((m['content'] for m in chatMem[aiNum]))
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
             elif ('-err' in message.content[:n]) and devChk(uid):
                 prompt = replydict('user'  , f'{user.name} said {message.content}' )
                 reply  = await aiaiv2([prompt], aiNum, 99999)
-                reply2 = iterLines((f'{k}: {v}' for k, v in reply["content"].items()))
+                reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
                 print(f'{aiNam}:\n{reply2}')
                 return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
             
@@ -178,7 +171,7 @@ class askAI(commands.Cog):
                 print(f'{aiNam} timeout 了')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
             except AssertionError:
-                reply2 = iterLines((f'{k}: {v}' for k, v in reply["content"].items()))
+                reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
                 print(f'{aiNam}:\n{reply2}')
                 
                 await message.channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}') 
@@ -200,7 +193,7 @@ class askAI(commands.Cog):
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = iterLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
+        sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
         await ctx.send(f'```{sb}```\n{user.name}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
     
     @commands.hybrid_command(name = 'localread')
@@ -216,7 +209,7 @@ class askAI(commands.Cog):
     async def _listbot(self, ctx):
         t = scoreArr.sum(axis=0).sort_values(ascending=False)
         s = scoreArr.sum().sum()
-        l = iterLines(f'{wcformat(id2name[int(i)], w=8)}{v : <8}{ v/s :<2.3%}' for i, v in zip(t.index, t.values))
+        l = sepLines(f'{wcformat(id2name[int(i)], w=8)}{v : <8}{ v/s :<2.3%}' for i, v in zip(t.index, t.values))
         await ctx.send(f'Bot List:\n```{l}```')
             
     @commands.command(name = 'bl')
@@ -252,6 +245,6 @@ async def setup(bot):
     await bot.add_cog(askAI(bot))
 
 async def teardown(bot):
-    print('saved')
-    print(scoreArr)
+    print('ai saved')
+    # print(scoreArr)
     scoreArr.to_csv('./acc/scoreArr.csv')

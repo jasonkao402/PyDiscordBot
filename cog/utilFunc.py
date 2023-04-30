@@ -8,7 +8,7 @@ def devChk(id:int) -> bool:
     admin = [225833749156331520, 316141566173642752, 304589833484107786, 619168250487504916]
     return int(id) in admin
 
-def iterLines(itr):
+def sepLines(itr):
     return '\n'.join(itr)
 
 def wcformat(s:str, w=12, strFront=True):
