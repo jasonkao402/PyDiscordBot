@@ -7,12 +7,12 @@ from opencc import OpenCC
 from aiohttp import ClientSession, TCPConnector, ClientTimeout
 import asyncio
 from asyncio.exceptions import TimeoutError
-from cog.utilFunc import devChk, sepLines, wcformat
+from cog.utilFunc import *
 import pandas as pd
 from time import localtime, strftime
 
-MEMOLEN = 12
-READLEN = 30
+MEMOLEN = 10
+READLEN = 20
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
     k, o = acc_file.read().splitlines()
@@ -60,13 +60,14 @@ whatever = [
    
 headers = {
     "Content-Type": "application/json",
-    "Authorization": "Bearer " + openai.api_key,
+    "Authorization": f"Bearer {openai.api_key}",
+    "OpenAI-Organization": openai.organization,
 }
 # "organization": openai.organization,
 url = "https://api.openai.com/v1/chat/completions"
 cc = OpenCC('s2twp')
 
-async def aiaiv2(msgs, botid, tokens=700) -> dict:
+async def aiaiv2(msgs, botid, tokens = 600) -> dict:
     async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
         data = {
             "model": "gpt-3.5-turbo",
@@ -105,18 +106,18 @@ class askAI(commands.Cog):
     
     @commands.Cog.listener()
     async def on_message(self, message):
-        user = message.author
+        user, text = message.author, message.content
         uid = user.id
-        n = min(len(message.content), READLEN)
+        n = min(len(text), READLEN)
         
         if uid == self.bot.user.id:
             return
         
-        elif (aiInfo:=nameChk(message.content[:n])) != (-1, ''):
+        elif (aiInfo:=nameChk(text[:n])) != (-1, ''):
             aiNum, aiNam = aiInfo
             
             # logging 
-            print(f'{wcformat(user.name)}[{aiNam}]: {message.content}')
+            print(f'{wcformat(user.name)}[{aiNam}]: {text}')
             # hehe
             if uid in banList:
                 if random() < self.ignore:
@@ -129,38 +130,44 @@ class askAI(commands.Cog):
                 else:
                     print("嘖")
                     
-            elif ('洗腦' in message.content[:n]):
+            elif ('洗腦' in text[:n]):
                 if devChk(uid):
                     chatMem[aiNum].clear()
                     return await message.channel.send(f'阿 {aiNam} 被洗腦了 🫠')
                 else:
                     return await message.channel.send('客官不可以')
                 
-            elif ('人設' in message.content[:n]) and devChk(uid):
-                if ('更新人設' in message.content[:n]):
-                    msg = message.content
+            elif ('人設' in text[:n]) and devChk(uid):
+                if ('更新人設' in text[:n]):
+                    msg = text
                     setsys_extra[aiNum] = msg[msg.find('更新人設')+4:]
                 return await message.channel.send(setsys_extra[aiNum])
             
-            elif ('-t' in message.content[:n]) and devChk(uid):
+            elif ('-t' in text[:n]) and devChk(uid):
                 return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
             
-            elif ('-log' in message.content[:n]) and devChk(uid):
+            elif ('-log' in text[:n]) and devChk(uid):
                 tmp = sepLines((m['content'] for m in chatMem[aiNum]))
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
-            elif ('-err' in message.content[:n]) and devChk(uid):
-                prompt = replydict('user'  , f'{user.name} said {message.content}' )
+            elif ('-err' in text[:n]) and devChk(uid):
+                prompt = replydict('user'  , f'{user.name} said {text}' )
                 reply  = await aiaiv2([prompt], aiNum, 99999)
                 reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
                 print(f'{aiNam}:\n{reply2}')
                 return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
             
             try:
-                prompt = replydict('user'  , f'{user.name} said {message.content}')
-                setup  = replydict('system', setsys_extra[aiNum]+f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
+                prompt = replydict('user'  , f'{user.name} said {text}')
+                setup  = replydict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
                 async with message.channel.typing():
-                    reply = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum)
+                    if multiChk(text, ['詳細', '繼續']):
+                        tokens = 600
+                    elif multiChk(text, ['簡單', '摘要', '簡略']) or len(text) < READLEN:
+                        tokens = 200
+                    else:
+                        tokens = 400
+                    reply = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum, tokens)
                 
                 assert reply['role'] != 'error'
                 

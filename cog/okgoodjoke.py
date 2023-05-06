@@ -6,10 +6,12 @@ from discord import Client as DC_Client
 memo = dict()
 okok = '''👌 🆗
 ❓ ❔
-🈸
+🈸 🥵
+🛐 💯 ⚡
+😡
 '''.splitlines()
 
-emojiArr = pd.read_csv('./acc/emojiArr.csv', index_col='uid', dtype=int)
+emojiArr = pd.read_csv('./acc/emojiArr.csv', index_col='uid', dtype=int).fillna(0)
 
 def localRead():
     global emoji2id, id2emoji, okok
@@ -41,13 +43,15 @@ class okgoodjoke(commands.Cog):
             msg = await ch.fetch_message(payload.message_id)
             uid = msg.author.id
             mdc = {str(emoji) : emoji.count for emoji in msg.reactions}[emj]
+            
             if mdc == 3 and (eid:=nameChk(emj)) != -1:
                 if uid not in emojiArr.index:
                     emojiArr.loc[uid] = 0
+                    
                 emojiArr.loc[uid].iloc[eid] += 1
                 t = emojiArr.iloc[:,eid].sort_values(ascending=False).head(5)
                 sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
-                return await ch.send(f'{emj} Scoreboard:\n```{sb}```', reference=msg)
+                return await ch.send(f'{emj} Scoreboard:\n```{sb}```', reference=msg, silent=True)
                 
 async def setup(bot):
     localRead()
