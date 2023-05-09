@@ -2,8 +2,10 @@ import pandas as pd
 from discord.ext import commands
 from cog.utilFunc import sepLines, wcformat
 from discord import Client as DC_Client
+from collections import deque
 
-memo = dict()
+MEMOLEN = 32
+cachedMsg = deque(maxlen=MEMOLEN)
 okok = '''👌 🆗
 ❓ ❔
 🈸 🥵
@@ -32,19 +34,18 @@ class okgoodjoke(commands.Cog):
 
     def __init__(self, bot: DC_Client):
         self.bot = bot
-        global memo
-        memo = dict()
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        emj = str(payload.emoji)
-        if payload.guild_id == 477839636404633600:
+        emj, mid = str(payload.emoji), payload.message_id
+        if payload.guild_id == 477839636404633600 and mid not in cachedMsg:
             ch = self.bot.get_partial_messageable(payload.channel_id, guild_id=payload.guild_id)
             msg = await ch.fetch_message(payload.message_id)
             uid = msg.author.id
             mdc = {str(emoji) : emoji.count for emoji in msg.reactions}[emj]
             
             if mdc == 3 and (eid:=nameChk(emj)) != -1:
+                cachedMsg.append(mid)
                 if uid not in emojiArr.index:
                     emojiArr.loc[uid] = 0
                     
