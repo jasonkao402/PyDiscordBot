@@ -1,5 +1,5 @@
 import openai
-from discord import Client as DC_Client
+from discord import Client as DC_Client, Message
 from discord.ext import commands
 from collections import deque
 from random import choice, random, randint
@@ -105,9 +105,9 @@ class askAI(commands.Cog):
         # self.last_reply = replydict()
     
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message:Message):
         user, text = message.author, message.content
-        uid = user.id
+        uid, userName = user.id, user.name
         n = min(len(text), READLEN)
         
         if uid == self.bot.user.id:
@@ -117,7 +117,7 @@ class askAI(commands.Cog):
             aiNum, aiNam = aiInfo
             
             # logging 
-            print(f'{wcformat(user.name)}[{aiNam}]: {text}')
+            print(f'{wcformat(userName)}[{aiNam}]: {text}')
             # hehe
             if uid in banList:
                 if random() < self.ignore:
@@ -151,14 +151,16 @@ class askAI(commands.Cog):
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
             elif ('-err' in text[:n]) and devChk(uid):
-                prompt = replydict('user'  , f'{user.name} said {text}' )
+                prompt = replydict('user'  , f'{userName} said {text}' )
                 reply  = await aiaiv2([prompt], aiNum, 99999)
                 reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
                 print(f'{aiNam}:\n{reply2}')
                 return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
             
             try:
-                prompt = replydict('user'  , f'{user.name} said {text}')
+                # 特判 = =
+                if aiNum == 5: userName = '嘎零'
+                prompt = replydict('user'  , f'{userName} said {text}')
                 setup  = replydict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
                 async with message.channel.typing():
                     if multiChk(text, ['詳細', '繼續']):
@@ -192,16 +194,16 @@ class askAI(commands.Cog):
     @commands.hybrid_command(name = 'scoreboard')
     async def _scoreboard(self, ctx):
         user = ctx.author
-        uid = user.id
+        uid, userName = user.id, user.name
         if uid not in scoreArr.index: 
-            return await ctx.send(f'{user.name} 尚未和AI們對話過')
+            return await ctx.send(f'{userName} 尚未和AI們對話過')
         arr = scoreArr.loc[uid]
         m = arr.max()
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
         sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
-        await ctx.send(f'```{sb}```\n{user.name}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
+        await ctx.send(f'```{sb}```\n{userName}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
     
     @commands.hybrid_command(name = 'localread')
     async def _cmdlocalRead(self, ctx):
