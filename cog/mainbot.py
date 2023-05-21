@@ -49,12 +49,13 @@ class mainbot(commands.Cog):
         else : await ctx.channel.purge(limit = rpt+1)
         print(f'{ctx.author.name[:16]} tried removed {rpt} messages')
     
-    @commands.command(name = 'sel', aliases = ['rnd', 'rs', '幫我選一個'])
+    @commands.command(name = 'rnd')
+    # @commands.command(name = 'sel', aliases = ['rnd', 'rs', '幫我選一個'])
     async def _sel(self, ctx, *args):
         '''randomly select one item from your inputs'''
-        TGTMEME = random.choice(args)
-        await ctx.send(TGTMEME)
-        print(*args)
+        sel = random.choice(args)
+        await ctx.send(sel)
+        print(*args, f'->{sel}')
 
 async def setup(bot):
     await bot.add_cog(mainbot(bot))
