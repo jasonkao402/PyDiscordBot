@@ -11,7 +11,7 @@ from cog.utilFunc import *
 import pandas as pd
 from time import localtime, strftime
 
-MEMOLEN = 10
+MEMOLEN = 8
 READLEN = 20
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
@@ -67,7 +67,7 @@ headers = {
 url = "https://api.openai.com/v1/chat/completions"
 cc = OpenCC('s2twp')
 
-async def aiaiv2(msgs, botid, tokens = 600) -> dict:
+async def aiaiv2(msgs:list, botid:int, tokens:int) -> dict:
     async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
         data = {
             "model": "gpt-3.5-turbo",
@@ -90,7 +90,7 @@ async def aiaiv2(msgs, botid, tokens = 600) -> dict:
         # print(response)
         return replydict(rol='error', msg=response['error'])
     chatTok[botid] = response['usage']['total_tokens']
-    if chatTok[botid] > 3200:
+    if chatTok[botid] > 3000:
         chatMem[botid].popleft()
         chatMem[botid].popleft()
         print(f"token warning:{response['usage']['total_tokens']}, popped last msg.")
@@ -164,11 +164,11 @@ class askAI(commands.Cog):
                 setup  = replydict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
                 async with message.channel.typing():
                     if multiChk(text, ['詳細', '繼續']):
-                        tokens = 600
+                        tokens = 500
                     elif multiChk(text, ['簡單', '摘要', '簡略']) or len(text) < READLEN:
-                        tokens = 200
+                        tokens = 100
                     else:
-                        tokens = 400
+                        tokens = 200
                     reply = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum, tokens)
                 
                 assert reply['role'] != 'error'
