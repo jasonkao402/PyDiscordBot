@@ -1,0 +1,4 @@
+#ignore generated results
+*
+*/
+!.gitignore

@@ -10,6 +10,7 @@ from asyncio.exceptions import TimeoutError
 from cog.utilFunc import *
 import pandas as pd
 from time import localtime, strftime
+import numpy as np
 
 MEMOLEN = 8
 READLEN = 20
@@ -64,18 +65,38 @@ headers = {
     "OpenAI-Organization": openai.organization,
 }
 # "organization": openai.organization,
-url = "https://api.openai.com/v1/chat/completions"
+
 cc = OpenCC('s2twp')
 
+async def embedding_v1(inputStr:str):
+    url = "https://api.openai.com/v1/embeddings"
+    inputStr = inputStr.replace("\n", " ")
+    async def Embed_Result(session:ClientSession, inputStr, url=url, headers=headers):
+        data = {
+            "model": "text-embedding-ada-002",
+            "input": inputStr,
+        }
+        async with session.post(url, headers=headers, json=data) as result:
+            return await result.json()
+    async def get_response():
+        to, co = ClientTimeout(total=60), TCPConnector(ssl=False)
+        async with ClientSession(connector=co, timeout=to) as session:
+            return await Embed_Result(session, inputStr)
+    response = await get_response()
+    if 'error' in response:
+        return embedVector(str(response['error']), np.zeros(1536))
+    return embedVector(inputStr, np.array(response['data'][0]['embedding']))
+
 async def aiaiv2(msgs:list, botid:int, tokens:int) -> dict:
+    url = "https://api.openai.com/v1/chat/completions"
     async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
         data = {
             "model": "gpt-3.5-turbo",
             "messages": msgs,
             "max_tokens": min(tokens, 4096-chatTok[botid]),
             "temperature": 0.8,
-            "frequency_penalty": 0.4,
-            "presence_penalty": 0.4
+            "frequency_penalty": 0.6,
+            "presence_penalty": 0.6
         }
         async with session.post(url, headers=headers, json=data) as result:
             return await result.json()
@@ -107,7 +128,7 @@ class askAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message:Message):
         user, text = message.author, message.content
-        uid, userName = user.id, user.name
+        uid, userName = user.id, user.display_name
         n = min(len(text), READLEN)
         
         if uid == self.bot.user.id:
@@ -194,7 +215,7 @@ class askAI(commands.Cog):
     @commands.hybrid_command(name = 'scoreboard')
     async def _scoreboard(self, ctx):
         user = ctx.author
-        uid, userName = user.id, user.name
+        uid, userName = user.id, user.display_name
         if uid not in scoreArr.index: 
             return await ctx.send(f'{userName} 尚未和AI們對話過')
         arr = scoreArr.loc[uid]
@@ -202,7 +223,7 @@ class askAI(commands.Cog):
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
+        sb = sepLines((f'{wcformat(self.bot.get_user(i).display_name)}: {v}'for i, v in zip(t.index, t.values)))
         await ctx.send(f'```{sb}```\n{userName}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
     
     @commands.hybrid_command(name = 'localread')
