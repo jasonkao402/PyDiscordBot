@@ -11,9 +11,12 @@ from cog.utilFunc import *
 import pandas as pd
 from time import localtime, strftime
 import numpy as np
+from collections import defaultdict
+from os.path import isfile
 
 MEMOLEN = 8
 READLEN = 20
+THRESHOLD = 0.85
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
     k, o = acc_file.read().splitlines()
@@ -31,7 +34,7 @@ scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=int)
     
 def localRead(resetMem = False) -> None:
     with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
-        global setsys_extra, name2ID, id2name, chatMem, chatTok
+        global setsys_extra, name2ID, id2name, chatMem, chatTok, dfDict
         setsys_tmp = set1_file.readlines()
         setsys_extra = []
         name2ID, id2name = {}, []
@@ -42,6 +45,7 @@ def localRead(resetMem = False) -> None:
         if resetMem:
             chatMem = [deque(maxlen=MEMOLEN) for _ in range(len(setsys_extra))]
             chatTok = [0 for _ in range(len(setsys_extra))]
+            dfDict = defaultdict(pd.DataFrame)
         print(name2ID)
 
 def nameChk(s) -> tuple:
@@ -51,6 +55,9 @@ def nameChk(s) -> tuple:
 
 def replydict(rol='assistant', msg=''):
     return {'role': rol, 'content': msg}
+
+def injectCheck(val):
+    return True if val > THRESHOLD and val < 0.999 else False
 
 whatever = [
     "對不起，發生 429 - Too Many Requests ，所以不知道該怎麼回你 QQ",
@@ -91,7 +98,7 @@ async def aiaiv2(msgs:list, botid:int, tokens:int) -> dict:
     url = "https://api.openai.com/v1/chat/completions"
     async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
         data = {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-3.5-turbo-0301",
             "messages": msgs,
             "max_tokens": min(tokens, 4096-chatTok[botid]),
             "temperature": 0.8,
@@ -128,7 +135,7 @@ class askAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message:Message):
         user, text = message.author, message.content
-        uid, userName = user.id, user.display_name
+        uid, userName = user.id, user.global_name
         n = min(len(text), READLEN)
         
         if uid == self.bot.user.id:
@@ -182,16 +189,54 @@ class askAI(commands.Cog):
                 # 特判 = =
                 if aiNum == 5: userName = '嘎零'
                 prompt = replydict('user'  , f'{userName} said {text}')
-                setup  = replydict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
-                async with message.channel.typing():
-                    if multiChk(text, ['詳細', '繼續']):
-                        tokens = 500
-                    elif multiChk(text, ['簡單', '摘要', '簡略']) or len(text) < READLEN:
-                        tokens = 100
-                    else:
-                        tokens = 200
-                    reply = await aiaiv2([setup, *chatMem[aiNum], prompt], aiNum, tokens)
                 
+                if not uid in dfDict:
+                    dfDict[uid] = pd.DataFrame(columns=['text', 'vector'])
+                    # check if file exists
+                    if isfile(f'./embed/{uid}.csv') and isfile(f'embed/{uid}.npy'):
+                        tmptext = pd.read_csv(f'./embed/{uid}.csv')
+                        tmpvect = np.load    (f'./embed/{uid}.npy', allow_pickle=True)
+                        for i in range(len(tmptext)):
+                            dfDict[uid].loc[i] = (tmptext.loc[i]['text'], tmpvect[i])
+                
+                if multiChk(text, ['詳細', '繼續']):
+                    tokens = 500
+                elif multiChk(text, ['簡單', '摘要', '簡略']) or len(text) < READLEN:
+                    tokens = 60
+                else:
+                    tokens = 150
+                    
+                async with message.channel.typing():
+                    # skipping ai name
+                    if len(text) > len(aiNam):
+                        nidx = text.find(aiNam, 0, len(aiNam))
+                        if nidx != -1:
+                            text = text[nidx+len(aiNam):]
+                        if text[0] == '，' or text[0] == ' ':
+                            text = text[1:]
+                    # print(text)
+                    embed = await embedding_v1(text)
+                assert embed.vector[0] != 0
+                
+                idxs, corrs = simRank(embed.vector, dfDict[uid]['vector'])
+                debugmsg = sepLines((f'{t}: {c}{" (採用)" if injectCheck(c) else ""}' for t, c in zip(dfDict[uid]['text'][idxs], corrs)))
+                await message.channel.send(f'相似度:\n{debugmsg}')
+                if len(corrs) == 0 or corrs[0] < 0.98:
+                    dfDict[uid].loc[len(dfDict[uid])] = embed.asdict()
+                
+                # filter out using injectCheck
+                itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
+                selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
+                # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
+                setupmsg  = replydict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
+                async with message.channel.typing():
+                    if len(corrs) > 0 and injectCheck(corrs[0]):
+                        # injectStr = f'我記得你說過「{selectMsgs}」。'
+                        selectMsgs = selectMsgs.replace("\n", ' ')
+                        prompt = replydict('user', f'{userName} said {selectMsgs}，{text}')
+                        print(f'debug: {prompt["content"]}')
+                        
+                    reply = await aiaiv2([setupmsg, *chatMem[aiNum], prompt], aiNum, tokens)
                 assert reply['role'] != 'error'
                 
                 reply2 = reply["content"]
@@ -201,8 +246,11 @@ class askAI(commands.Cog):
                 print(f'{aiNam} timeout 了')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
             except AssertionError:
-                reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
-                print(f'{aiNam}:\n{reply2}')
+                if embed.vector[0] == 0:
+                    print(f'Embed error:\n{embed.text}')
+                if reply['role'] == 'error':
+                    reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
+                    print(f'Reply error:\n{aiNam}:\n{reply2}')
                 
                 await message.channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}') 
             else:
@@ -211,6 +259,7 @@ class askAI(commands.Cog):
                 if uid not in scoreArr.index:
                     scoreArr.loc[uid] = 0
                 scoreArr.loc[uid].iloc[aiNum] += 1
+                
     
     @commands.hybrid_command(name = 'scoreboard')
     async def _scoreboard(self, ctx):
@@ -223,7 +272,7 @@ class askAI(commands.Cog):
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = sepLines((f'{wcformat(self.bot.get_user(i).display_name)}: {v}'for i, v in zip(t.index, t.values)))
+        sb = sepLines((f'{wcformat(self.bot.get_user(i).global_name)}: {v}'for i, v in zip(t.index, t.values)))
         await ctx.send(f'```{sb}```\n{userName}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
     
     @commands.hybrid_command(name = 'localread')
@@ -278,3 +327,8 @@ async def teardown(bot):
     print('ai saved')
     # print(scoreArr)
     scoreArr.to_csv('./acc/scoreArr.csv')
+    for k in dfDict.keys():
+        print(f'UID {k}: {len(dfDict[k])}')
+        dfDict[k]['text'].to_csv(f'./embed/{k}.csv', index=False)
+        np.save(f'./embed/{k}.npy', dfDict[k]['vector'].to_numpy())
+    

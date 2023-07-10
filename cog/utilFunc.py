@@ -1,5 +1,5 @@
 from wcwidth import wcswidth
-from numpy import ndarray, dot
+from numpy import array, ndarray, dot, argsort
 from numpy.linalg import norm
 
 def clamp(n:int, minn=0, maxn=100) -> float:
@@ -10,8 +10,8 @@ def devChk(id:int) -> bool:
     admin = [225833749156331520, 316141566173642752, 304589833484107786, 619168250487504916, 868448833556840478, 662585167432646668]
     return int(id) in admin
 
-def sepLines(itr):
-    return '\n'.join(itr)
+def sepLines(itr, sep='\n'):
+    return sep.join(itr)
 
 def wcformat(s:str, w=12, strFront=True):
     if strFront:
@@ -26,6 +26,11 @@ def multiChk(s:str, l:list) -> tuple:
 
 def cosineSim(a, b) -> float:
     return dot(a, b) / (norm(a) * norm(b))
+
+def simRank(a, b, K=3) -> tuple:
+    sim = array([cosineSim(a, vector) for vector in b])
+    idx = argsort(sim)[:-K-1:-1]
+    return idx, sim[idx]
 
 class embedVector:
     def __init__(self, text:str, vector:ndarray):

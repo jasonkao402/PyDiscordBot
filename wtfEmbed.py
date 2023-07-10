@@ -3,11 +3,9 @@ import asyncio
 import os
 import pandas as pd
 import numpy as np
-from opencc import OpenCC
-from aiohttp import ClientSession, TCPConnector, ClientTimeout
 from collections import deque
-from cog.askAI import replydict, embedding_v1
-from cog.utilFunc import embedVector, cosineSim
+from cog.askAI import replydict, embedding_v1, THRESHOLD
+from cog.utilFunc import simRank, sepLines
 from collections import defaultdict
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
@@ -28,43 +26,39 @@ chatTok = 0
 N = 4
 chatMem = deque(maxlen=2*N)
 dfDict = defaultdict(pd.DataFrame)
-# pd.DataFrame(columns=['id', 'text', 'vector'])
 
 async def main():
+    uid = 225833749156331520
     for _ in range(N):
-        prompt = input('You: ')
+        rawprompt = input('You: ')
         try:
-            prompt = replydict('user'  , f'jasonZzz said {prompt}')
-            id = 9487
-            if not id in dfDict:
-                dfDict[id] = pd.DataFrame(columns=['text', 'vector'])
+            # prompt = replydict('user'  , f'jasonZzz said {rawprompt}')
+            if not uid in dfDict:
+                dfDict[uid] = pd.DataFrame(columns=['text', 'vector'])
                 # check if file exists
-                if os.path.isfile(f'./embed/{id}.csv') and os.path.isfile(f'embed/{id}.npy'):
-                    tmptext = pd.read_csv(f'./embed/{id}.csv')
-                    tmpvect = np.load    (f'./embed/{id}.npy', allow_pickle=True)
+                if os.path.isfile(f'./embed/{uid}.csv') and os.path.isfile(f'embed/{uid}.npy'):
+                    tmptext = pd.read_csv(f'./embed/{uid}.csv')
+                    tmpvect = np.load    (f'./embed/{uid}.npy', allow_pickle=True)
                     for i in range(len(tmptext)):
-                        dfDict[id].loc[i] = (tmptext.loc[i]['text'], tmpvect[i])    
-            embed = await embedding_v1(prompt['content'])
+                        dfDict[uid].loc[i] = (tmptext.loc[i]['text'], tmpvect[i])    
+            embed = await embedding_v1(rawprompt)
             assert embed.vector[0] != 0
-            # compare with database using cosine similarity
-            sim = [cosineSim(embed.vector, vector) for vector in dfDict[id]['vector']]
-            idx = np.argsort(sim)[:-2-1:-1]
-            for i in idx:
-                print(dfDict[id]['text'][i])
-                print(sim[i])
+            idxs, corrs = simRank(embed.vector, dfDict[uid]['vector'])
+            debugmsg = sepLines((f'{t}: {c}{" (採用)" if c > THRESHOLD else ""}' for t, c in zip(dfDict[uid]['text'][idxs], corrs)))
+            print(debugmsg)
         except TimeoutError:
             print('timeout')
         except AssertionError:
             if embed.vector[0] != 0:
                 print(f'Embed error:\n{embed.text}')
         else:
-            dfDict[id].loc[len(dfDict[id])] = embed.asdict()
+            dfDict[uid].loc[len(dfDict[uid])] = embed.asdict()
             # chatMem.append(prompt)
             # chatMem.append(reply)
 
 asyncio.run(main())
 for k in dfDict.keys():
-    print(f'ID {k}: {len(dfDict[k])}')
+    print(f'uid {k}: {len(dfDict[k])}')
     dfDict[k]['text'].to_csv(f'./embed/{k}.csv', index=False)
     np.save(f'./embed/{k}.npy', dfDict[k]['vector'].to_numpy())
     # print(dfDict[k]['vector'].to_numpy())

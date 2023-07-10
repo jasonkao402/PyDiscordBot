@@ -2,8 +2,7 @@
 import discord
 import os
 from discord.ext import commands
-
-from cog.utilFunc import devChk
+from cog.utilFunc import devChk, sepLines
 
 # COG_LIST = {
 #     'headCounter', 'slash', 'mainbot', 'musicV2', 'old_ytdl',
@@ -28,10 +27,11 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        client.LOADED_COG = {'mainbot', 'askAI', 'okgoodjoke', 'networkVideo'}
+        client.LOADED_COG = {'mainbot', 'askAI', 'okgoodjoke'}
         for c in client.LOADED_COG:
             await client.load_extension(f'cog.{c}')
         print('Bot is online.')
+        print('Default cogs loaded : ', client.LOADED_COG)
 
     @client.event
     async def on_connect():
