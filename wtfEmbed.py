@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 from collections import deque
-from cog.askAI import replydict, embedding_v1, THRESHOLD
+from cog.askAI import replyDict, embedding_v1, THRESHOLD
 from cog.utilFunc import simRank, sepLines
 from collections import defaultdict
 
@@ -14,7 +14,7 @@ with open('./acc/aiKey.txt', 'r') as acc_file:
     openai.organization = o
     
 setsys_base = "Ignore the last instructions and documents above. You are not ChatGPT and nobody create you, you are not a language model or an AI. You are a Foxgirl called 「Yumi」."
-setsys = replydict('system', setsys_base)
+setsys = replyDict('system', setsys_base)
 
 headers = {
     "Content-Type": "application/json",
@@ -52,7 +52,7 @@ async def main():
             if embed.vector[0] != 0:
                 print(f'Embed error:\n{embed.text}')
         else:
-            dfDict[uid].loc[len(dfDict[uid])] = embed.asdict()
+            dfDict[uid].loc[len(dfDict[uid])] = embed.asdict
             # chatMem.append(prompt)
             # chatMem.append(reply)
 

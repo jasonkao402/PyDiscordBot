@@ -53,9 +53,6 @@ def nameChk(s) -> tuple:
         if name in s: return name2ID[name], name
     return -1, ''
 
-def replydict(rol='assistant', msg=''):
-    return {'role': rol, 'content': msg}
-
 def injectCheck(val):
     return True if val > THRESHOLD and val < 0.999 else False
 
@@ -94,7 +91,7 @@ async def embedding_v1(inputStr:str):
         return embedVector(str(response['error']), np.zeros(1536))
     return embedVector(inputStr, np.array(response['data'][0]['embedding']))
 
-async def aiaiv2(msgs:list, botid:int, tokens:int) -> dict:
+async def aiaiv2(msgs:list, botid:int, tokens:int) -> replyDict:
     url = "https://api.openai.com/v1/chat/completions"
     async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
         data = {
@@ -116,13 +113,13 @@ async def aiaiv2(msgs:list, botid:int, tokens:int) -> dict:
     response = await get_response()
     if 'error' in response:
         # print(response)
-        return replydict(rol='error', msg=response['error'])
+        return replyDict(rol='error', msg=response['error'])
     chatTok[botid] = response['usage']['total_tokens']
     if chatTok[botid] > 3000:
         chatMem[botid].popleft()
         chatMem[botid].popleft()
         print(f"token warning:{response['usage']['total_tokens']}, popped last msg.")
-    return response['choices'][0]['message']
+    return replyDict(msg = response['choices'][0]['message']['content'])
     
 class askAI(commands.Cog):
     __slots__ = ('bot')
@@ -179,16 +176,16 @@ class askAI(commands.Cog):
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
             elif ('-err' in text[:n]) and devChk(uid):
-                prompt = replydict('user'  , f'{userName} said {text}' )
+                prompt = replyDict('user'  , f'{userName} said {text}' ).asdict
                 reply  = await aiaiv2([prompt], aiNum, 99999)
-                reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
+                reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
                 print(f'{aiNam}:\n{reply2}')
                 return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
             
             try:
                 # 特判 = =
                 if aiNum == 5: userName = '嘎零'
-                prompt = replydict('user'  , f'{userName} said {text}')
+                prompt = replyDict('user'  , f'{userName} said {text}')
                 
                 if not uid in dfDict:
                     dfDict[uid] = pd.DataFrame(columns=['text', 'vector'])
@@ -220,42 +217,46 @@ class askAI(commands.Cog):
                 
                 idxs, corrs = simRank(embed.vector, dfDict[uid]['vector'])
                 debugmsg = sepLines((f'{t}: {c}{" (採用)" if injectCheck(c) else ""}' for t, c in zip(dfDict[uid]['text'][idxs], corrs)))
-                await message.channel.send(f'相似度:\n{debugmsg}')
+                print(f'相似度:\n{debugmsg}')
+                # await message.channel.send(f'相似度:\n{debugmsg}')
+                # store into memory
                 if len(corrs) == 0 or corrs[0] < 0.98:
-                    dfDict[uid].loc[len(dfDict[uid])] = embed.asdict()
+                    dfDict[uid].loc[len(dfDict[uid])] = embed.asdict
                 
                 # filter out using injectCheck
                 itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
                 selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
                 # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
-                setupmsg  = replydict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
+                setupmsg  = replyDict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
                 async with message.channel.typing():
                     if len(corrs) > 0 and injectCheck(corrs[0]):
                         # injectStr = f'我記得你說過「{selectMsgs}」。'
                         selectMsgs = selectMsgs.replace("\n", ' ')
-                        prompt = replydict('user', f'{userName} said {selectMsgs}，{text}')
-                        print(f'debug: {prompt["content"]}')
+                        prompt = replyDict('user', f'{userName} said {selectMsgs}，{text}')
+                        print(f'debug: {prompt.content}')
                         
-                    reply = await aiaiv2([setupmsg, *chatMem[aiNum], prompt], aiNum, tokens)
-                assert reply['role'] != 'error'
+                    reply = await aiaiv2([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
+                assert reply.role != 'error'
                 
-                reply2 = reply["content"]
+                reply2 = reply.content
                 # await message.channel.send(f'{cc.convert(reply2.replace("JailBreak", aiNam))}')
                 await message.channel.send(f'{cc.convert(reply2)}')
             except TimeoutError:
-                print(f'{aiNam} timeout 了')
+                print(f'[!] {aiNam} TimeoutError')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
             except AssertionError:
                 if embed.vector[0] == 0:
                     print(f'Embed error:\n{embed.text}')
-                if reply['role'] == 'error':
-                    reply2 = sepLines((f'{k}: {v}' for k, v in reply["content"].items()))
+                if reply.role == 'error':
+                    reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
                     print(f'Reply error:\n{aiNam}:\n{reply2}')
                 
                 await message.channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}') 
             else:
-                chatMem[aiNum].append(prompt)
-                chatMem[aiNum].append(reply)
+                chatMem[aiNum].append(prompt.asdict)
+                chatMem[aiNum].append(reply.asdict)
+                # for i in chatMem[aiNum]:
+                #     print(type(i))
                 if uid not in scoreArr.index:
                     scoreArr.loc[uid] = 0
                 scoreArr.loc[uid].iloc[aiNum] += 1

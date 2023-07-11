@@ -7,7 +7,7 @@ def clamp(n:int, minn=0, maxn=100) -> float:
     return max(min(maxn, n), minn)
 
 def devChk(id:int) -> bool:
-    admin = [225833749156331520, 316141566173642752, 304589833484107786, 619168250487504916, 868448833556840478, 662585167432646668]
+    admin = [225833749156331520, 316141566173642752, 304589833484107786, 619168250487504916, 868448833556840478, 662585167432646668, 336527947299028992]
     return int(id) in admin
 
 def sepLines(itr, sep='\n'):
@@ -37,6 +37,16 @@ class embedVector:
         # self.id = id
         self.text = text.replace('\n', ' ')
         self.vector = vector
+
+    @property
     def asdict(self):
         return {'text':self.text, 'vector':self.vector}
 
+class replyDict:
+    def __init__(self, rol='assistant', msg=''):
+        self.role = rol
+        self.content = msg
+        
+    @property
+    def asdict(self):
+        return {'role': self.role, 'content': self.content}
