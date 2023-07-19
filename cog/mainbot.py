@@ -41,7 +41,7 @@ class mainbot(commands.Cog):
         try:
             rpt = int(rpt)
         except:
-            await ctx.send(self.BADARGUMENT, delete_after=20)
+            await ctx.send(BADARGUMENT, delete_after=20)
             print('clear cmd error')
             return
 

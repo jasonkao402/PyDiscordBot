@@ -51,7 +51,7 @@ class okgoodjoke(commands.Cog):
                     
                 emojiArr.loc[uid].iloc[eid] += 1
                 t = emojiArr.iloc[:,eid].sort_values(ascending=False).head(5)
-                sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
+                sb = sepLines((f'{wcformat(self.bot.get_user(i).global_name)}: {v}'for i, v in zip(t.index, t.values)))
                 return await ch.send(f'{emj} Emoji Rank:\n```{sb}```', reference=msg, silent=True)
     
     @commands.hybrid_command(name = 'erank')
@@ -64,7 +64,7 @@ class okgoodjoke(commands.Cog):
                 return await ctx.send(f'{emj} Emoji Rank 404 not found.', silent=True)
             # print('debug', eid)
             t = emojiArr.iloc[:,eid].sort_values(ascending=False).head(5)
-            sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
+            sb = sepLines((f'{wcformat(self.bot.get_user(i).global_name)}: {v}'for i, v in zip(t.index, t.values)))
             return await ctx.send(f'{emj} Emoji Rank:\n```{sb}```', silent=True)
 
 async def setup(bot):
