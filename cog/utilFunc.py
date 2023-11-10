@@ -19,7 +19,7 @@ def wcformat(s:str, w=12, strFront=True):
     else:
         return (' '*(w - wcswidth(s)) + s)
     
-def multiChk(s:str, l:list) -> tuple:
+def multiChk(s:str, l:list) -> int:
     for i in l:
         if i in s: return i
     return -1
@@ -43,10 +43,13 @@ class embedVector:
         return {'text':self.text, 'vector':self.vector}
 
 class replyDict:
-    def __init__(self, rol='assistant', msg=''):
+    def __init__(self, rol='assistant', msg='', name=''):
         self.role = rol
         self.content = msg
-        
+        self.name = name
     @property
     def asdict(self):
-        return {'role': self.role, 'content': self.content}
+        if self.name != '':
+            return {'role': self.role, 'content': self.content, 'name': self.name}
+        else:
+            return {'role': self.role, 'content': self.content}

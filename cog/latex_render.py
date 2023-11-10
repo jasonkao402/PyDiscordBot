@@ -1,15 +1,14 @@
 from discord import File as DC_File, Client as DC_Client
 from discord.ext import commands
-import sympy
 import matplotlib.pyplot as plt
 from io import BytesIO
 
-def render_text(formula:str, fontsize=12, dpi=256) -> bytes:
+def render_text(formula:str, fontsize=10, dpi=256) -> bytes:
     """Renders LaTeX formula into image."""
     fig = plt.figure(figsize=(0.01, 0.01))
-    fig.text(0, 0, u'${}$'.format(formula), fontsize=fontsize)
+    fig.text(0, 0, u'${}$'.format(formula), fontsize=fontsize, color='#ffffff')
     buffer_ = BytesIO()
-    fig.savefig(buffer_, dpi=dpi, transparent=False, format='png', bbox_inches='tight', pad_inches=0.02)
+    fig.savefig(buffer_, dpi=dpi, transparent=True, format='png', bbox_inches='tight', pad_inches=0.02)
     buffer_.seek(0)
     plt.close(fig)
     

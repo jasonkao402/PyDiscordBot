@@ -1,25 +1,29 @@
-import openai
-from discord import Client as DC_Client, Message
-from discord.ext import commands
-from collections import deque
-from random import choice, random, randint
-from opencc import OpenCC
-from aiohttp import ClientSession, TCPConnector, ClientTimeout
+
 import asyncio
 from asyncio.exceptions import TimeoutError
-from cog.utilFunc import *
-import pandas as pd
-from time import localtime, strftime
-import numpy as np
-from collections import defaultdict
+from collections import defaultdict, deque
 from os.path import isfile
+from random import choice, randint, random
+from time import localtime, strftime
+
+import numpy as np
+import openai
+import pandas as pd
+from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from discord import Client as DC_Client
+from discord import Message
+from discord.ext import commands
+from opencc import OpenCC
+
+from cog.utilFunc import *
 
 MEMOLEN = 8
 READLEN = 20
-THRESHOLD = 0.85
+THRESHOLD = 0.8575
+TOKENPRESET = [100, 200, 700]
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
-    k, o = acc_file.read().splitlines()
+    k, o = acc_file.read().splitlines()[:2]
     openai.api_key = k
     openai.organization = o
     
@@ -54,7 +58,7 @@ def nameChk(s) -> tuple:
     return -1, ''
 
 def injectCheck(val):
-    return True if val > THRESHOLD and val < 0.999 else False
+    return True if val > THRESHOLD and val < 0.99 else False
 
 whatever = [
     "對不起，發生 429 - Too Many Requests ，所以不知道該怎麼回你 QQ",
@@ -132,7 +136,8 @@ class askAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message:Message):
         user, text = message.author, message.content
-        uid, userName = user.id, user.global_name
+        uid, userName = user.id, str(user)
+        userName = userName.replace('.', '')
         n = min(len(text), READLEN)
         
         if uid == self.bot.user.id:
@@ -176,7 +181,7 @@ class askAI(commands.Cog):
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
             elif ('-err' in text[:n]) and devChk(uid):
-                prompt = replyDict('user'  , f'{userName} said {text}' ).asdict
+                prompt = replyDict('user'  , f'{text}', userName).asdict
                 reply  = await aiaiv2([prompt], aiNum, 99999)
                 reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
                 print(f'{aiNam}:\n{reply2}')
@@ -184,8 +189,11 @@ class askAI(commands.Cog):
             
             try:
                 # 特判 = =
-                if aiNum == 5: userName = '嘎零'
-                prompt = replyDict('user'  , f'{userName} said {text}')
+                if aiNum == 5:
+                    userName = 'Ning'
+                    prompt = replyDict('user'  , f'嘎零 said {text}', userName)
+                else:
+                    prompt = replyDict('user'  , f'{userName} said {text}', userName)
                 
                 if not uid in dfDict:
                     dfDict[uid] = pd.DataFrame(columns=['text', 'vector'])
@@ -197,11 +205,11 @@ class askAI(commands.Cog):
                             dfDict[uid].loc[i] = (tmptext.loc[i]['text'], tmpvect[i])
                 
                 if multiChk(text, ['詳細', '繼續']):
-                    tokens = 500
+                    tokens = TOKENPRESET[2]
                 elif multiChk(text, ['簡單', '摘要', '簡略']) or len(text) < READLEN:
-                    tokens = 60
+                    tokens = TOKENPRESET[0]
                 else:
-                    tokens = 150
+                    tokens = TOKENPRESET[1]
                     
                 async with message.channel.typing():
                     # skipping ai name
@@ -227,12 +235,17 @@ class askAI(commands.Cog):
                 itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
                 selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
                 # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
-                setupmsg  = replyDict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}')
+                setupmsg  = replyDict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}', 'system')
                 async with message.channel.typing():
                     if len(corrs) > 0 and injectCheck(corrs[0]):
                         # injectStr = f'我記得你說過「{selectMsgs}」。'
                         selectMsgs = selectMsgs.replace("\n", ' ')
-                        prompt = replyDict('user', f'{userName} said {selectMsgs}，{text}')
+                        # 特判 = =
+                        if aiNum == 5:
+                            # userName = 'Ning'
+                            prompt = replyDict('user', f'嘎零 said {selectMsgs}, {text}', 'Ning')
+                        else: 
+                            prompt = replyDict('user', f'{userName} said {selectMsgs}, {text}', userName)
                         print(f'debug: {prompt.content}')
                         
                     reply = await aiaiv2([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
@@ -273,7 +286,7 @@ class askAI(commands.Cog):
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = sepLines((f'{wcformat(self.bot.get_user(i).global_name)}: {v}'for i, v in zip(t.index, t.values)))
+        sb = sepLines((f'{wcformat(str(self.bot.get_user(i)))}: {v}'for i, v in zip(t.index, t.values)))
         await ctx.send(f'```{sb}```\n{userName}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
     
     @commands.hybrid_command(name = 'localread')
