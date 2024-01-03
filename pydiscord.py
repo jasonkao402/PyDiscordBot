@@ -4,9 +4,6 @@ import os
 from discord.ext import commands
 from cog.utilFunc import devChk, sepLines
 
-
-
-
 with open('./acc/tokenDC.txt', 'r') as acc_file:
     acc_data = acc_file.read().splitlines()
     TOKEN = acc_data[0]
@@ -37,6 +34,7 @@ def main():
         # LOADED_COG = {'mainbot', 'askAI', 'okgoodjoke', 'tex'}
         for c in LOADED_COG:
             await client.load_extension(f'cog.{c}')
+        await client.tree.sync()
         print('Bot is online.')
         print('Default cogs loaded : ', LOADED_COG)
 
@@ -122,7 +120,7 @@ def main():
         await ctx.send('今天的網路夠多了。')
         await client.close()
 
-    # Game Start!
+    # Start!
     client.run(TOKEN)
 
 if __name__ == "__main__":

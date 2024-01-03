@@ -5,14 +5,16 @@ from collections import defaultdict, deque
 from os.path import isfile
 from random import choice, randint, random
 from time import localtime, strftime
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import numpy as np
 import openai
 import pandas as pd
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from discord import Client as DC_Client
-from discord import Message
-from discord.ext import commands
+from discord import Message, Embed, Color, app_commands, Interaction
+from discord.ext import commands, tasks
 from opencc import OpenCC
 
 from cog.utilFunc import *
@@ -20,7 +22,11 @@ from cog.utilFunc import *
 MEMOLEN = 8
 READLEN = 20
 THRESHOLD = 0.8575
-TOKENPRESET = [100, 200, 700]
+TOKENPRESET = [150, 250, 700]
+
+tz = timezone(timedelta(hours = 8))
+tempTime = datetime.now(timezone.utc) + timedelta(seconds=-10)
+tempTime = tempTime.time()
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
     k, o = acc_file.read().splitlines()[:2]
@@ -130,9 +136,14 @@ class askAI(commands.Cog):
     
     def __init__(self, bot: DC_Client):
         self.bot = bot
+        self.channel = self.bot.get_channel(1088253899871371284)
         self.ignore = 0.5
+        self.my_task.start()
         # self.last_reply = replydict()
-    
+        
+    def cog_unload(self):
+        self.my_task.cancel()
+        
     @commands.Cog.listener()
     async def on_message(self, message:Message):
         user, text = message.author, message.content
@@ -235,7 +246,7 @@ class askAI(commands.Cog):
                 itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
                 selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
                 # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
-                setupmsg  = replyDict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}', 'system')
+                setupmsg  = replyDict('system', f'{setsys_extra[aiNum]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
                 async with message.channel.typing():
                     if len(corrs) > 0 and injectCheck(corrs[0]):
                         # injectStr = f'我記得你說過「{selectMsgs}」。'
@@ -273,7 +284,6 @@ class askAI(commands.Cog):
                 if uid not in scoreArr.index:
                     scoreArr.loc[uid] = 0
                 scoreArr.loc[uid].iloc[aiNum] += 1
-                
     
     @commands.hybrid_command(name = 'scoreboard')
     async def _scoreboard(self, ctx):
@@ -332,7 +342,57 @@ class askAI(commands.Cog):
         num = float(num)
         self.ignore = num
         print(f'忽略率： {num}')
-
+        
+    @app_commands.command(name = 'schedule')
+    async def _schedule(self, interaction: Interaction, stime:int, text:Optional[str] = ''):
+        dt = datetime.now(timezone.utc) + timedelta(seconds=int(stime))
+        
+        self.channel = interaction.channel
+        self.sch_User = str(interaction.user).replace('.', '')
+        self.sch_Text = text if text != '' else '好無聊，想找伊莉亞聊天，要聊甚麼呢?'
+        tsk = self.my_task
+        if not tsk.is_running():
+            print('start task')
+            tsk.start()
+        tsk.change_interval(time=dt.time())
+        tsk.restart()
+        
+        embed = Embed(title = "您的AI貓娘伊莉亞", description = f"伊莉亞來找主人 {self.sch_User} 了！", color = Color.random())
+        embed.add_field(name = "時間", value = utctimeFormat(tsk.next_iteration))
+        embed.add_field(name = "狀態", value = self.my_task.is_running())
+        await interaction.response.send_message(embed = embed)
+        
+    @tasks.loop(time=tempTime)
+    async def my_task(self):
+        channel = self.channel
+        aiNam = id2name[0]
+        if channel:
+            setupmsg  = replyDict('system', f'{setsys_extra[0]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
+            try:
+                async with channel.typing():
+                    prompt = replyDict('user', f'{self.sch_User} said {self.sch_Text}', self.sch_User)
+                    reply = await aiaiv2([setupmsg.asdict, *chatMem[0], prompt.asdict], 0, TOKENPRESET[0])
+                assert reply.role != 'error'
+                
+                reply2 = reply.content
+                await channel.send(f'{cc.convert(reply2)}')
+            except TimeoutError:
+                print(f'[!] {aiNam} TimeoutError')
+                await channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
+            except AssertionError:
+                if reply.role == 'error':
+                    reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
+                    print(f'Reply error:\n{aiNam}:\n{reply2}')
+                
+                await channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}')
+            else:
+                chatMem[0].append(reply.asdict)
+    
+    # @my_task.before_loop
+    # async def before_printer(self):
+    #     await self.bot.wait_until_ready()
+    #     print('bot ready task start')
+        
 async def setup(bot):
     localRead(True)
     await bot.add_cog(askAI(bot))
