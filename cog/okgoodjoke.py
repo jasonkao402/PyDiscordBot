@@ -22,7 +22,7 @@ def localRead():
     for i in range(len(setsys_tmp)):
         id2emoji.append(setsys_tmp[i].split(maxsplit=1)[0])
         emoji2id.update((alias, i) for alias in setsys_tmp[i].split())
-    print(emoji2id)
+    # print(emoji2id)
     
 def nameChk(s):
     for emoji in emoji2id:

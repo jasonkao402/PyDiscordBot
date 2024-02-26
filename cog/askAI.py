@@ -5,14 +5,16 @@ from collections import defaultdict, deque
 from os.path import isfile
 from random import choice, randint, random
 from time import localtime, strftime
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import numpy as np
 import openai
 import pandas as pd
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from discord import Client as DC_Client
-from discord import Message
-from discord.ext import commands
+from discord import Message, Embed, Color, app_commands, Interaction
+from discord.ext import commands, tasks
 from opencc import OpenCC
 
 from cog.utilFunc import *
@@ -20,7 +22,12 @@ from cog.utilFunc import *
 MEMOLEN = 8
 READLEN = 20
 THRESHOLD = 0.8575
-TOKENPRESET = [100, 200, 700]
+TOKENPRESET = [150, 250, 700]
+LONELYMETER = 250
+
+tz = timezone(timedelta(hours = 8))
+tempTime = datetime.now(timezone.utc) + timedelta(seconds=-10)
+tempTime = tempTime.time()
 
 with open('./acc/aiKey.txt', 'r') as acc_file:
     k, o = acc_file.read().splitlines()[:2]
@@ -29,7 +36,10 @@ with open('./acc/aiKey.txt', 'r') as acc_file:
     
 with open('./acc/banList.txt', 'r') as acc_file:
     banList = [int(id) for id in acc_file.readlines()]
-
+    
+with open('./talkTest2.txt', 'r', encoding='utf-8') as f:
+        talkList = f.readlines()
+        
 scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=int)
 # with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
 #     setsys_base = set2_file.read()
@@ -50,7 +60,7 @@ def localRead(resetMem = False) -> None:
             chatMem = [deque(maxlen=MEMOLEN) for _ in range(len(setsys_extra))]
             chatTok = [0 for _ in range(len(setsys_extra))]
             dfDict = defaultdict(pd.DataFrame)
-        print(name2ID)
+        # print(name2ID)
 
 def nameChk(s) -> tuple:
     for name in name2ID:
@@ -72,14 +82,12 @@ headers = {
     "Authorization": f"Bearer {openai.api_key}",
     "OpenAI-Organization": openai.organization,
 }
-# "organization": openai.organization,
-
 cc = OpenCC('s2twp')
 
 async def embedding_v1(inputStr:str):
     url = "https://api.openai.com/v1/embeddings"
     inputStr = inputStr.replace("\n", " ")
-    async def Embed_Result(session:ClientSession, inputStr, url=url, headers=headers):
+    async def Embed_Result(session:ClientSession, inputStr, headers=headers):
         data = {
             "model": "text-embedding-ada-002",
             "input": inputStr,
@@ -97,7 +105,7 @@ async def embedding_v1(inputStr:str):
 
 async def aiaiv2(msgs:list, botid:int, tokens:int) -> replyDict:
     url = "https://api.openai.com/v1/chat/completions"
-    async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
+    async def Chat_Result(session:ClientSession, msgs, headers=headers):
         data = {
             "model": "gpt-3.5-turbo-0301",
             # "model": "gpt-3.5-turbo-1106",
@@ -131,9 +139,22 @@ class askAI(commands.Cog):
     
     def __init__(self, bot: DC_Client):
         self.bot = bot
+        self.channel = self.bot.get_channel(1088253899871371284)
         self.ignore = 0.5
+        self.my_task.start()
+        self._mindLoop.start()
+        self._loneMeter.start()
+        self.loneMeter = 0
+        self.loneMsg = 0
+        self.loneLimit = LONELYMETER
+        self.sch_FullUser = None
         # self.last_reply = replydict()
-    
+        
+    def cog_unload(self):
+        self.my_task.cancel()
+        self._mindLoop.cancel()
+        self._loneMeter.cancel()
+        
     @commands.Cog.listener()
     async def on_message(self, message:Message):
         user, text = message.author, message.content
@@ -236,7 +257,7 @@ class askAI(commands.Cog):
                 itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
                 selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
                 # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
-                setupmsg  = replyDict('system', setsys_extra[aiNum] + f'現在是{strftime("%Y-%m-%d %H:%M", localtime())}', 'system')
+                setupmsg  = replyDict('system', f'{setsys_extra[aiNum]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
                 async with message.channel.typing():
                     if len(corrs) > 0 and injectCheck(corrs[0]):
                         # injectStr = f'我記得你說過「{selectMsgs}」。'
@@ -274,7 +295,6 @@ class askAI(commands.Cog):
                 if uid not in scoreArr.index:
                     scoreArr.loc[uid] = 0
                 scoreArr.loc[uid].iloc[aiNum] += 1
-                
     
     @commands.hybrid_command(name = 'scoreboard')
     async def _scoreboard(self, ctx):
@@ -333,7 +353,102 @@ class askAI(commands.Cog):
         num = float(num)
         self.ignore = num
         print(f'忽略率： {num}')
-
+        
+    @app_commands.command(name = 'schedule')
+    async def _schedule(self, interaction: Interaction, stime:int, text:Optional[str] = ''):
+        dt = datetime.now(timezone.utc) + timedelta(seconds=int(stime))
+        
+        self.channel = interaction.channel
+        self.sch_FullUser = interaction.user
+        self.sch_User = str(interaction.user).replace('.', '')
+        self.sch_Text = text if text != '' else '好無聊，想找伊莉亞聊天，要聊甚麼呢?'
+        
+        tsk = self._loneMeter
+        if not tsk.is_running():
+            print('start task')
+            tsk.start()
+        tsk.change_interval(seconds=4)
+        tsk.restart()
+        
+        tsk = self.my_task
+        if not tsk.is_running():
+            print('start task')
+            tsk.start()
+        tsk.change_interval(time=dt.time())
+        tsk.restart()
+        
+        tsk = self._mindLoop
+        if not tsk.is_running():
+            print('start task')
+            tsk.start()
+            
+        time_points = np.random.exponential(60/5, (5))
+        time_points = np.round(time_points, 3)
+        cumulative_times = np.cumsum(time_points)
+        cur_time = datetime.now(timezone.utc)
+        
+        seq_t = [(cur_time + timedelta(seconds = i)).time() for i in cumulative_times]
+        for i in seq_t:
+            print(f'{i}')
+        tsk.change_interval(time=seq_t)
+        tsk.restart()
+        
+        embed = Embed(title = "AI貓娘伊莉亞", description = f"伊莉亞來找主人 {self.sch_User} 了！", color = Color.random())
+        embed.add_field(name = "時間", value = utctimeFormat(tsk.next_iteration))
+        embed.add_field(name = "狀態", value = self.my_task.is_running())
+        await interaction.response.send_message(embed = embed)
+        
+    @tasks.loop(time=tempTime)
+    async def my_task(self):
+        channel = self.channel
+        aiNam = id2name[0]
+        if channel:
+            print("debugging")
+            # setupmsg  = replyDict('system', f'{setsys_extra[0]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
+            # try:
+            #     async with channel.typing():
+            #         prompt = replyDict('user', f'{self.sch_User} said {self.sch_Text}', self.sch_User)
+            #         reply = await aiaiv2([setupmsg.asdict, *chatMem[0], prompt.asdict], 0, TOKENPRESET[0])
+            #     assert reply.role != 'error'
+                
+            #     reply2 = reply.content
+            #     await channel.send(f'{cc.convert(reply2)}')
+            # except TimeoutError:
+            #     print(f'[!] {aiNam} TimeoutError')
+            #     await channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
+            # except AssertionError:
+            #     if reply.role == 'error':
+            #         reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
+            #         print(f'Reply error:\n{aiNam}:\n{reply2}')
+                
+            #     await channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}')
+            # else:
+            #     chatMem[0].append(reply.asdict)
+    
+    @tasks.loop(time=tempTime)
+    async def _mindLoop(self):
+        channel = self.channel
+        user = self.sch_FullUser
+        # await channel.send(f'{user.mention} {talkList[self._mindLoop.current_loop]}')
+        print(f'{user} {talkList[self._mindLoop.current_loop]}')
+    
+    @tasks.loop(time=tempTime)
+    async def _loneMeter(self):
+        SCALE = 10
+        
+        channel = self.channel
+        user = self.sch_FullUser
+        limit = self.loneLimit
+        self.loneMeter += np.random.poisson(SCALE)
+        print(f'loneMeter: {self.loneMeter}/{limit}')
+        if self.loneMeter > limit:
+            self.loneLimit = LONELYMETER/2 + np.random.exponential(LONELYMETER/2)
+            consume = np.random.poisson(10*SCALE)
+            self.loneMeter -= consume
+            
+            await channel.send(f'{talkList[self.loneMsg % len(talkList)]}\n({-consume} energy) (meter: {self.loneMeter}/{limit}))')
+            self.loneMsg += 1
+        
 async def setup(bot):
     localRead(True)
     await bot.add_cog(askAI(bot))

@@ -1,0 +1,266 @@
+{
+    "articles": [
+        {
+            "author": "自由時報",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T11:54:00Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "全球各國PS 玩家最愛玩哪些熱門遊戲？Sony 官方用一張地圖揭曉答案- 自由電子報3C科技 - 自由時報",
+            "url": "https://news.google.com/rss/articles/CBMiIGh0dHBzOi8vM2MubHRuLmNvbS50dy9uZXdzLzU2NDc00gEA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Yahoo奇摩新聞",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T11:15:47Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "羽田機場擦撞意外 國土交通省公布通話紀錄 塔台未允海保機進跑道 - Yahoo奇摩新聞",
+            "url": "https://news.google.com/rss/articles/CBMisAJodHRwczovL3R3Lm5ld3MueWFob28uY29tLyVFNyVCRSVCRCVFNyU5NCVCMCVFNiVBOSU5RiVFNSVBMCVCNCVFNiU5MyVBNiVFNiU5MiU5RSVFNiU4NCU4RiVFNSVBNCU5Ni0lRTUlOUMlOEIlRTUlOUMlOUYlRTQlQkElQTQlRTklODAlOUElRTclOUMlODElRTUlODUlQUMlRTUlQjglODMlRTklODAlOUElRTglQTklQjElRTclQjQlODAlRTklOEMlODQtJUU1JUExJTk0JUU1JThGJUIwJUU2JTlDJUFBJUU1JTg1JTgxJUU2JUI1JUI3JUU0JUJGJTlEJUU2JUE5JTlGJUU5JTgwJUIyJUU4JUI3JTkxJUU5JTgxJTkzLTExMTU0NjU2OC5odG1s0gG4Amh0dHBzOi8vdHcubmV3cy55YWhvby5jb20vYW1waHRtbC8lRTclQkUlQkQlRTclOTQlQjAlRTYlQTklOUYlRTUlQTAlQjQlRTYlOTMlQTYlRTYlOTIlOUUlRTYlODQlOEYlRTUlQTQlOTYtJUU1JTlDJThCJUU1JTlDJTlGJUU0JUJBJUE0JUU5JTgwJTlBJUU3JTlDJTgxJUU1JTg1JUFDJUU1JUI4JTgzJUU5JTgwJTlBJUU4JUE5JUIxJUU3JUI0JTgwJUU5JThDJTg0LSVFNSVBMSU5NCVFNSU4RiVCMCVFNiU5QyVBQSVFNSU4NSU4MSVFNiVCNSVCNyVFNCVCRiU5RCVFNiVBOSU5RiVFOSU4MCVCMiVFOCVCNyU5MSVFOSU4MSU5My0xMTE1NDY1NjguaHRtbA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "早安健康",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T10:52:45Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "天然「癌細胞剋星」活性關鍵在體溫！泡澡強免疫5招不「傷心」 - 早安健康",
+            "url": "https://news.google.com/rss/articles/CBMiIGh0dHBzOi8vd3d3LmVkaC50dy9hcnRpY2xlLzM1MzIw0gEkaHR0cHM6Ly93d3cuZWRoLnR3L2FtcC9hcnRpY2xlLzM1MzIw?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Yahoo奇摩新聞",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T10:10:09Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "張誌家意外猝逝韓媒大篇幅報導 直嘆：全盛時期讓韓國隊很痛苦 - Yahoo奇摩新聞",
+            "url": "https://news.google.com/rss/articles/CBMingJodHRwczovL3R3Lm5ld3MueWFob28uY29tLyVFNSVCQyVCNSVFOCVBQSU4QyVFNSVBRSVCNiVFNiU4NCU4RiVFNSVBNCU5NiVFNyU4QyU5RCVFOSU4MCU5RCVFOSU5RiU5MyVFNSVBQSU5MiVFNSVBNCVBNyVFNyVBRiU4NyVFNSVCOSU4NSVFNSVBMCVCMSVFNSVCMCU4RS0lRTclOUIlQjQlRTUlOTglODYtJUU1JTg1JUE4JUU3JTlCJTlCJUU2JTk5JTgyJUU2JTlDJTlGJUU4JUFFJTkzJUU5JTlGJTkzJUU1JTlDJThCJUU5JTlBJThBJUU1JUJFJTg4JUU3JTk3JTlCJUU4JThCJUE2LTEwMTAwOTUxNS5odG1s0gGmAmh0dHBzOi8vdHcubmV3cy55YWhvby5jb20vYW1waHRtbC8lRTUlQkMlQjUlRTglQUElOEMlRTUlQUUlQjYlRTYlODQlOEYlRTUlQTQlOTYlRTclOEMlOUQlRTklODAlOUQlRTklOUYlOTMlRTUlQUElOTIlRTUlQTQlQTclRTclQUYlODclRTUlQjklODUlRTUlQTAlQjElRTUlQjAlOEUtJUU3JTlCJUI0JUU1JTk4JTg2LSVFNSU4NSVBOCVFNyU5QiU5QiVFNiU5OSU4MiVFNiU5QyU5RiVFOCVBRSU5MyVFOSU5RiU5MyVFNSU5QyU4QiVFOSU5QSU4QSVFNSVCRSU4OCVFNyU5NyU5QiVFOCU4QiVBNi0xMDEwMDk1MTUuaHRtbA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "中時新聞網 Chinatimes.com",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T09:37:51Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "疑羅致政不雅片外流？蔡正元曝：都會選區期待高 - 中時新聞網 Chinatimes.com",
+            "url": "https://news.google.com/rss/articles/CBMiPWh0dHBzOi8vd3d3LmNoaW5hdGltZXMuY29tL3JlYWx0aW1lbmV3cy8yMDI0MDEwMzAwNDEwOC0yNjA0MDfSAUFodHRwczovL3d3dy5jaGluYXRpbWVzLmNvbS9hbXAvcmVhbHRpbWVuZXdzLzIwMjQwMTAzMDA0MTA4LTI2MDQwNw?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Anue鉅亨",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T09:25:14Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "台股挫近300點 電子五哥遭外資重點砍出 - Anue鉅亨",
+            "url": "https://news.google.com/rss/articles/CBMiJmh0dHBzOi8vbmV3cy5jbnllcy5jb20vbmV3cy9pZC81NDIzNzc30gEqaHR0cHM6Ly9hbXAtbmV3cy5jbnllcy5jb20vbmV3cy9pZC81NDIzNzc3?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Yahoo奇摩股市",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T09:22:13Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "【新台幣活存】年終獎金要存哪？ 高利活存8%又來了 - Yahoo奇摩股市",
+            "url": "https://news.google.com/rss/articles/CBMi9wFodHRwczovL3R3LnN0b2NrLnlhaG9vLmNvbS9uZXdzLyVFMyU4MCU5MCVFNiU5NiVCMCVFNSU4RiVCMCVFNSVCOSVBMyVFNiVCNCVCQiVFNSVBRCU5OCVFMyU4MCU5MSVFNSVCOSVCNCVFNyVCNSU4MiVFNyU4RCU4RSVFOSU4NyU5MSVFOCVBNiU4MSVFNSVBRCU5OCVFNSU5MyVBQSVFRiVCQyU5Ri0lRTklQUIlOTglRTUlODglQTklRTYlQjQlQkIlRTUlQUQlOTg4JUU1JThGJTg4JUU0JUJFJTg2JUU0JUJBJTg2LTA5MjIxMzY5NS5odG1s0gEA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "聯合新聞網",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T09:12:18Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "流感後遺症？桃園男下肢無力險癱 部桃醫師確認是這症狀 - 聯合新聞網",
+            "url": "https://news.google.com/rss/articles/CBMiJ2h0dHBzOi8vdWRuLmNvbS9uZXdzL3N0b3J5LzcyNjYvNzY4Mzc1OdIBK2h0dHBzOi8vdWRuLmNvbS9uZXdzL2FtcC9zdG9yeS83MjY2Lzc2ODM3NTk?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "USTV 非凡電視",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T08:44:08Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "二度遇襲太害怕!馬士基:無限期停航紅海\"2024需求疲弱\"蘋果遭巴克萊降評市值蒸發千億!｜推播周恬吏｜非凡財經新聞｜20240103 - USTV 非凡電視",
+            "url": "https://news.google.com/rss/articles/CCAiCzRsX3EwQmxTeXVBmAEB?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "鏡週刊",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T08:39:25Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "舌戰曹興誠！拒統拒獨爭不休 趙少康談郭台銘認了：3支電話都打不通 - 鏡週刊",
+            "url": "https://news.google.com/rss/articles/CBMiL2h0dHBzOi8vd3d3Lm1pcnJvcm1lZGlhLm1nL3N0b3J5LzIwMjQwMTAzZWRpMDAx0gEzaHR0cHM6Ly93d3cubWlycm9ybWVkaWEubWcvc3RvcnkvYW1wLzIwMjQwMTAzZWRpMDAx?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "LINE TODAY Taiwan",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T08:31:46Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "孟耿如突發文洩心聲 悲嘆影射：「搭完順風船後就下船」 | TVBS | LINE TODAY - LINE TODAY Taiwan",
+            "url": "https://news.google.com/rss/articles/CBMiK2h0dHBzOi8vdG9kYXkubGluZS5tZS90dy92Mi9hcnRpY2xlL2d6a3BZeDjSAS9odHRwczovL3RvZGF5LmxpbmUubWUvdHcvdjIvYW1wL2FydGljbGUvZ3prcFl4OA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "自由時報",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T08:23:14Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "總統選舉公報首見「政見欄」 學者曝原因：與過去台獨審查有關 - 自由時報",
+            "url": "https://news.google.com/rss/articles/CBMiOmh0dHBzOi8vbmV3cy5sdG4uY29tLnR3L25ld3MvcG9saXRpY3MvYnJlYWtpbmduZXdzLzQ1NDA2NjnSAT5odHRwczovL25ld3MubHRuLmNvbS50dy9hbXAvbmV3cy9wb2xpdGljcy9icmVha2luZ25ld3MvNDU0MDY2OQ?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Yahoo奇摩新聞",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T08:03:44Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "影／造勢活動讓汐止交通大打結 賴品妤道歉了 - Yahoo奇摩新聞",
+            "url": "https://news.google.com/rss/articles/CBMi1gFodHRwczovL3R3Lm5ld3MueWFob28uY29tLyVFNSVCRCVCMS0lRTklODAlQTAlRTUlOEIlQTIlRTYlQjQlQkIlRTUlOEIlOTUlRTglQUUlOTMlRTYlQjElOTAlRTYlQUQlQTIlRTQlQkElQTQlRTklODAlOUElRTUlQTQlQTclRTYlODklOTMlRTclQjUlOTAtJUU4JUIzJUI0JUU1JTkzJTgxJUU1JUE2JUE0JUU5JTgxJTkzJUU2JUFEJTg5JUU0JUJBJTg2LTA3NTczNDA0NC5odG1s0gHeAWh0dHBzOi8vdHcubmV3cy55YWhvby5jb20vYW1waHRtbC8lRTUlQkQlQjEtJUU5JTgwJUEwJUU1JThCJUEyJUU2JUI0JUJCJUU1JThCJTk1JUU4JUFFJTkzJUU2JUIxJTkwJUU2JUFEJUEyJUU0JUJBJUE0JUU5JTgwJTlBJUU1JUE0JUE3JUU2JTg5JTkzJUU3JUI1JTkwLSVFOCVCMyVCNCVFNSU5MyU4MSVFNSVBNiVBNCVFOSU4MSU5MyVFNiVBRCU4OSVFNCVCQSU4Ni0wNzU3MzQwNDQuaHRtbA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Yahoo奇摩運動",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T08:00:36Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "葉竹軒轉任富邦悍將二軍內野教練 林華韋讚個性純真實在 - Yahoo奇摩運動",
+            "url": "https://news.google.com/rss/articles/CBMikgJodHRwczovL3R3LnNwb3J0cy55YWhvby5jb20vbmV3cy8lRTglOTElODklRTclQUIlQjklRTglQkIlOTIlRTglQkQlODklRTQlQkIlQkIlRTUlQUYlOEMlRTklODIlQTYlRTYlODIlOEQlRTUlQjAlODclRTQlQkElOEMlRTglQkIlOEQlRTUlODUlQTclRTklODclOEUlRTYlOTUlOTklRTclQjclQjQtJUU2JTlFJTk3JUU4JThGJUFGJUU5JTlGJThCJUU4JUFFJTlBJUU1JTgwJThCJUU2JTgwJUE3JUU3JUI0JTk0JUU3JTlDJTlGJUU1JUFGJUE2JUU1JTlDJUE4LTA4MDAzNjI0Ni5odG1s0gGaAmh0dHBzOi8vdHcuc3BvcnRzLnlhaG9vLmNvbS9hbXBodG1sL25ld3MvJUU4JTkxJTg5JUU3JUFCJUI5JUU4JUJCJTkyJUU4JUJEJTg5JUU0JUJCJUJCJUU1JUFGJThDJUU5JTgyJUE2JUU2JTgyJThEJUU1JUIwJTg3JUU0JUJBJThDJUU4JUJCJThEJUU1JTg1JUE3JUU5JTg3JThFJUU2JTk1JTk5JUU3JUI3JUI0LSVFNiU5RSU5NyVFOCU4RiVBRiVFOSU5RiU4QiVFOCVBRSU5QSVFNSU4MCU4QiVFNiU4MCVBNyVFNyVCNCU5NCVFNyU5QyU5RiVFNSVBRiVBNiVFNSU5QyVBOC0wODAwMzYyNDYuaHRtbA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Rti 中央廣播電臺",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T06:45:45Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "醫：糖尿病患更易心臟病血管堵塞恐無症狀- Rti央廣 - Rti 中央廣播電臺",
+            "url": "https://news.google.com/rss/articles/CBMiK2h0dHBzOi8vd3d3LnJ0aS5vcmcudHcvbmV3cy92aWV3L2lkLzIxOTE3MjXSAQA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "自由時報",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T06:20:00Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "健康網》8旬翁角膜感染 中醫：黃芩、桑白皮改善體質 - 自由時報",
+            "url": "https://news.google.com/rss/articles/CBMiNmh0dHBzOi8vaGVhbHRoLmx0bi5jb20udHcvYXJ0aWNsZS9icmVha2luZ25ld3MvNDU0MDQyMtIBOmh0dHBzOi8vaGVhbHRoLmx0bi5jb20udHcvYW1wL2FydGljbGUvYnJlYWtpbmduZXdzLzQ1NDA0MjI?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Yahoo奇摩新聞",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T06:16:17Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "羅智強打死刑存廢！王欣儀曝姐慘死刀下 苗博雅：有問題趕快公開辯論 - Yahoo奇摩新聞",
+            "url": "https://news.google.com/rss/articles/CBMisQJodHRwczovL3R3Lm5ld3MueWFob28uY29tLyVFNyVCRSU4NSVFNiU5OSVCQSVFNSVCQyVCNyVFNiU4OSU5MyVFNiVBRCVCQiVFNSU4OCU5MSVFNSVBRCU5OCVFNSVCQiVBMi0lRTclOEUlOEIlRTYlQUMlQTMlRTUlODQlODAlRTYlOUIlOUQlRTUlQTclOTAlRTYlODUlOTglRTYlQUQlQkIlRTUlODglODAlRTQlQjglOEItJUU4JThCJTk3JUU1JThEJTlBJUU5JTlCJTg1LSVFNiU5QyU4OSVFNSU5NSU4RiVFOSVBMSU4QyVFOCVCNiU5NSVFNSVCRiVBQiVFNSU4NSVBQyVFOSU5NiU4QiVFOCVCRSVBRiVFOCVBQiU5Ni0wNjE1MDY5OTYuaHRtbNIBuQJodHRwczovL3R3Lm5ld3MueWFob28uY29tL2FtcGh0bWwvJUU3JUJFJTg1JUU2JTk5JUJBJUU1JUJDJUI3JUU2JTg5JTkzJUU2JUFEJUJCJUU1JTg4JTkxJUU1JUFEJTk4JUU1JUJCJUEyLSVFNyU4RSU4QiVFNiVBQyVBMyVFNSU4NCU4MCVFNiU5QiU5RCVFNSVBNyU5MCVFNiU4NSU5OCVFNiVBRCVCQiVFNSU4OCU4MCVFNCVCOCU4Qi0lRTglOEIlOTclRTUlOEQlOUElRTklOUIlODUtJUU2JTlDJTg5JUU1JTk1JThGJUU5JUExJThDJUU4JUI2JTk1JUU1JUJGJUFCJUU1JTg1JUFDJUU5JTk2JThCJUU4JUJFJUFGJUU4JUFCJTk2LTA2MTUwNjk5Ni5odG1s?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "LINE TODAY Taiwan",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T06:03:49Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "PS4 主機更新限制第三方控制器，SIE 遭法國監管單位罰款 1400 萬美元 | 遊戲基地 | LINE TODAY - LINE TODAY Taiwan",
+            "url": "https://news.google.com/rss/articles/CBMiK2h0dHBzOi8vdG9kYXkubGluZS5tZS90dy92Mi9hcnRpY2xlL0xYTGVZNWzSAS9odHRwczovL3RvZGF5LmxpbmUubWUvdHcvdjIvYW1wL2FydGljbGUvTFhMZVk1bA?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "TVBS NEWS",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T06:01:02Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "蔡依林大陸跨年「真唱or假唱」? 博主列假唱名單歌迷不滿｜TVBS新聞 @TVBSNEWS01 - TVBS NEWS",
+            "url": "https://news.google.com/rss/articles/CCAiC2NqUGtYMlBGcHBFmAEB?oc=5",
+            "urlToImage": null
+        },
+        {
+            "author": "Yahoo奇摩股市",
+            "content": null,
+            "description": null,
+            "publishedAt": "2024-01-03T05:37:31Z",
+            "source": {
+                "id": "google-news",
+                "name": "Google News"
+            },
+            "title": "好康必收！LINE Pay每周狂贈4萬張優惠券icash Pay祭最高17%回饋 - Yahoo奇摩股市",
+            "url": "https://news.google.com/rss/articles/CBMi7wFodHRwczovL3R3LnN0b2NrLnlhaG9vLmNvbS9uZXdzLyVFNSVBNSVCRCVFNSVCQSVCNyVFNSVCRiU4NSVFNiU5NCVCNiVFRiVCQyU4MWxpbmUtcGF5JUU2JUFGJThGJUU1JTkxJUE4JUU3JThCJTgyJUU4JUI0JTg4NCVFOCU5MCVBQyVFNSVCQyVCNSVFNSU4NCVBQSVFNiU4MyVBMCVFNSU4OCVCOC1pY2FzaC1wYXklRTclQTUlQUQlRTYlOUMlODAlRTklQUIlOTgxNyVFNSU5QiU5RSVFOSVBNSU4Qi0wNTM3MjU1NjkuaHRtbNIBAA?oc=5",
+            "urlToImage": null
+        }
+    ],
+    "status": "ok",
+    "totalResults": 34
+}

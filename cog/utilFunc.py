@@ -1,6 +1,9 @@
 from wcwidth import wcswidth
 from numpy import array, ndarray, dot, argsort
 from numpy.linalg import norm
+from datetime import datetime, timedelta, timezone
+
+TWTZ = timezone(timedelta(hours = 8))
 
 def clamp(n:int, minn=0, maxn=100) -> float:
     '''clamp n in set range'''
@@ -12,6 +15,9 @@ def devChk(id:int) -> bool:
 
 def sepLines(itr, sep='\n'):
     return sep.join(itr)
+
+def utctimeFormat(t:datetime):
+    return t.replace(tzinfo=timezone.utc).astimezone(TWTZ).strftime("%Y-%m-%d %H:%M:%S")
 
 def wcformat(s:str, w=12, strFront=True):
     if strFront:
