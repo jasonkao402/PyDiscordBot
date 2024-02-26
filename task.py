@@ -1,7 +1,10 @@
 import pandas as pd
 from datetime import datetime
+import os
 
-# 读取CSV文件
+# cd to file 
+abspath = os.path.abspath(__file__)
+os.chdir(os.path.dirname(abspath))
 data = pd.read_csv('task.csv')
 
 # 获取当前时间

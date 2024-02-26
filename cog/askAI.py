@@ -100,6 +100,7 @@ async def aiaiv2(msgs:list, botid:int, tokens:int) -> replyDict:
     async def Chat_Result(session:ClientSession, msgs, url=url, headers=headers):
         data = {
             "model": "gpt-3.5-turbo-0301",
+            # "model": "gpt-3.5-turbo-1106",
             "messages": msgs,
             "max_tokens": min(tokens, 4096-chatTok[botid]),
             "temperature": 0.8,
@@ -136,8 +137,8 @@ class askAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message:Message):
         user, text = message.author, message.content
-        uid, userName = user.id, str(user)
-        userName = userName.replace('.', '')
+        uid, userName = user.id, user.name
+        userName = userName.replace('.', '').replace('#', '')
         n = min(len(text), READLEN)
         
         if uid == self.bot.user.id:
@@ -286,8 +287,8 @@ class askAI(commands.Cog):
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = sepLines((f'{wcformat(str(self.bot.get_user(i)))}: {v}'for i, v in zip(t.index, t.values)))
-        await ctx.send(f'```{sb}```\n{userName}最常找{id2name[i]}互動 ({m} 次)，共對話 {s} 次')
+        sb = sepLines((f'{wcformat(self.bot.get_user(i).name, w=16)}: {v}'for i, v in zip(t.index, t.values)))
+        await ctx.send(f'```{sb}```\n{userName}共對話 {s} 次，最常找{id2name[i]}互動 ({m} 次，佔{m/s:.2%})')
     
     @commands.hybrid_command(name = 'localread')
     async def _cmdlocalRead(self, ctx):
@@ -316,7 +317,7 @@ class askAI(commands.Cog):
             if uid not in banList and devChk(user.id):
                 banList.append(uid)
                 with open('./acc/banList.txt', 'a') as bfile:
-                    bfile.write(str(uid))
+                    bfile.write(f'{uid}\n')
                 print(f'Added to bList: {uid}')
             else:
                 print(f'Already banned: {uid}')
