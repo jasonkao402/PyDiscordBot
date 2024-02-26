@@ -34,7 +34,7 @@ def main():
         # LOADED_COG = {'mainbot', 'askAI', 'okgoodjoke', 'tex'}
         for c in LOADED_COG:
             await client.load_extension(f'cog.{c}')
-        await client.tree.sync()
+        # await client.tree.sync()
         print('Bot is online.')
         print('Default cogs loaded : ', LOADED_COG)
 
