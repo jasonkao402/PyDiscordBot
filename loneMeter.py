@@ -6,7 +6,8 @@ import numpy as np
 
 v = 0
 N = 100
-SCALE = 10
+LIMIT = 250
+SCALE = 2
 vl = [0]
 
 def plot_update(x:np.array):
@@ -14,24 +15,31 @@ def plot_update(x:np.array):
     plt.plot(x, color='blue')
     plt.draw()
     plt.pause(0.1)  # Pause to update the plot
+    
+def setLimit():
+    return np.random.normal(LIMIT, SCALE)
 
 async def update_variable():
-    global v, vl
+    # global v, vl
     
     tot = 0
     rnd = np.random.poisson(SCALE, N)
-    limit = np.random.triangular(100, 200, 200)
-    while len(vl) < 1000:
-        v += rnd[tot]
-        if v > limit:
-            resetting()
-            limit = np.random.normal(200, 50)
-        tot += 1
-        if tot == N:
-            rnd = np.random.poisson(SCALE, N)
-            tot = 0
-            print('reset')
-        vl.append(v)
+    limit = setLimit()
+    
+    # while len(vl) < 1000:
+    v += rnd[tot]
+    
+    if v > limit:
+        resetting()
+        limit = setLimit()
+        
+    tot += 1
+    if tot == N:
+        rnd = np.random.poisson(SCALE, N)
+        tot = 0
+        print('reset')
+        
+    vl.append(v)
 
 async def refresh_plot():
     global vl
