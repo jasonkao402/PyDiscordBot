@@ -1,7 +1,6 @@
 import random
-from cog.utilFunc import *
 from discord.ext import commands
-from discord import app_commands
+from cog.utilFunc import *
 
 POSINT = '正整數啦!  (´_ゝ`)\n'
 BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
@@ -10,7 +9,7 @@ class mainbot(commands.Cog):
     """Main functions."""
     __slots__ = ('bot')
     
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.Cog.listener()
@@ -21,7 +20,7 @@ class mainbot(commands.Cog):
         
     # @app_commands.command(name = '')
     @commands.hybrid_command(name = 'hello')
-    async def _hello(self, ctx):
+    async def _hello(self, ctx:commands.Context):
         user = ctx.author
         if devChk(user.id):
             await ctx.send(f'{user.mention}主人我來了 ฅ(>ω<)ฅ\n我是只屬於主人的呦~\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
@@ -45,7 +44,7 @@ class mainbot(commands.Cog):
             print('clear cmd error')
             return
 
-        if rpt <= 0 or rpt > 10 : await ctx.send(BADARGUMENT)
+        if rpt <= 0 or rpt > 10 : await ctx.send(BADARGUMENT, delete_after=20)
         else : await ctx.channel.purge(limit = rpt+1)
         print(f'{ctx.author.name[:16]} tried removed {rpt} messages')
     
@@ -56,5 +55,5 @@ class mainbot(commands.Cog):
         await ctx.send(sel)
         print(*args, f'->{sel}')
 
-async def setup(bot):
+async def setup(bot:commands.Bot):
     await bot.add_cog(mainbot(bot))

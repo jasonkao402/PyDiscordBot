@@ -1,11 +1,10 @@
-
 import asyncio
 from asyncio.exceptions import TimeoutError
 from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 from os.path import isfile
 from random import choice, randint, random
-from time import localtime, strftime
-from datetime import datetime, timedelta, timezone
+from time import strftime
 from typing import Optional
 
 import numpy as np
@@ -13,7 +12,7 @@ import openai
 import pandas as pd
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from discord import Client as DC_Client
-from discord import Message, Embed, Color, app_commands, Interaction
+from discord import Color, Embed, Interaction, Message, app_commands
 from discord.ext import commands, tasks
 from opencc import OpenCC
 
@@ -33,19 +32,19 @@ with open('./acc/aiKey.txt', 'r') as acc_file:
     k, o = acc_file.read().splitlines()[:2]
     openai.api_key = k
     openai.organization = o
-    
+
 with open('./acc/banList.txt', 'r') as acc_file:
     banList = [int(id) for id in acc_file.readlines()]
-    
-with open('./talkTest2.txt', 'r', encoding='utf-8') as f:
-        talkList = f.readlines()
-        
+
+# with open('./talkTest2.txt', 'r', encoding='utf-8') as f:
+#         talkList = f.readlines()
+
 scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=int)
 # with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
 #     setsys_base = set2_file.read()
 #     # setsys = {'role': 'system', 'content': acc_data}
 #     setsys = {'role': 'system', 'content': setsys_base}
-    
+
 def localRead(resetMem = False) -> None:
     with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
         global setsys_extra, name2ID, id2name, chatMem, chatTok, dfDict
@@ -76,11 +75,11 @@ whatever = [
     "對不起，發生 500 - The server had an error while processing request ，所以不知道該怎麼回你 QQ"
     "阿呀 腦袋融化了~",
 ] + '不知道喔 我也不知道 看情況 可能吧 嗯 隨便 都可以 喔 哈哈 笑死 真假 亂講 怎樣 所以 🤔'.split()
-   
+
 headers = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer {openai.api_key}",
-    "OpenAI-Organization": openai.organization,
+    # "Authorization": f"Bearer {openai.api_key}",
+    # "OpenAI-Organization": openai.organization,
 }
 cc = OpenCC('s2twp')
 
@@ -104,16 +103,18 @@ async def embedding_v1(inputStr:str):
     return embedVector(inputStr, np.array(response['data'][0]['embedding']))
 
 async def aiaiv2(msgs:list, botid:int, tokens:int) -> replyDict:
-    url = "https://api.openai.com/v1/chat/completions"
+    url = "http://140.113.208.114:11434/v1/chat/completions"
     async def Chat_Result(session:ClientSession, msgs, headers=headers):
         data = {
-            "model": "gpt-3.5-turbo-0301",
+            "model": "gemma2it",
             # "model": "gpt-3.5-turbo-1106",
             "messages": msgs,
-            "max_tokens": min(tokens, 4096-chatTok[botid]),
-            "temperature": 0.8,
-            "frequency_penalty": 0.6,
-            "presence_penalty": 0.6
+            "max_tokens": min(tokens, 1024 - chatTok[botid]),
+            "seed": 42,
+            "stop": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
+            "temperature": 0.5,
+            "repeat_penalty": 1.25,
+            "mirostat_mode": 2,
         }
         async with session.post(url, headers=headers, json=data) as result:
             return await result.json()
@@ -133,7 +134,7 @@ async def aiaiv2(msgs:list, botid:int, tokens:int) -> replyDict:
         chatMem[botid].popleft()
         print(f"token warning:{response['usage']['total_tokens']}, popped last msg.")
     return replyDict(msg = response['choices'][0]['message']['content'])
-    
+
 class askAI(commands.Cog):
     __slots__ = ('bot')
     
@@ -210,7 +211,7 @@ class askAI(commands.Cog):
                 return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
             
             try:
-                # 特判 = =
+                # special case, convert all user as Ning
                 if aiNum == 5:
                     userName = 'Ning'
                     prompt = replyDict('user'  , f'嘎零 said {text}', userName)
@@ -242,33 +243,33 @@ class askAI(commands.Cog):
                         if text[0] == '，' or text[0] == ' ':
                             text = text[1:]
                     # print(text)
-                    embed = await embedding_v1(text)
-                assert embed.vector[0] != 0
+                    # embed = await embedding_v1(text)
+                # assert embed.vector[0] != 0
                 
-                idxs, corrs = simRank(embed.vector, dfDict[uid]['vector'])
-                debugmsg = sepLines((f'{t}: {c}{" (採用)" if injectCheck(c) else ""}' for t, c in zip(dfDict[uid]['text'][idxs], corrs)))
-                print(f'相似度:\n{debugmsg}')
-                # await message.channel.send(f'相似度:\n{debugmsg}')
-                # store into memory
-                if len(corrs) == 0 or corrs[0] < 0.98:
-                    dfDict[uid].loc[len(dfDict[uid])] = embed.asdict
+                # idxs, corrs = simRank(embed.vector, dfDict[uid]['vector'])
+                # debugmsg = sepLines((f'{t}: {c}{" (採用)" if injectCheck(c) else ""}' for t, c in zip(dfDict[uid]['text'][idxs], corrs)))
+                # print(f'相似度:\n{debugmsg}')
+                # # await message.channel.send(f'相似度:\n{debugmsg}')
+                # # store into memory
+                # if len(corrs) == 0 or corrs[0] < 0.98:
+                #     dfDict[uid].loc[len(dfDict[uid])] = embed.asdict
                 
                 # filter out using injectCheck
-                itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
-                selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
+                # itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
+                # selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
                 # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
                 setupmsg  = replyDict('system', f'{setsys_extra[aiNum]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
                 async with message.channel.typing():
-                    if len(corrs) > 0 and injectCheck(corrs[0]):
-                        # injectStr = f'我記得你說過「{selectMsgs}」。'
-                        selectMsgs = selectMsgs.replace("\n", ' ')
-                        # 特判 = =
-                        if aiNum == 5:
-                            # userName = 'Ning'
-                            prompt = replyDict('user', f'嘎零 said {selectMsgs}, {text}', 'Ning')
-                        else: 
-                            prompt = replyDict('user', f'{userName} said {selectMsgs}, {text}', userName)
-                        print(f'debug: {prompt.content}')
+                    # if len(corrs) > 0 and injectCheck(corrs[0]):
+                    #     # injectStr = f'我記得你說過「{selectMsgs}」。'
+                    #     selectMsgs = selectMsgs.replace("\n", ' ')
+                    #     # 特判 = =
+                    #     if aiNum == 5:
+                    #         # userName = 'Ning'
+                    #         prompt = replyDict('user', f'嘎零 said {selectMsgs}, {text}', 'Ning')
+                    #     else: 
+                    #         prompt = replyDict('user', f'{userName} said {selectMsgs}, {text}', userName)
+                    #     print(f'debug: {prompt.content}')
                         
                     reply = await aiaiv2([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
                 assert reply.role != 'error'
@@ -280,8 +281,8 @@ class askAI(commands.Cog):
                 print(f'[!] {aiNam} TimeoutError')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
             except AssertionError:
-                if embed.vector[0] == 0:
-                    print(f'Embed error:\n{embed.text}')
+                # if embed.vector[0] == 0:
+                #     print(f'Embed error:\n{embed.text}')
                 if reply.role == 'error':
                     reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
                     print(f'Reply error:\n{aiNam}:\n{reply2}')
@@ -355,8 +356,8 @@ class askAI(commands.Cog):
         print(f'忽略率： {num}')
         
     @app_commands.command(name = 'schedule')
-    async def _schedule(self, interaction: Interaction, stime:int, text:Optional[str] = ''):
-        dt = datetime.now(timezone.utc) + timedelta(seconds=int(stime))
+    async def _schedule(self, interaction: Interaction, delayTime:int, text:Optional[str] = ''):
+        dt = datetime.now(timezone.utc) + timedelta(seconds=int(delayTime))
         
         self.channel = interaction.channel
         self.sch_FullUser = interaction.user
@@ -365,7 +366,7 @@ class askAI(commands.Cog):
         
         tsk = self._loneMeter
         if not tsk.is_running():
-            print('start task')
+            print(f'start task {tsk.__name__}')
             tsk.start()
         tsk.change_interval(seconds=4)
         tsk.restart()
@@ -430,7 +431,7 @@ class askAI(commands.Cog):
         channel = self.channel
         user = self.sch_FullUser
         # await channel.send(f'{user.mention} {talkList[self._mindLoop.current_loop]}')
-        print(f'{user} {talkList[self._mindLoop.current_loop]}')
+        # print(f'{user} {talkList[self._mindLoop.current_loop]}')
     
     @tasks.loop(time=tempTime)
     async def _loneMeter(self):
@@ -446,14 +447,14 @@ class askAI(commands.Cog):
             consume = np.random.poisson(10*SCALE)
             self.loneMeter -= consume
             
-            await channel.send(f'{talkList[self.loneMsg % len(talkList)]}\n({-consume} energy) (meter: {self.loneMeter}/{limit}))')
+            # await channel.send(f'{talkList[self.loneMsg % len(talkList)]}\n({-consume} energy) (meter: {self.loneMeter}/{limit}))')
             self.loneMsg += 1
-        
-async def setup(bot):
+
+async def setup(bot:commands.Bot):
     localRead(True)
     await bot.add_cog(askAI(bot))
 
-async def teardown(bot):
+async def teardown(bot:commands.Bot):
     print('ai saved')
     # print(scoreArr)
     scoreArr.to_csv('./acc/scoreArr.csv')
@@ -461,4 +462,3 @@ async def teardown(bot):
         print(f'UID {k}: {len(dfDict[k])}')
         dfDict[k]['text'].to_csv(f'./embed/{k}.csv', index=False)
         np.save(f'./embed/{k}.npy', dfDict[k]['vector'].to_numpy())
-    

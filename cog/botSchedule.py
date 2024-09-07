@@ -9,7 +9,7 @@ timet = timet.time()
 class botSchedule(commands.Cog):
     __slots__ = ('bot')
     
-    def __init__(self, bot: DC_Client):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.channel = self.bot.get_channel(1088253899871371284)
         # self.my_task.start()
@@ -43,7 +43,7 @@ class botSchedule(commands.Cog):
         if self.channel:
             await self.channel.send('喵喵喵~')
 
-async def setup(bot):
+async def setup(bot:commands.Bot):
     await bot.add_cog(botSchedule(bot))
     
 if __name__ == '__main__':

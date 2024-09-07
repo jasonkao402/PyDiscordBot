@@ -1,8 +1,8 @@
+from collections import deque
 import pandas as pd
+from discord import RawReactionActionEvent
 from discord.ext import commands
 from cog.utilFunc import sepLines, wcformat
-from discord import Client as DC_Client
-from collections import deque
 
 MEMOLEN = 32
 cachedMsg = deque(maxlen=MEMOLEN)
@@ -32,11 +32,11 @@ def nameChk(s):
 class okgoodjoke(commands.Cog):
     __slots__ = ('bot')
 
-    def __init__(self, bot: DC_Client):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload):
+    async def on_raw_reaction_add(self, payload:RawReactionActionEvent):
         emj, mid = str(payload.emoji), payload.message_id
         if payload.guild_id == 477839636404633600 and mid not in cachedMsg:
             ch = self.bot.get_partial_messageable(payload.channel_id, guild_id=payload.guild_id)
@@ -55,7 +55,7 @@ class okgoodjoke(commands.Cog):
                 return await ch.send(f'{emj} Emoji Rank:\n```{sb}```', reference=msg, silent=True)
     
     @commands.hybrid_command(name = 'erank')
-    async def _emojiRank(self, ctx:commands.Context, emj):
+    async def _emojiRank(self, ctx:commands.Context, emj:str):
         uid, eid = ctx.author.id, nameChk(emj)
         if ctx.guild.id == 477839636404633600:
             if uid not in emojiArr.index:
@@ -67,7 +67,7 @@ class okgoodjoke(commands.Cog):
             sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
             return await ctx.send(f'{emj} Emoji Rank:\n```{sb}```', silent=True)
 
-async def setup(bot):
+async def setup(bot:commands.Bot):
     localRead()
     await bot.add_cog(okgoodjoke(bot))
     

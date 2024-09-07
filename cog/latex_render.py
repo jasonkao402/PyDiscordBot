@@ -1,4 +1,4 @@
-from discord import File as DC_File, Client as DC_Client
+from discord import File as DC_File
 from discord.ext import commands
 import matplotlib.pyplot as plt
 from io import BytesIO
@@ -17,7 +17,7 @@ def render_text(formula:str, fontsize=10, dpi=256) -> bytes:
 class latex_render(commands.Cog):
     __slots__ = ('bot')
     
-    def __init__(self, bot: DC_Client):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
     
     @commands.hybrid_command(name = 'latex')
@@ -26,7 +26,7 @@ class latex_render(commands.Cog):
         b = render_text(args)
         await ctx.send(file=DC_File(fp=BytesIO(b), filename='latex_.png'))
                 
-async def setup(bot):
+async def setup(bot:commands.Bot):
     await bot.add_cog(latex_render(bot))
     
 if __name__ == '__main__':
