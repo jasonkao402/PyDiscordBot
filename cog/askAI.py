@@ -8,15 +8,15 @@ from time import strftime
 from typing import Optional
 
 import numpy as np
-import openai
 import pandas as pd
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands
 from discord.ext import commands, tasks
 from opencc import OpenCC
-
 from cog.utilFunc import *
+from pydiscord import configToml
+import json, re
 
 MEMOLEN = 8
 READLEN = 20
@@ -28,23 +28,57 @@ tz = timezone(timedelta(hours = 8))
 tempTime = datetime.now(timezone.utc) + timedelta(seconds=-10)
 tempTime = tempTime.time()
 
-with open('./acc/aiKey.txt', 'r') as acc_file:
-    k, o = acc_file.read().splitlines()[:2]
-    openai.api_key = k
-    openai.organization = o
-
 with open('./acc/banList.txt', 'r') as acc_file:
     banList = [int(id) for id in acc_file.readlines()]
 
-# with open('./talkTest2.txt', 'r', encoding='utf-8') as f:
-#         talkList = f.readlines()
-
-scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=int)
-# with open('./acc/aiSet_base.txt', 'r', encoding='utf-8') as set2_file:
-#     setsys_base = set2_file.read()
-#     # setsys = {'role': 'system', 'content': acc_data}
-#     setsys = {'role': 'system', 'content': setsys_base}
-
+scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
+class OllamaAPIHandler():
+    def __init__(self):
+        self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
+        self.clientSession = ClientSession(connector=self.connector)
+    
+    def close(self):
+        if not self.connector.closed:
+            self.connector.close()
+            print("Connector closed")
+        if not self.clientSession.closed:
+            self.clientSession.close()
+            print("Client session closed")
+            
+    async def chat(self, messages:list, botid:int, tokens:int) -> replyDict:
+        json = {
+            "model": configToml['LLM']['model'],
+            "messages": messages,
+            "max_tokens": min(tokens, 2500 - chatTok[botid]),
+            "seed": 42,
+            "stop": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
+            "temperature": configToml['LLM']['temperature'],
+            "repeat_penalty": 1.25,
+            "mirostat_mode": 2,
+            "stream": False,
+        }
+        async with self.clientSession.post(configToml['linkChat'], json=json) as request:
+            # request.raise_for_status()
+            response = await request.json()
+            
+        if 'error' in response:
+            return replyDict(role = 'error', content = response['error'])
+        
+        chatTok[botid] = response['prompt_eval_count'] + response['eval_count']
+        if chatTok[botid] > 3000:
+            chatMem[botid].popleft()
+            chatMem[botid].popleft()
+            print(f"token warning:{chatTok[botid]}, popped last msg.")
+        rd = replyDict(**response['message'])
+        rd.content = cc.convert(rd.content)
+        return rd
+    
+    async def ps(self):
+        async with self.clientSession.get(configToml['stat']) as request:
+            request.raise_for_status()
+            response = await request.json()
+        return response
+        
 def localRead(resetMem = False) -> None:
     with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
         global setsys_extra, name2ID, id2name, chatMem, chatTok, dfDict
@@ -76,64 +110,7 @@ whatever = [
     "阿呀 腦袋融化了~",
 ] + '不知道喔 我也不知道 看情況 可能吧 嗯 隨便 都可以 喔 哈哈 笑死 真假 亂講 怎樣 所以 🤔'.split()
 
-headers = {
-    "Content-Type": "application/json",
-    # "Authorization": f"Bearer {openai.api_key}",
-    # "OpenAI-Organization": openai.organization,
-}
 cc = OpenCC('s2twp')
-
-async def embedding_v1(inputStr:str):
-    url = "https://api.openai.com/v1/embeddings"
-    inputStr = inputStr.replace("\n", " ")
-    async def Embed_Result(session:ClientSession, inputStr, headers=headers):
-        data = {
-            "model": "text-embedding-ada-002",
-            "input": inputStr,
-        }
-        async with session.post(url, headers=headers, json=data) as result:
-            return await result.json()
-    async def get_response():
-        to, co = ClientTimeout(total=60), TCPConnector(ssl=False)
-        async with ClientSession(connector=co, timeout=to) as session:
-            return await Embed_Result(session, inputStr)
-    response = await get_response()
-    if 'error' in response:
-        return embedVector(str(response['error']), np.zeros(1536))
-    return embedVector(inputStr, np.array(response['data'][0]['embedding']))
-
-async def aiaiv2(msgs:list, botid:int, tokens:int) -> replyDict:
-    url = "http://140.113.208.114:11434/v1/chat/completions"
-    async def Chat_Result(session:ClientSession, msgs, headers=headers):
-        data = {
-            "model": "gemma2it",
-            # "model": "gpt-3.5-turbo-1106",
-            "messages": msgs,
-            "max_tokens": min(tokens, 1024 - chatTok[botid]),
-            "seed": 42,
-            "stop": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
-            "temperature": 0.5,
-            "repeat_penalty": 1.25,
-            "mirostat_mode": 2,
-        }
-        async with session.post(url, headers=headers, json=data) as result:
-            return await result.json()
-
-    async def get_response():
-        to, co = ClientTimeout(total=60), TCPConnector(ssl=False)
-        async with ClientSession(connector=co, timeout=to) as session:
-            return await Chat_Result(session, msgs)
-
-    response = await get_response()
-    if 'error' in response:
-        # print(response)
-        return replyDict(rol='error', msg=response['error'])
-    chatTok[botid] = response['usage']['total_tokens']
-    if chatTok[botid] > 3000:
-        chatMem[botid].popleft()
-        chatMem[botid].popleft()
-        print(f"token warning:{response['usage']['total_tokens']}, popped last msg.")
-    return replyDict(msg = response['choices'][0]['message']['content'])
 
 class askAI(commands.Cog):
     __slots__ = ('bot')
@@ -149,9 +126,11 @@ class askAI(commands.Cog):
         self.loneMsg = 0
         self.loneLimit = LONELYMETER
         self.sch_FullUser = None
+        self.ollamaAPI = OllamaAPIHandler()
         # self.last_reply = replydict()
         
     def cog_unload(self):
+        self.ollamaAPI.close()
         self.my_task.cancel()
         self._mindLoop.cancel()
         self._loneMeter.cancel()
@@ -160,7 +139,8 @@ class askAI(commands.Cog):
     async def on_message(self, message:Message):
         user, text = message.author, message.content
         uid, userName = user.id, user.name
-        userName = userName.replace('.', '').replace('#', '')
+        # userName = userName.replace('.', '').replace('#', '')
+        userName = re.sub(r'[.#]', '', userName)
         n = min(len(text), READLEN)
         
         if uid == self.bot.user.id:
@@ -203,12 +183,12 @@ class askAI(commands.Cog):
                 tmp = sepLines((m['content'] for m in chatMem[aiNum]))
                 return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
-            elif ('-err' in text[:n]) and devChk(uid):
-                prompt = replyDict('user'  , f'{text}', userName).asdict
-                reply  = await aiaiv2([prompt], aiNum, 99999)
-                reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
-                print(f'{aiNam}:\n{reply2}')
-                return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
+            # elif ('-err' in text[:n]) and devChk(uid):
+            #     prompt = replyDict('user'  , f'{text}', userName).asdict
+            #     reply  = await aiaiv2([prompt], aiNum, 99999)
+            #     reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
+            #     print(f'{aiNam}:\n{reply2}')
+            #     return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
             
             try:
                 # special case, convert all user as Ning
@@ -234,14 +214,15 @@ class askAI(commands.Cog):
                 else:
                     tokens = TOKENPRESET[1]
                     
-                async with message.channel.typing():
-                    # skipping ai name
-                    if len(text) > len(aiNam):
-                        nidx = text.find(aiNam, 0, len(aiNam))
-                        if nidx != -1:
-                            text = text[nidx+len(aiNam):]
-                        if text[0] == '，' or text[0] == ' ':
-                            text = text[1:]
+                # skipping ai name
+                if len(text) > len(aiNam):
+                    nidx = text.find(aiNam, 0, len(aiNam))
+                    if nidx != -1:
+                        text = text[nidx+len(aiNam):]
+                    if text[0] == '，' or text[0] == ' ':
+                        text = text[1:]
+                        
+                # async with message.channel.typing():
                     # print(text)
                     # embed = await embedding_v1(text)
                 # assert embed.vector[0] != 0
@@ -271,12 +252,11 @@ class askAI(commands.Cog):
                     #         prompt = replyDict('user', f'{userName} said {selectMsgs}, {text}', userName)
                     #     print(f'debug: {prompt.content}')
                         
-                    reply = await aiaiv2([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
+                    reply = await self.ollamaAPI.chat([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
                 assert reply.role != 'error'
                 
                 reply2 = reply.content
-                # await message.channel.send(f'{cc.convert(reply2.replace("JailBreak", aiNam))}')
-                await message.channel.send(f'{cc.convert(reply2)}')
+                await message.channel.send(reply2)
             except TimeoutError:
                 print(f'[!] {aiNam} TimeoutError')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
@@ -298,9 +278,9 @@ class askAI(commands.Cog):
                 scoreArr.loc[uid].iloc[aiNum] += 1
     
     @commands.hybrid_command(name = 'scoreboard')
-    async def _scoreboard(self, ctx):
+    async def _scoreboard(self, ctx:commands.Context):
         user = ctx.author
-        uid, userName = user.id, user.display_name
+        uid, userName = user.id, user.name
         if uid not in scoreArr.index: 
             return await ctx.send(f'{userName} 尚未和AI們對話過')
         arr = scoreArr.loc[uid]
@@ -308,11 +288,11 @@ class askAI(commands.Cog):
         i = int(arr.idxmax())
         s = arr.sum()
         t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = sepLines((f'{wcformat(self.bot.get_user(i).name, w=16)}: {v}'for i, v in zip(t.index, t.values)))
+        sb = sepLines((f'{wcformat(self.bot.get_user(i).name, w=16)}: {v}' for i, v in zip(t.index, t.values)))
         await ctx.send(f'```{sb}```\n{userName}共對話 {s} 次，最常找{id2name[i]}互動 ({m} 次，佔{m/s:.2%})')
     
     @commands.hybrid_command(name = 'localread')
-    async def _cmdlocalRead(self, ctx):
+    async def _cmdlocalRead(self, ctx:commands.Context):
         user = ctx.author
         if devChk(user.id):
             localRead()
@@ -321,14 +301,15 @@ class askAI(commands.Cog):
             await ctx.send('客官不可以')
 
     @commands.hybrid_command(name = 'listbot')
-    async def _listbot(self, ctx):
+    async def _listbot(self, ctx:commands.Context):
         t = scoreArr.sum(axis=0).sort_values(ascending=False)
         s = scoreArr.sum().sum()
         l = sepLines(f'{wcformat(id2name[int(i)], w=8)}{v : <8}{ v/s :<2.3%}' for i, v in zip(t.index, t.values))
         await ctx.send(f'Bot List:\n```{l}```')
             
     @commands.command(name = 'bl')
-    async def _blacklist(self, ctx, uid):
+    @commands.is_owner()
+    async def _blacklist(self, ctx:commands.Context, uid:int):
         user = ctx.author
         # hehe
         if user.id in banList:
@@ -346,7 +327,8 @@ class askAI(commands.Cog):
             print(f'ban error: {uid}')
     
     @commands.command(name = 'ig')
-    async def _ignore(self, ctx, num):
+    @commands.is_owner()
+    async def _ignore(self, ctx:commands.Context, num:float):
         user = ctx.author
         # hehe
         if user.id in banList or not devChk(user.id):
@@ -354,10 +336,16 @@ class askAI(commands.Cog):
         num = float(num)
         self.ignore = num
         print(f'忽略率： {num}')
+    
+    @commands.hybrid_command(name = 'status')
+    @commands.is_owner()
+    async def _status(self, ctx:commands.Context):
+        status = await self.ollamaAPI.ps()
+        await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
         
     @app_commands.command(name = 'schedule')
-    async def _schedule(self, interaction: Interaction, delayTime:int, text:Optional[str] = ''):
-        dt = datetime.now(timezone.utc) + timedelta(seconds=int(delayTime))
+    async def _schedule(self, interaction: Interaction, delaytime:int, text:Optional[str] = ''):
+        dt = datetime.now(timezone.utc) + timedelta(seconds=int(delaytime))
         
         self.channel = interaction.channel
         self.sch_FullUser = interaction.user

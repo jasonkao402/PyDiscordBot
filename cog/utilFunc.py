@@ -1,10 +1,22 @@
-from wcwidth import wcswidth
-from numpy import array, ndarray, dot, argsort
-from numpy.linalg import norm
+import os
 from datetime import datetime, timedelta, timezone
+from numpy import argsort, array, dot, ndarray
+from numpy.linalg import norm
+import toml
+from typing import List
+from wcwidth import wcswidth
 
 TWTZ = timezone(timedelta(hours = 8))
 
+def loadToml():
+    if not os.path.exists('./acc/config.toml'):
+        print('config.toml not found, please check the file')
+        return {}
+    with open('./acc/config.toml', 'r+') as tomlFile:
+        print('config.toml loaded')
+        configToml = toml.load(tomlFile)
+        return configToml
+    
 def clamp(n:int, minn=0, maxn=100) -> float:
     '''clamp n in set range'''
     return max(min(maxn, n), minn)
@@ -49,10 +61,12 @@ class embedVector:
         return {'text':self.text, 'vector':self.vector}
 
 class replyDict:
-    def __init__(self, rol='assistant', msg='', name=''):
-        self.role = rol
-        self.content = msg
+    def __init__(self, role: str ='assistant', content: List[str]=[], name: str=''):
+        self.role = role
+        self.content = content
         self.name = name
+    def __str__(self):
+        return f'{self.role} : {self.content}'
     @property
     def asdict(self):
         if self.name != '':

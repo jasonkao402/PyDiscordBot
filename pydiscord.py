@@ -1,13 +1,10 @@
-# -*- coding: utf-8 -*-
-import discord
 import os
+import discord
 from discord.ext import commands
-from cog.utilFunc import devChk, sepLines
+from cog.utilFunc import devChk, loadToml
 
-with open('./acc/tokenDC.txt', 'r') as acc_file:
-    acc_data = acc_file.read().splitlines()
-    TOKEN = acc_data[0]
-    
+configToml = loadToml()
+
 def main():
     absFilePath = os.path.abspath(__file__)
     currWorkDir = os.path.dirname(absFilePath)
@@ -16,7 +13,7 @@ def main():
     global client, COG_LIST, LOADED_COG
     
     # PreLoad
-    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render'}
+    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'msglog'}
     cog_folder = os.path.join(currWorkDir, 'cog')
     for file in os.listdir(cog_folder):
         if file.endswith('.py'):
@@ -31,7 +28,6 @@ def main():
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
         # PreLoad
-        # LOADED_COG = {'mainbot', 'askAI', 'okgoodjoke', 'tex'}
         for c in LOADED_COG:
             await client.load_extension(f'cog.{c}')
         # await client.tree.sync()
@@ -43,8 +39,8 @@ def main():
         print(f'Connected, discord latency: {round(client.latency*1000)} ms')
 
     @client.hybrid_command(name = 'reload')
-    # @commands.has_permissions(manage_guild=True)
-    async def _reload(ctx):
+    @commands.is_owner()
+    async def _reload(ctx:commands.Context):
         if devChk(ctx.author.id):
             suc = 0
             for c in LOADED_COG:
@@ -56,8 +52,8 @@ def main():
             print(f'[C] {suc} reloaded')
 
     @client.command()
-    @commands.has_permissions(manage_guild=True)
-    async def load(ctx, *args):
+    @commands.is_owner()
+    async def load(ctx:commands.Context, *args):
         suc = 0
         fal = 0
         if (not args) or '-l' in args:
@@ -86,8 +82,8 @@ def main():
         print('[C] loaded, now : ', LOADED_COG)
 
     @client.command()
-    @commands.has_permissions(manage_guild=True)
-    async def unload(ctx, *args):
+    @commands.is_owner()
+    async def unload(ctx:commands.Context, *args):
         global LOADED_COG
         suc = 0
         fal = 0
@@ -115,11 +111,14 @@ def main():
         print('[C] unloaded, now : ', LOADED_COG)
 
     @client.command()
-    @commands.has_permissions(manage_guild=True)
-    async def close(ctx):
+    @commands.is_owner()
+    async def close(ctx:commands.Context):
         await ctx.send('今天的網路夠多了。')
         await client.close()
 
+    # Load API token, and delete it from configToml
+    TOKEN = configToml['apiToken']['discord']
+    configToml.pop('apiToken', None)
     # Start!
     client.run(TOKEN)
 

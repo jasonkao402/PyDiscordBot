@@ -6,7 +6,7 @@ from io import BytesIO
 def render_text(formula:str, fontsize=10, dpi=256) -> bytes:
     """Renders LaTeX formula into image."""
     fig = plt.figure(figsize=(0.01, 0.01))
-    fig.text(0, 0, u'${}$'.format(formula), fontsize=fontsize, color='#ffffff')
+    fig.text(0, 0, f'${formula}$', fontsize=fontsize, color='#ffffff')
     buffer_ = BytesIO()
     fig.savefig(buffer_, dpi=dpi, transparent=True, format='png', bbox_inches='tight', pad_inches=0.02)
     buffer_.seek(0)
@@ -21,7 +21,7 @@ class latex_render(commands.Cog):
         self.bot = bot
     
     @commands.hybrid_command(name = 'latex')
-    async def _latex(self, ctx, *, args:str):
+    async def _latex(self, ctx:commands.Context, *, args:str):
         # print(args, len(args))
         b = render_text(args)
         await ctx.send(file=DC_File(fp=BytesIO(b), filename='latex_.png'))

@@ -1,6 +1,7 @@
-import random
+import random, json
 from discord.ext import commands
-from cog.utilFunc import *
+from cog.utilFunc import devChk, loadToml
+import pydiscord
 
 POSINT = '正整數啦!  (´_ゝ`)\n'
 BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
@@ -13,7 +14,7 @@ class mainbot(commands.Cog):
         self.bot = bot
 
     @commands.Cog.listener()
-    async def on_command_error(self, ctx, err):
+    async def on_command_error(self, ctx:commands.Context, err:commands.CommandError):
         if hasattr(ctx.command, 'on_error'):
             return
         await ctx.send(f'```{err}```')
@@ -27,16 +28,23 @@ class mainbot(commands.Cog):
         else:
             await ctx.send(f'{user.mention}主人您好，很榮幸能為您服務 <(✿◡‿◡)>\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
         print(f'hi, {user.name}')
- 
+    
+    @commands.hybrid_command(name = 'toml')
+    @commands.is_owner()
+    async def _toml(self, ctx:commands.Context):
+        pydiscord.configToml = loadToml()
+        pydiscord.configToml.pop('apiToken', None)
+        await ctx.send(f'toml reload done.```json\n{json.dumps(pydiscord.configToml, indent=2, ensure_ascii=False)}```')
+        
     @commands.command(name = 'ping')
-    async def _ping(self, ctx):
+    async def _ping(self, ctx:commands.Context):
         PINGT = round(self.bot.latency*1000)
         await ctx.send(f'pong : {PINGT} ms')
         print(f'pong : {PINGT}')
     
     @commands.hybrid_command(name = 'clear')
-    @commands.has_permissions(manage_messages=True)
-    async def _clear(self, ctx, rpt : int = 1):
+    @commands.is_owner()
+    async def _clear(self, ctx:commands.Context, rpt : int = 1):
         try:
             rpt = int(rpt)
         except:
@@ -49,7 +57,7 @@ class mainbot(commands.Cog):
         print(f'{ctx.author.name[:16]} tried removed {rpt} messages')
     
     @commands.command(name = 'sel', aliases = ['rnd', '幫我選一個'])
-    async def _sel(self, ctx, *args):
+    async def _sel(self, ctx:commands.Context, *args):
         '''randomly select one item from your inputs'''
         sel = random.choice(args)
         await ctx.send(sel)
