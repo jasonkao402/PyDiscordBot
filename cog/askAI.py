@@ -16,7 +16,7 @@ from discord.ext import commands, tasks
 from opencc import OpenCC
 from cog.utilFunc import *
 from pydiscord import configToml
-import json, re
+import json, re, base64
 
 MEMOLEN = 8
 READLEN = 20
@@ -28,8 +28,9 @@ tz = timezone(timedelta(hours = 8))
 tempTime = datetime.now(timezone.utc) + timedelta(seconds=-10)
 tempTime = tempTime.time()
 
-with open('./acc/banList.txt', 'r') as acc_file:
-    banList = [int(id) for id in acc_file.readlines()]
+# with open('./acc/banList.txt', 'r') as acc_file:
+#     banList = [int(id) for id in acc_file.readlines()]
+banList = []
 
 scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
 class OllamaAPIHandler():
@@ -47,12 +48,12 @@ class OllamaAPIHandler():
             
     async def chat(self, messages:list, botid:int, tokens:int) -> replyDict:
         json = {
-            "model": configToml['LLM']['model'],
+            "model": configToml['modelChat'],
             "messages": messages,
             "max_tokens": min(tokens, 2500 - chatTok[botid]),
             "seed": 42,
             "stop": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
-            "temperature": configToml['LLM']['temperature'],
+            "temperature": configToml['chatParams']['temperature'],
             "repeat_penalty": 1.25,
             "mirostat_mode": 2,
             "stream": False,
@@ -74,7 +75,7 @@ class OllamaAPIHandler():
         return rd
     
     async def ps(self):
-        async with self.clientSession.get(configToml['stat']) as request:
+        async with self.clientSession.get(configToml['linkStatus']) as request:
             request.raise_for_status()
             response = await request.json()
         return response
@@ -198,6 +199,10 @@ class askAI(commands.Cog):
                 else:
                     prompt = replyDict('user'  , f'{userName} said {text}', userName)
                 
+                if message.attachments:
+                    # with the individual images encoded in Base64
+                    prompt.images = [base64.b64encode(await attachment.read()).decode('utf-8') for attachment in message.attachments]
+
                 if not uid in dfDict:
                     dfDict[uid] = pd.DataFrame(columns=['text', 'vector'])
                     # check if file exists
@@ -251,7 +256,7 @@ class askAI(commands.Cog):
                     #     else: 
                     #         prompt = replyDict('user', f'{userName} said {selectMsgs}, {text}', userName)
                     #     print(f'debug: {prompt.content}')
-                        
+                    # print(f'debug: {prompt.asdict}')
                     reply = await self.ollamaAPI.chat([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
                 assert reply.role != 'error'
                 
@@ -275,7 +280,7 @@ class askAI(commands.Cog):
                 #     print(type(i))
                 if uid not in scoreArr.index:
                     scoreArr.loc[uid] = 0
-                scoreArr.loc[uid].iloc[aiNum] += 1
+                scoreArr.loc[uid, str(aiNum)] += 1
     
     @commands.hybrid_command(name = 'scoreboard')
     async def _scoreboard(self, ctx:commands.Context):
@@ -306,7 +311,17 @@ class askAI(commands.Cog):
         s = scoreArr.sum().sum()
         l = sepLines(f'{wcformat(id2name[int(i)], w=8)}{v : <8}{ v/s :<2.3%}' for i, v in zip(t.index, t.values))
         await ctx.send(f'Bot List:\n```{l}```')
-            
+    
+    @commands.hybrid_command(name = 'selectmodel')
+    @commands.is_owner()
+    async def _selectModel(self, ctx:commands.Context, model:str):
+        # hardcode
+        if model in {'llama3.2-vision', 'gemma2it'}:
+            configToml['modelChat'] = model
+            await ctx.send(f'已切換至 {model}')
+        else:
+            await ctx.send('客官不可以')
+
     @commands.command(name = 'bl')
     @commands.is_owner()
     async def _blacklist(self, ctx:commands.Context, uid:int):

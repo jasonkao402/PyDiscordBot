@@ -61,15 +61,20 @@ class embedVector:
         return {'text':self.text, 'vector':self.vector}
 
 class replyDict:
-    def __init__(self, role: str ='assistant', content: List[str]=[], name: str=''):
+    def __init__(self, role: str ='assistant', content: List[str]=[], name: str='', images: List[str]=[]):
         self.role = role
         self.content = content
         self.name = name
+        self.images = images
+
     def __str__(self):
-        return f'{self.role} : {self.content}'
+        return f'{self.role} : {self.content}' + (f' ({self.name})' if self.name else '') + (f' [{self.images}]' if self.images else '')
+    
     @property
     def asdict(self):
-        if self.name != '':
-            return {'role': self.role, 'content': self.content, 'name': self.name}
-        else:
-            return {'role': self.role, 'content': self.content}
+        result = {'role': self.role, 'content': self.content}
+        if len(self.images) > 0:
+            result['images'] = self.images
+        if self.name:
+            result['name'] = self.name
+        return result

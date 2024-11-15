@@ -113,7 +113,7 @@ def main():
     @client.command()
     @commands.is_owner()
     async def close(ctx:commands.Context):
-        await ctx.send('今天的網路夠多了。')
+        await ctx.send(f'cya {ctx.author.mention}')
         await client.close()
 
     # Load API token, and delete it from configToml
