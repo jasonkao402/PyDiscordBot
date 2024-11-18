@@ -33,7 +33,13 @@ tempTime = tempTime.time()
 banList = []
 
 scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
-class OllamaAPIHandler():
+
+class SDImage_APIHandler():
+    def __init__(self):
+        self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
+        self.clientSession = ClientSession(connector=self.connector)
+    
+class Ollama_APIHandler():
     def __init__(self):
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
         self.clientSession = ClientSession(connector=self.connector)
@@ -58,6 +64,7 @@ class OllamaAPIHandler():
             "mirostat_mode": 2,
             "stream": False,
         }
+        print(messages[-1])
         async with self.clientSession.post(configToml['linkChat'], json=json) as request:
             # request.raise_for_status()
             response = await request.json()
@@ -127,7 +134,7 @@ class askAI(commands.Cog):
         self.loneMsg = 0
         self.loneLimit = LONELYMETER
         self.sch_FullUser = None
-        self.ollamaAPI = OllamaAPIHandler()
+        self.ollamaAPI = Ollama_APIHandler()
         # self.last_reply = replydict()
         
     def cog_unload(self):
@@ -256,7 +263,6 @@ class askAI(commands.Cog):
                     #     else: 
                     #         prompt = replyDict('user', f'{userName} said {selectMsgs}, {text}', userName)
                     #     print(f'debug: {prompt.content}')
-                    # print(f'debug: {prompt.asdict}')
                     reply = await self.ollamaAPI.chat([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
                 assert reply.role != 'error'
                 
@@ -357,7 +363,21 @@ class askAI(commands.Cog):
     async def _status(self, ctx:commands.Context):
         status = await self.ollamaAPI.ps()
         await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
-        
+    
+    @commands.hybrid_command(name = 'sd')
+    @commands.is_owner()
+    async def _stableDiffusion(self, ctx:commands.Context, prompt:str):
+        user = ctx.author
+        payload = {
+            "prompt": prompt,
+            "steps": 30,
+            "width": 720,
+            "height": 720,
+        }
+        async with ctx.typing():
+            # async with 
+            pass
+
     @app_commands.command(name = 'schedule')
     async def _schedule(self, interaction: Interaction, delaytime:int, text:Optional[str] = ''):
         dt = datetime.now(timezone.utc) + timedelta(seconds=int(delaytime))
