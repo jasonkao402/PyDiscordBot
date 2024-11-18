@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from discord import Client as DC_Client
-from discord import Color, Embed, Interaction, Message, app_commands
+from discord import Color, Embed, Interaction, Message, app_commands, File
 from discord.ext import commands, tasks
 from opencc import OpenCC
 from cog.utilFunc import *
@@ -39,18 +39,39 @@ class SDImage_APIHandler():
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
         self.clientSession = ClientSession(connector=self.connector)
     
+    async def close(self):
+        if not self.clientSession.closed:
+            await self.clientSession.close()
+            print("SDImage Client session closed")
+            
+        if not self.connector.closed:
+            await self.connector.close()
+            print("SDImage Connector closed")
+
+    async def imageGen(self, prompt:str, steps:int, width:int, height:int):
+        json = {
+            "prompt": prompt,
+            "steps": steps,
+            "width": width,
+            "height": height,
+        }
+        async with self.clientSession.post(configToml['linkSDImg'], json=json) as request:
+            response = await request.json()
+        return response
+    
 class Ollama_APIHandler():
     def __init__(self):
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
         self.clientSession = ClientSession(connector=self.connector)
 
-    def close(self):
-        if not self.connector.closed:
-            self.connector.close()
-            print("Connector closed")
+    async def close(self):
         if not self.clientSession.closed:
-            self.clientSession.close()
-            print("Client session closed")
+            await self.clientSession.close()
+            print("Ollama Client session closed")
+            
+        if not self.connector.closed:
+            await self.connector.close()
+            print("Ollama Connector closed")
 
     async def chat(self, messages:list, botid:int, tokens:int) -> replyDict:
         json = {
@@ -134,6 +155,7 @@ class askAI(commands.Cog):
         self.loneLimit = LONELYMETER
         self.sch_FullUser = None
         self.ollamaAPI = Ollama_APIHandler()
+        self.sdimageAPI = SDImage_APIHandler()
         # self.last_reply = replydict()
         
     def cog_unload(self):
@@ -367,7 +389,7 @@ class askAI(commands.Cog):
     
     @commands.hybrid_command(name = 'sd')
     @commands.is_owner()
-    async def _stableDiffusion(self, ctx:commands.Context, prompt:str):
+    async def _stableDiffusion(self, ctx:commands.Context, prompt:str, steps:int = 30, width:int = 720, height:int = 720):
         user = ctx.author
         payload = {
             "prompt": prompt,
@@ -376,8 +398,11 @@ class askAI(commands.Cog):
             "height": 720,
         }
         async with ctx.typing():
-            # async with 
-            pass
+            async with self.sdimageAPI.imageGen(prompt, steps, width, height) as response:
+                for image in response['images']:
+                    # decode base64
+                    await ctx.send(file=File(base64.b64decode(image), filename='image.png'))
+
 
     @app_commands.command(name = 'schedule')
     async def _schedule(self, interaction: Interaction, delaytime:int, text:Optional[str] = ''):
