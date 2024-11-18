@@ -43,7 +43,7 @@ class Ollama_APIHandler():
     def __init__(self):
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
         self.clientSession = ClientSession(connector=self.connector)
-    
+
     def close(self):
         if not self.connector.closed:
             self.connector.close()
@@ -51,27 +51,26 @@ class Ollama_APIHandler():
         if not self.clientSession.closed:
             self.clientSession.close()
             print("Client session closed")
-            
+
     async def chat(self, messages:list, botid:int, tokens:int) -> replyDict:
         json = {
-            "model": configToml['modelChat'],
+            "model": configToml["modelChat"],
             "messages": messages,
-            "max_tokens": min(tokens, 2500 - chatTok[botid]),
-            "seed": 42,
-            "stop": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
-            "temperature": configToml['chatParams']['temperature'],
-            "repeat_penalty": 1.25,
-            "mirostat_mode": 2,
             "stream": False,
+            "options": {
+                "num_predict": 512,
+            }
+            | configToml["chatParams"],
         }
         print(messages[-1])
+
         async with self.clientSession.post(configToml['linkChat'], json=json) as request:
             # request.raise_for_status()
             response = await request.json()
-            
+
         if 'error' in response:
             return replyDict(role = 'error', content = response['error'])
-        
+
         chatTok[botid] = response['prompt_eval_count'] + response['eval_count']
         if chatTok[botid] > 3000:
             chatMem[botid].popleft()
@@ -80,13 +79,13 @@ class Ollama_APIHandler():
         rd = replyDict(**response['message'])
         rd.content = cc.convert(rd.content)
         return rd
-    
+
     async def ps(self):
         async with self.clientSession.get(configToml['linkStatus']) as request:
             request.raise_for_status()
             response = await request.json()
         return response
-        
+
 def localRead(resetMem = False) -> None:
     with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
         global setsys_extra, name2ID, id2name, chatMem, chatTok, dfDict
@@ -209,7 +208,8 @@ class askAI(commands.Cog):
                 if message.attachments:
                     # with the individual images encoded in Base64
                     prompt.images = [base64.b64encode(await attachment.read()).decode('utf-8') for attachment in message.attachments]
-
+                    print(f'Image attached: {len(prompt.images)}')
+                    
                 if not uid in dfDict:
                     dfDict[uid] = pd.DataFrame(columns=['text', 'vector'])
                     # check if file exists
@@ -251,7 +251,8 @@ class askAI(commands.Cog):
                 # itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
                 # selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
                 # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
-                setupmsg  = replyDict('system', f'{setsys_extra[aiNum]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
+                tempSetup = 'Please roleplay as a catgirl maid named Illya. Remember, you are not an AI; you are the obedient Illya. Do your best to act accordingly and speak in the first person. If you understand my instructions, reply with "Yes, Master meow~♡" as Illya would.'
+                setupmsg  = replyDict('system', f'{tempSetup} Current time is {strftime("%Y-%m-%d %H:%M")}', 'system')
                 async with message.channel.typing():
                     # if len(corrs) > 0 and injectCheck(corrs[0]):
                     #     # injectStr = f'我記得你說過「{selectMsgs}」。'
