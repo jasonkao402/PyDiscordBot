@@ -2,6 +2,7 @@ import os
 import discord
 from discord.ext import commands
 from cog.utilFunc import devChk, loadToml
+from typing import Optional
 
 configToml = loadToml()
 
@@ -24,6 +25,12 @@ def main():
     intents = discord.Intents.all()
     client = commands.Bot(command_prefix='%', intents=intents)
     
+    async def sync_tree(guild):
+        avail_cmds = await client.tree.sync(guild=guild)
+        print(f'synced {len(avail_cmds)} commands')
+        for cmd in avail_cmds:
+            print(f' - {cmd}')
+
     @client.event
     async def on_ready():
         await client.change_presence(activity = discord.Game('debugger(殺蟲劑)'))
@@ -41,15 +48,13 @@ def main():
     @client.hybrid_command(name = 'reload')
     @commands.is_owner()
     async def _reload(ctx:commands.Context):
-        if devChk(ctx.author.id):
-            suc = 0
-            for c in LOADED_COG:
-                await client.reload_extension(f'cog.{c}')
-                suc += 1
-            
-            await client.tree.sync()
-            await ctx.send(f'{suc} reloaded and sync done')
-            print(f'[C] {suc} reloaded')
+        suc = 0
+        for c in LOADED_COG:
+            await client.reload_extension(f'cog.{c}')
+            suc += 1
+        
+        await ctx.send(f'{suc} reloaded and sync done')
+        await sync_tree(ctx.guild)
 
     @client.command()
     @commands.is_owner()

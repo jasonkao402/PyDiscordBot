@@ -48,14 +48,17 @@ class SDImage_APIHandler():
             await self.connector.close()
             print("SDImage Connector closed")
 
-    async def imageGen(self, prompt:str, steps:int, width:int, height:int):
-        json = {
+    async def imageGen(self, prompt:str, width:int = 640, height:int = 640):
+        payload = {
             "prompt": prompt,
-            "steps": steps,
+            "negative_prompt": "EasyNegative, badhandv4, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+            "steps": 20,
             "width": width,
             "height": height,
+            "sampler_name": "DPM++ 2S a",
+            "cfg_scale": 8.0,
         }
-        async with self.clientSession.post(configToml['linkSDImg'], json=json) as request:
+        async with self.clientSession.post(configToml['linkSDImg'], json=payload) as request:
             response = await request.json()
         return response
     
@@ -83,7 +86,7 @@ class Ollama_APIHandler():
             }
             | configToml["chatParams"],
         }
-        print(messages[-1])
+        # print(messages[-1])
 
         async with self.clientSession.post(configToml['linkChat'], json=json) as request:
             # request.raise_for_status()
@@ -158,8 +161,9 @@ class askAI(commands.Cog):
         self.sdimageAPI = SDImage_APIHandler()
         # self.last_reply = replydict()
         
-    def cog_unload(self):
-        self.ollamaAPI.close()
+    async def cog_unload(self):
+        await self.ollamaAPI.close()
+        await self.sdimageAPI.close()
         self.my_task.cancel()
         self._mindLoop.cancel()
         self._loneMeter.cancel()
@@ -387,26 +391,26 @@ class askAI(commands.Cog):
         status = await self.ollamaAPI.ps()
         await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
     
-    @commands.hybrid_command(name = 'sd')
-    @commands.is_owner()
-    async def _stableDiffusion(self, ctx:commands.Context, prompt:str, steps:int = 30, width:int = 720, height:int = 720):
-        user = ctx.author
-        payload = {
-            "prompt": prompt,
-            "steps": 30,
-            "width": 720,
-            "height": 720,
-        }
-        async with ctx.typing():
-            async with self.sdimageAPI.imageGen(prompt, steps, width, height) as response:
-                for image in response['images']:
-                    # decode base64
-                    await ctx.send(file=File(base64.b64decode(image), filename='image.png'))
+    @app_commands.command(name = 'sd2')
+    @app_commands.describe(prompt = 'Prompt for the image', width = 'Width of the image', height = 'Height of the image')
+    async def _sd2(self, interaction: Interaction, prompt:str, width: Optional[int] = 640, height: Optional[int] = 640):
+        # clip w and h to 512 - 1024, in step of 16
+        width = max(512, min(1024, (width + 8) // 16 * 16))
+        height = max(512, min(1024, (height + 8) // 16 * 16))
+
+        await interaction.response.defer()
+        response = await self.sdimageAPI.imageGen(prompt, width, height)
+        for image in response['images']:
+            dest = f'acc/imgLog/{strftime("%Y_%m%d_%H%M")}.png'
+            with open(dest, 'wb') as f:
+                f.write(base64.b64decode(image))
+        await interaction.followup.send(prompt, file=File(dest))
+
 
 
     @app_commands.command(name = 'schedule')
-    async def _schedule(self, interaction: Interaction, delaytime:int, text:Optional[str] = ''):
-        dt = datetime.now(timezone.utc) + timedelta(seconds=int(delaytime))
+    async def _schedule(self, interaction: Interaction, delay_time:int, text:Optional[str] = ''):
+        dt = datetime.now(timezone.utc) + timedelta(seconds=int(delay_time))
         
         self.channel = interaction.channel
         self.sch_FullUser = interaction.user
