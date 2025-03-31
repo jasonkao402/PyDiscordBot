@@ -1,5 +1,4 @@
-import json, asyncio
-import time
+import asyncio
 import aiohttp, requests
 import numpy as np
 from cog.utilFunc import loadToml, embedVector
@@ -33,8 +32,7 @@ class OllamaAPIHandler:
             "messages": messages,
             "stream": False,
             "options": {
-                "num_predict": 512,
-                # "stop": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
+                "num_predict": 2048,
             }
             | configToml["chatParams"],
         }
