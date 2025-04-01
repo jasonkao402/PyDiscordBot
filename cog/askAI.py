@@ -51,7 +51,7 @@ class SDImage_APIHandler():
     async def imageGen(self, prompt:str, width:int = 640, height:int = 640):
         payload = {
             "prompt": prompt,
-            "negative_prompt": "EasyNegative, badhandv4, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+            "negative_prompt": "(lowres:1.2), EasyNegative, badhandv4, negative_hand-neg, (worst quality:1.4), (low quality:1.4), (bad anatomy:1.4), bad hands, multiple views, comic, jpeg artifacts, bad feet, text, error, missing fingers, extra digits, fewer digits, cropped, signature, watermark, username, blurry",
             "steps": 20,
             "width": width,
             "height": height,
@@ -82,7 +82,7 @@ class Ollama_APIHandler():
             "messages": messages,
             "stream": False,
             "options": {
-                "num_predict": 512,
+                "num_predict": 640,
             }
             | configToml["chatParams"],
         }
@@ -124,7 +124,7 @@ def localRead(resetMem = False) -> None:
             chatMem = [deque(maxlen=MEMOLEN) for _ in range(len(setsys_extra))]
             chatTok = [0 for _ in range(len(setsys_extra))]
             dfDict = defaultdict(pd.DataFrame)
-        # print(name2ID)
+        print(name2ID)
 
 def nameChk(s) -> tuple:
     for name in name2ID:
@@ -277,8 +277,9 @@ class askAI(commands.Cog):
                 # itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
                 # selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
                 # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
-                tempSetup = 'Please roleplay as a catgirl maid named Illya. Remember, you are not an AI; you are the obedient Illya. Do your best to act accordingly and speak in the first person. If you understand my instructions, reply with "Yes, Master meow~♡" as Illya would.'
-                setupmsg  = replyDict('system', f'{tempSetup} Current time is {strftime("%Y-%m-%d %H:%M")}', 'system')
+                # tempSetup = 'Please roleplay as a catgirl maid named Illya. Remember, you are not an AI; you are the obedient Illya. Do your best to act accordingly and speak in the first person. If you understand my instructions, reply with "Yes, Master meow~♡" as Illya would.'
+                # setupmsg  = replyDict('system', f'{tempSetup} Current time is {strftime("%Y-%m-%d %H:%M")}', 'system')
+                setupmsg  = replyDict('system', f'{setsys_extra[aiNum]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
                 async with message.channel.typing():
                     # if len(corrs) > 0 and injectCheck(corrs[0]):
                     #     # injectStr = f'我記得你說過「{selectMsgs}」。'
@@ -294,7 +295,18 @@ class askAI(commands.Cog):
                 assert reply.role != 'error'
                 
                 reply2 = reply.content
-                await message.channel.send(reply2)
+                if (configToml['modelChat'] == 'deepseek-r1:32b'):
+                    # need to split the reply into thinking and reply
+                    reply_think = reply2[reply2.find('<think>')  + 7 : reply2.find('</think>')]
+                    reply.content = reply2[reply2.find('</think>') + 8 :]
+                    # make a txt file for the thinking part
+                    think_fileName = f'./acc/thinkLog/{strftime("%Y_%m%d_%H%M%S")}.txt'
+                    with open(think_fileName, 'w+', encoding='utf-8') as f:
+                        f.write(reply_think)
+                    await message.channel.send(file=File(think_fileName))
+                    await message.channel.send(reply.content)
+                else:
+                    await message.channel.send(reply2)
             except TimeoutError:
                 print(f'[!] {aiNam} TimeoutError')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
@@ -349,11 +361,14 @@ class askAI(commands.Cog):
     @commands.is_owner()
     async def _selectModel(self, ctx:commands.Context, model:str):
         # hardcode
-        if model in {'llama3.2-vision', 'gemma2it'}:
+        # print(configToml["modelList"])
+        if model in ('help', 'list', 'ls'):
+            await ctx.send(f'目前可用模型：\n```{sepLines(configToml["modelList"])}```')
+        elif model in configToml["modelList"]:
+            await ctx.send(f'已從 {configToml['modelChat']} 切換至 {model}')
             configToml['modelChat'] = model
-            await ctx.send(f'已切換至 {model}')
         else:
-            await ctx.send('客官不可以')
+            await ctx.send(f'客官不可以，目前為 {configToml["modelChat"]}')
 
     @commands.command(name = 'bl')
     @commands.is_owner()

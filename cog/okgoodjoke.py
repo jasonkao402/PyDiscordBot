@@ -42,30 +42,36 @@ class okgoodjoke(commands.Cog):
             ch = self.bot.get_partial_messageable(payload.channel_id, guild_id=payload.guild_id)
             msg = await ch.fetch_message(payload.message_id)
             uid = msg.author.id
-            mdc = {str(emoji) : emoji.count for emoji in msg.reactions}[emj]
+            emoji_count = {str(emoji) : emoji.count for emoji in msg.reactions}[emj]
             
-            if mdc == 3 and (eid:=nameChk(emj)) != -1:
+            if emoji_count >= 2 and (eid:=nameChk(emj)) != -1:
                 cachedMsg.append(mid)
                 if uid not in emojiArr.index:
-                    emojiArr.loc[uid] = 0
-                    
-                emojiArr.loc[uid].iloc[eid] += 1
-                t = emojiArr.iloc[:,eid].sort_values(ascending=False).head(5)
-                sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
-                return await ch.send(f'{emj} Emoji Rank:\n```{sb}```', reference=msg, silent=True)
+                    emojiArr.loc[uid, :] = 0
+                print(emojiArr)
+                emojiArr.loc[uid, str(eid)] += 1
+                top_users  = emojiArr.iloc[:,eid].nlargest(5)
+                ranking_text = sepLines(
+                    f'{username.name if (username := self.bot.get_user(i)) else "ERROR"}: {v}'
+                    for i, v in zip(top_users.index, top_users.values)
+                )
+                return await ch.send(f'{emj} Emoji Rank:\n```{ranking_text}```', reference=msg, silent=True)
     
     @commands.hybrid_command(name = 'erank')
     async def _emojiRank(self, ctx:commands.Context, emj:str):
         uid, eid = ctx.author.id, nameChk(emj)
         if ctx.guild.id == 477839636404633600:
             if uid not in emojiArr.index:
-                emojiArr.loc[uid] = 0
+                emojiArr.loc[uid, :] = 0
             if eid == -1:
                 return await ctx.send(f'{emj} Emoji Rank 404 not found.', silent=True)
             # print('debug', eid)
-            t = emojiArr.iloc[:,eid].sort_values(ascending=False).head(5)
-            sb = sepLines((f'{wcformat(self.bot.get_user(i).name)}: {v}'for i, v in zip(t.index, t.values)))
-            return await ctx.send(f'{emj} Emoji Rank:\n```{sb}```', silent=True)
+            top_users  = emojiArr.iloc[:,eid].nlargest(5)
+            ranking_text = sepLines(
+                f'{username.name if (username := self.bot.get_user(i)) else "ERROR"}: {v}'
+                for i, v in zip(top_users.index, top_users.values)
+            )
+            return await ctx.send(f'{emj} Emoji Rank:\n```{ranking_text}```', silent=True)
 
 async def setup(bot:commands.Bot):
     localRead()

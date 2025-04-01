@@ -20,7 +20,7 @@ def setLimit():
     return np.random.normal(LIMIT, SCALE)
 
 async def update_variable():
-    # global v, vl
+    global v, vl
     
     tot = 0
     rnd = np.random.poisson(SCALE, N)
