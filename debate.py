@@ -8,7 +8,7 @@ import ollama_api
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 import asyncio
-
+import numpy as np
 
 class Team(Enum):
     PRO = 1
@@ -60,6 +60,8 @@ class Debater(ABC):
         self.team = Team.PRO if name == "正方" else Team.CON
         self.logger = debater_loggers[self.team]
         self.api = api
+        self.round_score = 0
+        self.total_score = 0
         self.arguments = []
         self.memory = []
 
@@ -104,42 +106,33 @@ class Judge:
     def __init__(self, api: ollama_api.OllamaAPIHandler):
         self.api = api
 
-    async def evaluate(self, args: List[str]):
+    async def evaluate(self, arg: str):
         """根據可靠度和合理程度計算得分"""
-        scores = [0] * len(args)
-        for i, arg in enumerate(args):
-            messages = [
-                {
-                    "role": "user",
-                    "content": f"你是一位辯論賽評審，請先客觀分析選手應答，且根據你對於應答內容的分析，分別給出兩個整數(範圍0~10)，代表選手應答內容之可靠度和有效反駁程度\n選手回應:{arg}",
-                }
-            ]
+        messages = [
+            {
+                "role": "user",
+                "content": f"你是一位辯論賽評審，請先客觀分析選手應答，且根據你對於應答內容的分析，分別給出兩個整數(範圍0~10)，代表選手應答內容之可靠度和有效反駁程度\n選手回應:{arg}",
+            }
+        ]
+        response_step1 = await self.api.chat(messages)
+        jsonPrompt = [
+            {
+                "role": "system",
+                "content": "given a review of a debate response from a judge, please extract the score and analysis from the review. The review is in Chinese. The json should contain the following fields: 'analysis', 'credibility', 'validity', e.g.:\n{\"analysis\": \"string\", \"credibility\": int, \"validity\": int}",
+            },
+            {
+                "role": "user",
+                "content": response_step1["message"]["content"],
+            },
+        ]
+        response_step2 = await self.api.chat(jsonPrompt)
+        response_step2 = response_step2["message"]["content"]
+        # print(json_response)
+        parsed_response = response_step2[response_step2.find("```json") + 7 : response_step2.rfind("```")]
+        print(parsed_response)
+        json_response = json.loads(parsed_response)
             
-            response = await self.api.chat(messages)
-            jsonPrompt = [
-                {
-                    "role": "system",
-                    "content": f"given a review of a debate response from a judge, please extract the score and analysis from the review. The review is in Chinese. The json should contain the following fields: 'analysis', 'credibility', 'validity', e.g.:\n{{\"analysis\": \"\", \"credibility\": 0, \"validity\": 0}}",
-                },
-                {
-                    "role": "user",
-                    "content": response["message"]["content"],
-                },
-            ]
-            json_response = await self.api.chat(jsonPrompt)
-            json_response = json_response["message"]["content"]
-            print(json_response)
-            # json_parsed_response = json.loads(json_response)
-            # print(json_parsed_response)
-            # response = response["message"]["content"]
-            # parsed_analysis = response[
-                # response.find("# 客觀分析") + 7 : response.find("# 評審給分")
-            # ]
-            # parsed_score = response[response.find("# 評審給分") + 7 :]
-            # judge_logger.info(f"客觀分析 {i:2d}: {parsed_analysis}")
-            # judge_logger.info(f"評審給分 {i:2d}: {parsed_score}")
-            # scores[i] = response
-        return scores
+        return json_response["analysis"], (json_response["credibility"], json_response["validity"])
 
 
 class DebateController:
@@ -184,16 +177,32 @@ class DebateController:
                     "update_con", {"text": self.con.memory[-1]}
                 )
                 
-            # await self.pro.rebut(self.con.arguments, T)
-            # await self.con.rebut(self.pro.arguments, T)
-
-            pro_score = await self.judge.evaluate(self.pro.memory)
-            con_score = await self.judge.evaluate(self.con.memory)
-            self.pro.memory = []
-            self.con.memory = []
-        # winner = "正方" if pro_score > con_score else "反方" if con_score > pro_score else "平手"
-        # logging.info(f"最終勝者: {winner}")
-        # return winner
+            # scores = np.zeros((len(self.pro.memory), 3))
+            for team in [self.pro, self.con]:
+                scores = np.zeros((len(team.memory), 3))
+                for i, rebut in enumerate(team.memory):
+                    analysis, (credibility, validity) = await self.judge.evaluate(rebut)
+                    scores[i] = (credibility, validity, credibility * validity)
+                    socketio.emit(
+                        "update_judge", {"text": f"{team.name} {i+1}/{len(team.memory)}: {credibility}, {validity}, {analysis}"}
+                    )
+                team.round_score = np.sum(scores[:, 2])
+                team.memory = []
+                
+            if self.pro.round_score > self.con.round_score:
+                self.pro.total_score += 1
+                socketio.emit(
+                    "update_judge", {"text": f"正方: {self.pro.round_score}, 反方: {self.con.round_score}, 正方勝"}
+                )
+            elif self.pro.round_score < self.con.round_score:
+                self.con.total_score += 1
+                socketio.emit(
+                    "update_judge", {"text": f"正方: {self.pro.round_score}, 反方: {self.con.round_score}, 反方勝"}
+                )
+            else:
+                socketio.emit(
+                    "update_judge", {"text": f"正方: {self.pro.round_score}, 反方: {self.con.round_score}, 平手"}
+                )
         await self.api.close()
 
 
@@ -201,12 +210,12 @@ class DebateController:
 def index():
     return render_template("index.html")
 
-@socketio.on("start_debate")
-def handle_start_debate():
-    topic = "台灣政府應在 2025 年前淘汰所有核電廠"
-    rounds = 3
-    prepare = 2
-    debate = DebateController(topic, rounds=rounds, prepare=prepare)
+@socketio.on('start_debate')
+def handle_start_debate(data):
+    topic = data['topic']
+    rounds = data['rounds']
+    prepare_amount = data['prepare_amount']
+    debate = DebateController(topic, rounds, prepare_amount)
     asyncio.run(debate.start_debate())
     
 # 測試

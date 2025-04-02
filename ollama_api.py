@@ -32,7 +32,7 @@ class OllamaAPIHandler:
             "messages": messages,
             "stream": False,
             "options": {
-                "num_predict": 2048,
+                "num_predict": 600,
             }
             | configToml["chatParams"],
         }
@@ -40,7 +40,8 @@ class OllamaAPIHandler:
             configToml["linkChat"], json=data
         ) as request:
             response = await request.json()
-
+        if 'error' in response:
+            response['message'] = {'content': response['error']}
         return response
 
     async def embed(self, inputStr: str):

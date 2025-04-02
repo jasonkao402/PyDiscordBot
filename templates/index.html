@@ -1,56 +1,102 @@
 <!DOCTYPE html>
 <html>
-
-<head>
+  <head>
     <title>LLM 辯論賽</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-</head>
+    <style>
+      .message-container {
+        max-height: 400px; /* Limit the height of the container */
+        overflow-y: auto; /* Allow scrolling if content exceeds height */
+        border: 1px solid #ccc;
+        padding: 10px;
+      }
+      
+      .message {
+        max-height: 120px; /* Set fixed height for message blocks */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap; /* Prevent text from wrapping */
+        cursor: pointer;
+        transition: max-height 0.3s ease-in-out;
+      }
+      
+      .expanded {
+        max-height: none; /* Show full text when expanded */
+        white-space: normal; /* Allow wrapping when expanded */
+      }
+    </style>
+  </head>
 
-<body>
+  <body>
     <h1>LLM 辯論賽</h1>
+
+    <!-- Input Fields -->
+    <label>辯論主題:<input type="text" id="debate_topic" value="短平快手遊的商業模式對玩家群體有害無益" /></label><br />
+    <label>辯論回合數:<input type="number" id="debate_rounds" value="5" /></label><br />
+    <label>準備論點數:<input type="number" id="prepare_amount" value="3" /></label><br />
+
     <button onclick="startDebate()">開始辯論</button>
+
     <div style="display: flex;">
-        <div style="width: 33%; padding: 10px;">
-            <h2>正方</h2>
-            <div id="pro_output"></div> <!-- Change from <p> to <div> -->
-        </div>
-        <div style="width: 33%; padding: 10px;">
-            <h2>反方</h2>
-            <div id="con_output"></div> <!-- Change from <p> to <div> -->
-        </div>
-        <div style="width: 33%; padding: 10px;">
-            <h2>裁判</h2>
-            <div id="judge_output"></div> <!-- Change from <p> to <div> -->
-        </div>
+      <div style="width: 33%; padding: 10px;">
+        <h2>正方</h2>
+        <div id="pro_output" class="message-container"></div>
+      </div>
+      <div style="width: 33%; padding: 10px;">
+        <h2>反方</h2>
+        <div id="con_output" class="message-container"></div>
+      </div>
+      <div style="width: 33%; padding: 10px;">
+        <h2>裁判</h2>
+        <div id="judge_output" class="message-container"></div>
+      </div>
     </div>
 
     <script>
-        var socket = io();
-
-        function startDebate() {
-            socket.emit('start_debate');
-        }
-
-        function addMessage(elementId, text) {
-            let container = document.getElementById(elementId);
-            let newParagraph = document.createElement("p");
-            newParagraph.textContent = text;
-            container.appendChild(newParagraph);  // Append a new <p> instead of modifying innerHTML
-        }
-
-        // Listen for updates from the server
-        socket.on('update_pro', function (data) {
-            addMessage('pro_output', data.text);
-        });
-
-        socket.on('update_con', function (data) {
-            addMessage('con_output', data.text);
-        });
-
-        socket.on('update_judge', function (data) {
-            addMessage('judge_output', data.text);
-        });
+      var socket = io()
+      
+      function startDebate() {
+        let topic = document.getElementById('debate_topic').value
+        let rounds = parseInt(document.getElementById('debate_rounds').value)
+        let prepareAmount = parseInt(document.getElementById('prepare_amount').value)
+      
+        socket.emit('start_debate', {
+          topic: topic,
+          rounds: rounds,
+          prepare_amount: prepareAmount
+        })
+      }
+      
+      function addMessage(elementId, text) {
+        let container = document.getElementById(elementId)
+        let newParagraph = document.createElement('p')
+      
+        newParagraph.innerHTML = text
+        newParagraph.classList.add('message')
+      
+        // Toggle full/truncated view on click
+        newParagraph.addEventListener('click', function () {
+          this.classList.toggle('expanded')
+        })
+      
+        container.appendChild(newParagraph)
+      
+        // Auto-scroll to the latest message
+        container.scrollTop = container.scrollHeight
+      }
+      
+      // Listen for updates from the server
+      socket.on('update_pro', function (data) {
+        addMessage('pro_output', data.text)
+      })
+      
+      socket.on('update_con', function (data) {
+        addMessage('con_output', data.text)
+      })
+      
+      socket.on('update_judge', function (data) {
+        addMessage('judge_output', data.text)
+      })
     </script>
-</body>
-
+  </body>
 </html>
