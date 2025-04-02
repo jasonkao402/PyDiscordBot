@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LLM 辯論賽</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+
+<body>
+    <h1>LLM 辯論賽</h1>
+    <button onclick="startDebate()">開始辯論</button>
+    <div style="display: flex;">
+        <div style="width: 33%; padding: 10px;">
+            <h2>正方</h2>
+            <div id="pro_output"></div> <!-- Change from <p> to <div> -->
+        </div>
+        <div style="width: 33%; padding: 10px;">
+            <h2>反方</h2>
+            <div id="con_output"></div> <!-- Change from <p> to <div> -->
+        </div>
+        <div style="width: 33%; padding: 10px;">
+            <h2>裁判</h2>
+            <div id="judge_output"></div> <!-- Change from <p> to <div> -->
+        </div>
+    </div>
+
+    <script>
+        var socket = io();
+
+        function startDebate() {
+            socket.emit('start_debate');
+        }
+
+        function addMessage(elementId, text) {
+            let container = document.getElementById(elementId);
+            let newParagraph = document.createElement("p");
+            newParagraph.textContent = text;
+            container.appendChild(newParagraph);  // Append a new <p> instead of modifying innerHTML
+        }
+
+        // Listen for updates from the server
+        socket.on('update_pro', function (data) {
+            addMessage('pro_output', data.text);
+        });
+
+        socket.on('update_con', function (data) {
+            addMessage('con_output', data.text);
+        });
+
+        socket.on('update_judge', function (data) {
+            addMessage('judge_output', data.text);
+        });
+    </script>
+</body>
+
+</html>
