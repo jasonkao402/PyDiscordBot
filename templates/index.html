@@ -1,102 +1,135 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>LLM 辯論賽</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <style>
-      .message-container {
-        max-height: 400px; /* Limit the height of the container */
-        overflow-y: auto; /* Allow scrolling if content exceeds height */
-        border: 1px solid #ccc;
-        padding: 10px;
-      }
-      
-      .message {
-        max-height: 120px; /* Set fixed height for message blocks */
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap; /* Prevent text from wrapping */
-        cursor: pointer;
-        transition: max-height 0.3s ease-in-out;
-      }
-      
-      .expanded {
-        max-height: none; /* Show full text when expanded */
-        white-space: normal; /* Allow wrapping when expanded */
-      }
-    </style>
-  </head>
 
-  <body>
-    <h1>LLM 辯論賽</h1>
+<head>
+  <title>LLM 辯論賽</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+  <style>
+    .message-container {
+      max-height: 600px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
 
-    <!-- Input Fields -->
-    <label>辯論主題:<input type="text" id="debate_topic" value="短平快手遊的商業模式對玩家群體有害無益" /></label><br />
-    <label>辯論回合數:<input type="number" id="debate_rounds" value="5" /></label><br />
-    <label>準備論點數:<input type="number" id="prepare_amount" value="3" /></label><br />
+    .message {
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      max-height: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: pre-line;
+    }
 
-    <button onclick="startDebate()">開始辯論</button>
+    .expanded {
+      max-height: none;
+      /* Show full text when expanded */
+    }
 
-    <div style="display: flex;">
-      <div style="width: 33%; padding: 10px;">
-        <h2>正方</h2>
-        <div id="pro_output" class="message-container"></div>
-      </div>
-      <div style="width: 33%; padding: 10px;">
-        <h2>反方</h2>
-        <div id="con_output" class="message-container"></div>
-      </div>
-      <div style="width: 33%; padding: 10px;">
-        <h2>裁判</h2>
-        <div id="judge_output" class="message-container"></div>
-      </div>
+    .role-default {
+      background-color: #f0f0f0;
+    }
+
+    /* 正方 – 淡藍 */
+    .role-pro {
+      background-color: #d0eaff;
+    }
+
+    /* 反方 – 淡紅 */
+    .role-con {
+      background-color: #ffd6d6;
+    }
+
+    /* 裁判 – 淡綠 */
+    .role-judge {
+      background-color: #d6ffe0;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>LLM 辯論賽</h1>
+
+  <!-- Input Fields -->
+  <label>辯論主題:<input type="text" id="debate_topic" value="反思自己是解決社會問題的關鍵" /></label><br />
+  <label>辯論回合數:<input type="number" id="debate_rounds" value="2" /></label><br />
+  <label>準備論點數:<input type="number" id="prepare_amount" value="3" /></label><br />
+
+  <button onclick="startDebate()">開始辯論</button>
+
+  <div style="display: flex;">
+    <div style="width: 33%; padding: 10px;">
+      <h2>正方</h2>
+      <div id="pro_output" class="message-container"></div>
     </div>
+    <div style="width: 33%; padding: 10px;">
+      <h2>反方</h2>
+      <div id="con_output" class="message-container"></div>
+    </div>
+    <div style="width: 33%; padding: 10px;">
+      <h2>裁判</h2>
+      <div id="judge_output" class="message-container"></div>
+    </div>
+  </div>
 
-    <script>
-      var socket = io()
-      
-      function startDebate() {
-        let topic = document.getElementById('debate_topic').value
-        let rounds = parseInt(document.getElementById('debate_rounds').value)
-        let prepareAmount = parseInt(document.getElementById('prepare_amount').value)
-      
-        socket.emit('start_debate', {
-          topic: topic,
-          rounds: rounds,
-          prepare_amount: prepareAmount
-        })
-      }
-      
-      function addMessage(elementId, text) {
-        let container = document.getElementById(elementId)
-        let newParagraph = document.createElement('p')
-      
-        newParagraph.innerHTML = text
-        newParagraph.classList.add('message')
-      
-        // Toggle full/truncated view on click
-        newParagraph.addEventListener('click', function () {
-          this.classList.toggle('expanded')
-        })
-      
-        container.appendChild(newParagraph)
-      
-        // Auto-scroll to the latest message
-        container.scrollTop = container.scrollHeight
-      }
-      
-      // Listen for updates from the server
-      socket.on('update_pro', function (data) {
-        addMessage('pro_output', data.text)
+  <script>
+    var socket = io()
+
+    function startDebate() {
+      let topic = document.getElementById('debate_topic').value
+      let rounds = parseInt(document.getElementById('debate_rounds').value)
+      let prepareAmount = parseInt(document.getElementById('prepare_amount').value)
+
+      socket.emit('start_debate', {
+        topic: topic,
+        rounds: rounds,
+        prepare_amount: prepareAmount
       })
-      
-      socket.on('update_con', function (data) {
-        addMessage('con_output', data.text)
+    }
+
+    function addMessage(elementId, text, role = 'default') {
+      let container = document.getElementById(elementId)
+      let newParagraph = document.createElement('p')
+
+      newParagraph.classList.add('message', 'role-' + role)
+      newParagraph.innerHTML = text.replace(/\n/g, "<br>");
+
+      // Toggle full/truncated view on click
+      newParagraph.addEventListener('click', function () {
+        this.classList.toggle('expanded')
       })
-      
-      socket.on('update_judge', function (data) {
-        addMessage('judge_output', data.text)
-      })
-    </script>
-  </body>
+
+      container.appendChild(newParagraph)
+
+      // Auto-scroll to the latest message
+      container.scrollTop = container.scrollHeight
+    }
+
+    // Listen for updates from the server
+    socket.on('update_pro', function (data) {
+      addMessage('pro_output', data.text, 'pro')
+    })
+
+    socket.on('update_con', function (data) {
+      addMessage('con_output', data.text, 'con')
+    })
+
+    socket.on('update_judge', function (data) {
+      addMessage('judge_output', data.text, 'judge')
+    })
+
+    window.addEventListener('beforeunload', function () {
+      // const data = {
+      //   topic: document.getElementById('debate_topic').value,
+      //   rounds: parseInt(document.getElementById('debate_rounds').value),
+      //   prepare_amount: parseInt(document.getElementById('prepare_amount').value)
+      // }
+      navigator.sendBeacon('/end_debate', JSON.stringify(data))
+    })
+  </script>
+</body>
+
 </html>

@@ -75,7 +75,7 @@ class Debater(ABC):
         response = await self.api.chat(messages)
         response = response["message"]["content"]
         # print(response)
-        response = response[response.find("[") : response.find("]") + 1]
+        response = response[response.find("[") : response.rfind("]")+1]
         parsed_response = json.loads(response)
         self.arguments.extend(parsed_response)
         for i, arg in enumerate(self.arguments, 1):
@@ -91,7 +91,12 @@ class Debater(ABC):
             },
             {
                 "role": "user",
-                "content": f'你正在參加一場辯論賽，你{("支持" if self.team == Team.PRO else "反對")}「{self.topic}」，要回饋對手的論點: {opponent_argument}\n請依照指示的對抗強度(範圍0~1, 0: 融合對方論點，尋找共識平衡點, 1: 儘可能質疑對方可行性與可靠性)回饋，目前對抗強度={T}',
+                "content": f'我{("反對" if self.team == Team.PRO else "支持")}「{self.topic}」，因為'
+                + opponent_argument,
+            },
+            {
+                "role": "user",
+                "content": f'你正在參加一場辯論賽，要回饋對手的論點，請依照指示的對抗強度(範圍0~1, 0: 融合對方論點，尋找共識平衡點, 1: 質疑對方可行性與可靠性)回饋，目前對抗強度={T}',
             },
         ]
         response = await self.api.chat(messages)
@@ -149,6 +154,12 @@ class DebateController:
         self.pro = Debater("正方", self.topic, self.api)
         self.con = Debater("反方", self.topic, self.api)
         self.judge = Judge(self.api)
+        socketio.emit(
+            "update_pro", {"text": "正方準備論點中... (請稍候)"}
+        )
+        socketio.emit(
+            "update_con", {"text": "反方準備論點中... (請稍候)"}
+        )
         await self.pro.prepare_arguments(self.prepare)
         await self.con.prepare_arguments(self.prepare)
         for arg in self.pro.arguments:
@@ -161,20 +172,29 @@ class DebateController:
             )
         T_start = 0.9
         T_delta = 2
-        rounds = range(self.rounds)
+        # rounds = 
 
-        for i in rounds:
+        for i in range(self.rounds):
             T = T_start / T_delta**i
             logging.info(f"回合 {i+1}/{self.rounds}, T={T}")
-            for arg in self.pro.arguments:
+            socketio.emit(
+                "update_judge", {"text": f"回合 {i+1}/{self.rounds}, T={T}"}
+            )
+            socketio.emit(
+                "update_pro", {"text": f"回合 {i+1}/{self.rounds}"}
+            )
+            socketio.emit(
+                "update_con", {"text": f"回合 {i+1}/{self.rounds}"}
+            )
+            for j, arg in enumerate(self.con.arguments):
                 await self.pro.rebut(arg, T)
                 socketio.emit(
-                    "update_pro", {"text": self.pro.memory[-1]}
+                    "update_pro", {"text": f"論點 {j+1}/{self.prepare}\n{self.pro.memory[-1]}"}
                 )
-            for arg in self.con.arguments:
+            for j, arg in enumerate(self.pro.arguments):
                 await self.con.rebut(arg, T)
                 socketio.emit(
-                    "update_con", {"text": self.con.memory[-1]}
+                    "update_con", {"text": f"論點 {j+1}/{self.prepare}\n{self.con.memory[-1]}"}
                 )
                 
             # scores = np.zeros((len(self.pro.memory), 3))
@@ -203,12 +223,29 @@ class DebateController:
                 socketio.emit(
                     "update_judge", {"text": f"正方: {self.pro.round_score}, 反方: {self.con.round_score}, 平手"}
                 )
+        if self.pro.total_score > self.con.total_score:
+            result = "正方勝"
+        elif self.pro.total_score < self.con.total_score:
+            result = "反方勝"
+        else:
+            result = "平手"
+        socketio.emit(
+            "update_judge", {"text": f"最終結果: {result}"}
+        )
+        logging.info(f"最終結果: {result}")
         await self.api.close()
 
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+# @app.route("/api/end_debate", methods=["POST"])
+# def user_exit():
+    # data = request.get_json()
+    # user_id = data.get("user_id")
+    # print(f"使用者 {user_id} 離開頁面 (via Beacon)")
+    # return '', 204
 
 @socketio.on('start_debate')
 def handle_start_debate(data):
