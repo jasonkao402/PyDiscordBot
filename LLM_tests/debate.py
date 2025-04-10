@@ -4,7 +4,7 @@ import logging
 from abc import ABC
 from enum import Enum
 from typing import List
-import ollama_api
+import ollama_api as ollama_api
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 import asyncio

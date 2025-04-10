@@ -1,5 +1,4 @@
-import asyncio
-import aiohttp, requests
+import asyncio, aiohttp, requests
 import numpy as np
 from cog.utilFunc import loadToml, embedVector
 import base64
