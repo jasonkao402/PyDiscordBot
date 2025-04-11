@@ -68,8 +68,8 @@ class okgoodjoke(commands.Cog):
             # print('debug', eid)
             top_users  = emojiArr.iloc[:,eid].nlargest(5)
             ranking_text = sepLines(
-                f'{username.name if (username := self.bot.get_user(i)) else "ERROR"}: {v}'
-                for i, v in zip(top_users.index, top_users.values)
+                f'{username.name if (username := self.bot.get_user(user_id)) else "ERROR"}: {v}'
+                for user_id, v in zip(top_users.index, top_users.values)
             )
             return await ctx.send(f'{emj} Emoji Rank:\n```{ranking_text}```', silent=True)
 

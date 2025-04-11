@@ -125,3 +125,4 @@ dmypy.json
 .pyre/
 /temp
 Q*g
+subsystem_tests/imgs/*.jpg

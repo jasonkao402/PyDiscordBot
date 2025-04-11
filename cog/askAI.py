@@ -324,23 +324,38 @@ class askAI(commands.Cog):
                 # for i in chatMem[aiNum]:
                 #     print(type(i))
                 if uid not in scoreArr.index:
-                    scoreArr.loc[uid] = 0
+                    scoreArr.loc[uid, :] = 0
                 scoreArr.loc[uid, str(aiNum)] += 1
     
-    @commands.hybrid_command(name = 'scoreboard')
-    async def _scoreboard(self, ctx:commands.Context):
+    @commands.hybrid_command(name='scoreboard')
+    async def _scoreboard(self, ctx: commands.Context):
         user = ctx.author
-        uid, userName = user.id, user.name
-        if uid not in scoreArr.index: 
-            return await ctx.send(f'{userName} 尚未和AI們對話過')
-        arr = scoreArr.loc[uid]
-        m = arr.max()
-        i = int(arr.idxmax())
-        s = arr.sum()
-        t = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-        sb = sepLines((f'{wcformat(self.bot.get_user(i).name, w=16)}: {v}' for i, v in zip(t.index, t.values)))
-        await ctx.send(f'```{sb}```\n{userName}共對話 {s} 次，最常找{id2name[i]}互動 ({m} 次，佔{m/s:.2%})')
-    
+        uid, user_name = user.id, user.name
+
+        # Check if the user has interacted with any AI
+        if uid not in scoreArr.index:
+            return await ctx.send(f'{user_name} 尚未和AI們對話過')
+
+        # Retrieve user interaction data
+        user_scores = scoreArr.loc[uid]
+        total_interactions = user_scores.sum()
+        most_interacted_count = user_scores.max()
+        most_interacted_id = int(user_scores.idxmax())
+
+        # Retrieve top 5 users with the most interactions
+        top_users = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
+        top_users_list = sepLines(
+            f'{username.name if (username := self.bot.get_user(user_id)) else "ERROR"}: {count}'
+            for user_id, count in zip(top_users.index, top_users.values)
+        )
+
+        # Prepare and send the scoreboard message
+        await ctx.send(
+            f'```{top_users_list}```\n'
+            f'{user_name}共對話 {total_interactions} 次，'
+            f'最常找 {id2name[most_interacted_id]} 互動 '
+            f'({most_interacted_count} 次，佔 {most_interacted_count / total_interactions:.2%})'
+        )
     @commands.hybrid_command(name = 'localread')
     async def _cmdlocalRead(self, ctx:commands.Context):
         user = ctx.author
