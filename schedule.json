@@ -1,0 +1,87 @@
+
+[
+  {
+    "start_time": "07:30",
+    "end_time": "08:00",
+    "what_to_do": "Wake up! Snooze once, then reluctantly get out of bed. Check Instagram for a few minutes – gotta see what everyone's up to! Then a quick stretch and a mental pep talk to tackle the day. Yesterday I planned to try a new breakfast place, so I'm excited to see if I can make it.",
+    "interaction_target": "Self, Instagram"
+  },
+  {
+    "start_time": "08:00",
+    "end_time": "08:30",
+    "what_to_do": "Get ready! Quick shower, throw on a comfy outfit (probably something with a cute print).  I'm thinking about trying to learn a new braiding style for my hair – maybe I'll find a tutorial later.",
+    "interaction_target": "Self"
+  },
+  {
+    "start_time": "08:30",
+    "end_time": "09:15",
+    "what_to_do": "Breakfast adventure! Head to 'Morning Dew Cafe' – I saw it on a local foodie blog. Hopefully, they have some unique pastries! I'm thinking about their lavender honey latte.  I'm also going to try to take some aesthetically pleasing photos for my foodstagram.",
+    "interaction_target": "Cafe staff, potential Instagram followers"
+  },
+  {
+    "start_time": "09:15",
+    "end_time": "09:45",
+    "what_to_do": "Walk to campus.  I'm going to try to memorize a new route – maybe I'll discover a hidden gem! I'm daydreaming about building a little app that helps people find secret spots in the city.",
+    "interaction_target": "Environment, potential passersby"
+  },
+  {
+    "start_time": "09:45",
+    "end_time": "12:30",
+    "what_to_do": "Algorithms class. Ugh, this is always a brain workout. I need to focus and take detailed notes. I'm hoping Professor Chen will explain the dynamic programming concepts a little clearer today. I'm also going to try to ask a clarifying question – even if it feels silly.",
+    "interaction_target": "Professor Chen, classmates"
+  },
+  {
+    "start_time": "12:30",
+    "end_time": "13:30",
+    "what_to_do": "Lunch with Mei-Ling and Kevin. We're going to the student union – probably just grab some noodles. I want to ask Mei-Ling about her photography project – she's so talented! I also need to remind Kevin about our group project deadline next week.",
+    "interaction_target": "Mei-Ling, Kevin"
+  },
+  {
+    "start_time": "13:30",
+    "end_time": "16:30",
+    "what_to_do": "Data Structures lab.  We're working on implementing a binary search tree today. I'm going to pair up with David – he's really good at debugging. I'm also going to try to find a short online tutorial on tree traversal algorithms for later.",
+    "interaction_target": "David, lab assistant"
+  },
+  {
+    "start_time": "16:30",
+    "end_time": "17:00",
+    "what_to_do": "Quick coffee break. I'm feeling a little drained. I'm going to try a new flavor at the campus coffee shop – maybe a matcha latte with a little something extra. I'm also going to browse Reddit for a few minutes – gotta see what's trending.",
+    "interaction_target": "Cafe staff, Reddit community"
+  },
+  {
+    "start_time": "17:00",
+    "end_time": "18:30",
+    "what_to_do": "Online Python tutorial. I'm going to dedicate some time to brushing up on my Python skills. I found a course on Udemy about building web scrapers – that sounds really interesting! I'm also going to try to implement a simple script to download images from a specific website.",
+    "interaction_target": "Online tutorial platform"
+  },
+  {
+    "start_time": "18:30",
+    "end_time": "19:30",
+    "what_to_do": "Dinner. I'm craving dumplings! I'm going to try that new dumpling place near the library. I'm hoping they have a spicy option. I'm also going to listen to a podcast while I eat – maybe something about tech or design.",
+    "interaction_target": "Restaurant staff, podcast host"
+  },
+  {
+    "start_time": "19:30",
+    "end_time": "21:00",
+    "what_to_do": "Group project meeting with Kevin and Amy. We need to finalize the presentation slides. I'm a little nervous about presenting, but I'm going to try to be confident! I'm also going to suggest we practice our delivery a few times.",
+    "interaction_target": "Kevin, Amy"
+  },
+  {
+    "start_time": "21:00",
+    "end_time": "22:30",
+    "what_to_do": "Relaxation time. Face mask, some chill music, and maybe a little bit of sketching. I'm thinking about designing a cute sticker for my laptop. I also want to look up some braiding tutorials – I really want to learn a fishtail braid!",
+    "interaction_target": "Self"
+  },
+  {
+    "start_time": "22:30",
+    "end_time": "23:00",
+    "what_to_do": "Plan tomorrow. Check my calendar, make a to-do list. I need to remember to buy groceries and schedule a dentist appointment. I'm also going to jot down some ideas for my personal coding project.",
+    "interaction_target": "Self"
+  },
+  {
+    "start_time": "23:00",
+    "end_time": "00:00",
+    "what_to_do": "Wind down and sleep. Read a few pages of a book. Hopefully, I'm not too wired from all the caffeine!",
+    "interaction_target": "Self"
+  }
+]

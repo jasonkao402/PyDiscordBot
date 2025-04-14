@@ -61,7 +61,7 @@ class embedVector:
         return {'text':self.text, 'vector':self.vector}
 
 class replyDict:
-    def __init__(self, role: str ='assistant', content: List[str]=[], name: str='', images: List[str]=[]):
+    def __init__(self, role: str ='assistant', content: str = '', name: str='', images: List[str]=[]):
         self.role = role
         self.content = content
         self.name = name
