@@ -54,7 +54,7 @@ app = Flask(__name__)
 socketio = SocketIO(app, async_mode="threading")
 
 class Debater(ABC):
-    def __init__(self, name: str, topic, api: ollama_api.OllamaAPIHandler):
+    def __init__(self, name: str, topic, api: ollama_api.Ollama_API_Handler):
         self.name = name
         self.topic = topic
         self.team = Team.PRO if name == "正方" else Team.CON
@@ -73,7 +73,7 @@ class Debater(ABC):
             }
         ]
         response = await self.api.chat(messages)
-        response = response["message"]["content"]
+        response = response.content
         # print(response)
         response = response[response.find("[") : response.rfind("]")+1]
         parsed_response = json.loads(response)
@@ -100,7 +100,7 @@ class Debater(ABC):
             },
         ]
         response = await self.api.chat(messages)
-        response = response["message"]["content"]
+        response = response.content
         self.memory.append(response)
         self.logger.info(f"{self.name} (T={T}) 反駁「{opponent_argument}」: {response}")
 
@@ -108,7 +108,7 @@ class Debater(ABC):
 class Judge:
     """裁判評分系統"""
 
-    def __init__(self, api: ollama_api.OllamaAPIHandler):
+    def __init__(self, api: ollama_api.Ollama_API_Handler):
         self.api = api
 
     async def evaluate(self, arg: str):
@@ -127,11 +127,11 @@ class Judge:
             },
             {
                 "role": "user",
-                "content": response_step1["message"]["content"],
+                "content": response_step1.content,
             },
         ]
         response_step2 = await self.api.chat(jsonPrompt)
-        response_step2 = response_step2["message"]["content"]
+        response_step2 = response_step2.content
         # print(json_response)
         parsed_response = response_step2[response_step2.find("```json") + 7 : response_step2.rfind("```")]
         print(parsed_response)
@@ -150,7 +150,7 @@ class DebateController:
 
     async def start_debate(self):
         logging.info(f"辯論主題: {self.topic}")
-        self.api = ollama_api.OllamaAPIHandler()
+        self.api = ollama_api.Ollama_API_Handler()
         self.pro = Debater("正方", self.topic, self.api)
         self.con = Debater("反方", self.topic, self.api)
         self.judge = Judge(self.api)

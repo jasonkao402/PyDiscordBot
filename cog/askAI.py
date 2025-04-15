@@ -66,7 +66,8 @@ class Ollama_APIHandler():
     def __init__(self):
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
         self.clientSession = ClientSession(connector=self.connector)
-
+        self.completion_tokens = 0
+        
     async def close(self):
         if not self.clientSession.closed:
             await self.clientSession.close()
@@ -95,6 +96,7 @@ class Ollama_APIHandler():
         if 'error' in response:
             return replyDict(role = 'error', content = response['error'])
 
+        self.completion_tokens += response['eval_count']
         chatTok[botid] = response['prompt_eval_count'] + response['eval_count']
         if chatTok[botid] > 3000:
             chatMem[botid].popleft()
