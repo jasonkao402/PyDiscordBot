@@ -8,12 +8,12 @@ from sentence_transformers import SentenceTransformer
 from sklearn.cluster import DBSCAN
 from sklearn.feature_extraction.text import CountVectorizer
 
-
-hist_path = "subsystem_tests/chat_history/IllyaChan.json"
+hist_path = "subsystem_tests/chat_history/華山論劍.json"
+# hist_path = "subsystem_tests/chat_history/deepseek.txt"
 # model_name = "distiluse-base-multilingual-cased-v1"
 embedder = "paraphrase-multilingual-MiniLM-L12-v2"
 
-embedder = SentenceTransformer(embedder)
+embedder = SentenceTransformer(embedder, device="cuda:0")
 kw_model = KeyBERT(model=embedder)
 
 ban_msgs_regex = [
@@ -46,14 +46,25 @@ for i in data['messages']:
     if content == "":
         continue
     messages.append(content)
+# messages = []
+# with open(hist_path, 'r', encoding='utf-8') as f:
+#     # data = json.load(f)
+#     lines = f.readlines()
 
+# for line in lines:
+#     line = line.strip()
+#     content = filter_msg(line)
+#     if content == "":
+#         continue
+#     messages.append(content)
 
 # ✦ 對話轉向量
-embeddings = embedder.encode(messages, show_progress_bar=True)
+embeddings = embedder.encode(messages, show_progress_bar=True, convert_to_tensor=True)
+embeddings = np.array(embeddings.cpu())  # Convert to numpy array
 # ✦ DBSCAN 分群參數
 # eps: 範圍半徑（越大群越粗）
 # min_samples: 每群最少點數（建議 2~3）
-clustering = DBSCAN(eps=0.4, min_samples=2, metric='cosine')
+clustering = DBSCAN(eps=0.3, min_samples=2, metric='cosine')
 labels = clustering.fit_predict(embeddings)
 
 # ✦ 整理分群結果
@@ -79,13 +90,17 @@ for i, group in enumerate(clusters):
     summary = " / ".join(group[:2]) + ("..." if len(group) > 2 else "")
     print(f"✦ 總結：{summary}")
 
-    tokens = [jieba.lcut(line) for line in group]
-    tokens = [word for sublist in tokens for word in sublist]  # Flatten the list
-    keywords = kw_model.extract_keywords(" ".join(tokens), keyphrase_ngram_range=(1, 2), stop_words="zh", top_n=5)
-    print(f"✦ 關鍵字：{', '.join([k for k, _ in keywords])}")
+    tokens = jieba.cut(" ".join(group), cut_all=False)
+    tokens = list(set(tokens))  # Remove duplicates
+    if tokens:
+        keywords = kw_model.extract_keywords(" ".join(tokens), top_n=5)
+        print(f"✦ 關鍵字：{', '.join([k for k, _ in keywords])}")
+    else:
+        print("✦ 關鍵字：無法提取關鍵字（無有效文本）")
+    # print(f"✦ 關鍵字：{', '.join([k for k, _ in keywords])}")
 
 # ✦ 顯示離群點（optional）
-if noise:
-    print(f"\n--- ❗ 離群句（未歸類） ---")
-    for sentence in noise:
-        print(f"  ➤ {sentence}")
+# if noise:
+#     print(f"\n--- ❗ 離群句（未歸類） ---")
+#     for sentence in noise:
+#         print(f"  ➤ {sentence}")

@@ -126,4 +126,4 @@ dmypy.json
 /temp
 Q*g
 subsystem_tests/imgs/*.jpg
-subsystem_tests/chat_history/*.json
+subsystem_tests/chat_history/*
