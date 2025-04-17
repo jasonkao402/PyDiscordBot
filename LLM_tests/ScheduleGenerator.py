@@ -49,11 +49,11 @@ class ScheduleManager:
     def initialize(
         self,
         name: str = "伊莉亞",
-        personality: str = "個性活潑外向的女大學生，主修資訊工程",
-        behavior: str = "喜歡探索在地美食，學習新知識和技能，做白日夢",
+        personality: str = "懂得享受人生的攝影師女孩",
+        behavior: str = "喜歡到處拍照，做白日夢",
         interval: int = 600,
     ):
-        """初始化日程系统"""
+        """初始化日程系統"""
         self.name = name
         self.behavior = behavior
         self.schedule_doing_update_interval = interval
@@ -68,15 +68,15 @@ class ScheduleManager:
         prompt = f"You are {self.name}, {self.personality}, {self.behavior}."
         if self.yesterday_schedule_text:
             prompt += f"Your plan yesterday was: {self.yesterday_schedule_text}\n"
-        prompt += f"Please generate the schedule for {date_str} ({weekday}), which is today, based on your personal traits, behavior habits, and yesterday's plan.\n"
-        prompt += "Plan your schedule, including what you do throughout the day, from waking up to sleeping, any discoveries and thoughts, be specific, detailed, and precise to each hour (%H:%M). Remember to include the start time and end time.\n"
+        prompt += f"Please generate the schedule for {date_str} ({weekday}), which is today, based on your personal traits, habits, and yesterday's plan.\n"
+        prompt += "Plan your schedule, including what you do throughout the day, from waking up to sleeping, be specific, detailed, and precise to each hour (%H:%M). Remember to include the start time and end time.\n"
         prompt += "Please provide me today's schedule in json format with four following fields: start_time, end_time, what_to_do, and interaction_target. Make it realistic, not exaggerated, from waking up to sleeping, and do not output any other content:"
         
-        return prompt
+        return prompt 
     
     def get_task_at(self, reference_time: datetime = None):
         """獲取當前活動"""
-        reference_time = reference_time or datetime.now(TIME_ZONE)
+        reference_time = reference_time or self.internal_time
         # parsed_schedule = self.parse_schedule_text(self.today_schedule_text)
         for item in self.today_todo_list:
             start = item.start_time
@@ -86,46 +86,53 @@ class ScheduleManager:
         return Event(
             start_time=reference_time,
             end_time=reference_time + timedelta(minutes=30),
-            what_to_do="放鬆休息",
+            what_to_do="放鬆休息睡個覺",
             interaction_target="自己",
         )
         
-    def get_task_in_interval(self, start_time: datetime, end_time: datetime) -> List[Event]:
+    def get_task_in_interval(self, range_start: datetime, range_end: datetime) -> List[Event]:
         """獲取在指定時間範圍內的任務"""
         tasks = []
-        for item in self.today_todo_list:
-            if item.start_time >= start_time:
-                if item.end_time <= end_time:
-                    tasks.append(item)
-                else:
-                    tasks.append(item)
-                    break
+        for event in self.today_todo_list:
+            if event.start_time <= range_end and event.end_time >= range_start:
+                tasks.append(event)
+                
         return tasks
 
-    
-    def construct_doing_prompt(self, time: datetime, mind_thinking: str = ""):
-        now_time = time.strftime("%H:%M")
-        previous_doing = self.get_task_in_interval(self.internal_time - timedelta(hours=3), self.internal_time)
-        
+    def construct_doing_prompt(self, reference_time: datetime, mind_thinking: str = ""):
+        """構建當前狀態提示"""
+        reference_time = reference_time or self.internal_time
+        now_time = reference_time.strftime("%H:%M")
+        # range of recall
+        look_back, look_forward = timedelta(hours=2), timedelta(hours=2)
+        prev_doing = self.get_task_in_interval(reference_time - look_back, reference_time)
+        next_doing = self.get_task_in_interval(reference_time, reference_time + look_forward)
         prompt = f"你是{self.name}，{self.personality}，{self.behavior}\n"
-        today_schedule = list_events(self.today_todo_list)
-        prompt += f"你今天的日程是：{today_schedule}\n"
-        if previous_doing:
-            time_diff = self.internal_time - previous_doing[-1].start_time
-            print(f"{self.internal_time} - {previous_doing[-1].start_time} = {time_diff.seconds // 60} minutes")
-            previous_doing = list_events(previous_doing)
-            previous_doing = f"你之前做了的事情是：{previous_doing}，从之前到现在已经过去了 {time_diff.seconds // 60} 分钟了，\n"
-            prompt += previous_doing
+        
+        if prev_doing:
+            time_diff = reference_time - prev_doing[-1].start_time
+            prev_doing = list_events(prev_doing[1:])
+            prev_doing = f"你之前完成的事情是：{prev_doing}，從之前到現在已經過去了 {time_diff.seconds // 60} 分鐘了，\n"
+            print(f"previous doing: {prev_doing}")
+            prompt += prev_doing
+            
+        if len(next_doing) > 1:
+            time_diff = next_doing[1].start_time - reference_time
+            next_doing = list_events(next_doing)
+            next_doing = f"你接下來要做的事情是：{next_doing}，從現在到接下來的事情還有 {time_diff.seconds // 60} 分鐘，\n"
+            print(f"next doing: {next_doing}")
+            prompt += next_doing
+        
+        prompt += f"當前時間：{reference_time.strftime('%H:%M')}, 當前活動：{self.get_task_at(reference_time)}"
         if mind_thinking:
-            prompt += f"你脑子里在想：{mind_thinking}，\n"
-        prompt += f"结合你的个人特点和行为习惯,注意关注你今天的日程安排和想法安排你接下来做什么，现实一点，不要浮夸"
-        prompt += "安排你接下来做什么，具体一些，详细一些\n"
-        prompt += f"直接返回你现在{now_time}在做的事情，注意是当前时间，不要输出其他内容："
+            prompt += f"你在想：{mind_thinking}，\n"
+        prompt += f"結合你的個人特點和行為習慣，具體一些，詳細一些，考慮你今天的安排和想法"
+        prompt += f"直接返回你現在{now_time}在做的事情，注意是當前時間，不要輸出其他內容:"
         return prompt
     
     def parse_schedule_text(self, schedule_text: str) -> List[Event]:
         """解析日程文本"""
-        today_date = datetime.now(TIME_ZONE).date()
+        today_date = self.internal_time.date()
         
         # print(parsed_response)
         json_response = json.loads(schedule_text)
@@ -140,9 +147,11 @@ class ScheduleManager:
                     end_time = datetime.combine(today_date, datetime.strptime(schedule["end_time"], "%H:%M").time(), TIME_ZONE)
                 except ValueError:
                     continue
-                # check time range
+                # check time range, cross day
                 if start_time >= end_time:
-                    continue
+                    # cross day
+                    end_time += timedelta(days=1)
+                    # continue
             schedule_list.append(
                 Event(
                     start_time=start_time,
@@ -158,8 +167,8 @@ class ScheduleManager:
         # self.today_schedule_text = ""
         # self.today_done_list = []
 
-        self.start_time = datetime.now(TIME_ZONE)
-        prompt = self.construct_daytime_prompt(self.start_time)
+        # self.start_time = datetime.now(TIME_ZONE)
+        prompt = self.construct_daytime_prompt(self.internal_time)
         response = await self.api.chat([{"role": "user", "content": prompt}])
         
         parse_txt = response.content
@@ -179,7 +188,7 @@ async def simulate_schedule_generator():
     schedule_manager.initialize()
     # await schedule_manager.spawn_schedule()
     # with open("schedule.json", "w", encoding='utf8') as f:
-        # f.write(schedule_manager.today_schedule_text)
+    #     f.write(schedule_manager.today_schedule_text)
         
     with open("schedule.json", "r", encoding='utf8') as f:
         schedule_manager.today_schedule_text = f.read()
@@ -189,16 +198,19 @@ async def simulate_schedule_generator():
     # oldtime = datetime.now(TIME_ZONE)
     while True:
         oldtime = schedule_manager.internal_time
-        schedule_manager.internal_time += timedelta(seconds=schedule_manager.schedule_doing_update_interval*12)
+        # 1 step = 90 min simulation 
+        schedule_manager.internal_time += timedelta(seconds=schedule_manager.schedule_doing_update_interval*9)
         # next day
         if schedule_manager.internal_time.day != oldtime.day:
+            print("今天的日程已經結束，開始反思今天的日程")
             await schedule_manager.reflect_on_day()
-            await schedule_manager.spawn_schedule()
+            # await schedule_manager.spawn_schedule()
             schedule_manager.today_todo_list = schedule_manager.parse_schedule_text(schedule_manager.today_schedule_text)
             
         current = schedule_manager.get_task_at(schedule_manager.internal_time)
         print(f"當前時間：{schedule_manager.internal_time.strftime('%H:%M')}, 當前活動：{current}")
-        status_prompt = schedule_manager.construct_doing_prompt(schedule_manager.internal_time)
+        mind_injection = input("請輸入當前想法：")
+        status_prompt = schedule_manager.construct_doing_prompt(schedule_manager.internal_time, mind_injection)
         # print(f"當前狀態提示：{status_prompt}")
         status = await schedule_manager.api.chat([{"role": "user", "content": status_prompt}])
         print(f"當前狀態：{status.content}")

@@ -1,87 +1,93 @@
 
 [
   {
-    "start_time": "07:30",
-    "end_time": "08:00",
-    "what_to_do": "Wake up! Snooze once, then reluctantly get out of bed. Check Instagram for a few minutes – gotta see what everyone's up to! Then a quick stretch and a mental pep talk to tackle the day. Yesterday I planned to try a new breakfast place, so I'm excited to see if I can make it.",
-    "interaction_target": "Self, Instagram"
+    "start_time": "06:30",
+    "end_time": "07:00",
+    "what_to_do": "Wake up, stretch, and peek out the window to see the sunrise. Listen to the rooster crow and the sounds of the farm waking up. Quick check of weather forecast on my phone – hoping for sunshine!",
+    "interaction_target": "None"
   },
   {
-    "start_time": "08:00",
+    "start_time": "07:00",
+    "end_time": "07:30",
+    "what_to_do": "Help Grandma prepare breakfast – usually some fresh milk and homemade bread with local honey. Chat with her about the crops and what needs tending to today.",
+    "interaction_target": "Grandma"
+  },
+  {
+    "start_time": "07:30",
     "end_time": "08:30",
-    "what_to_do": "Get ready! Quick shower, throw on a comfy outfit (probably something with a cute print).  I'm thinking about trying to learn a new braiding style for my hair – maybe I'll find a tutorial later.",
-    "interaction_target": "Self"
+    "what_to_do": "Morning run through the rice paddies! I love feeling the cool morning air and watching the mist rise. I'll try to spot any interesting birds or wildflowers.",
+    "interaction_target": "None"
   },
   {
     "start_time": "08:30",
-    "end_time": "09:15",
-    "what_to_do": "Breakfast adventure! Head to 'Morning Dew Cafe' – I saw it on a local foodie blog. Hopefully, they have some unique pastries! I'm thinking about their lavender honey latte.  I'm also going to try to take some aesthetically pleasing photos for my foodstagram.",
-    "interaction_target": "Cafe staff, potential Instagram followers"
+    "end_time": "09:00",
+    "what_to_do": "Quick shower and get dressed. I'll wear something comfortable and practical for working outside.",
+    "interaction_target": "None"
   },
   {
-    "start_time": "09:15",
-    "end_time": "09:45",
-    "what_to_do": "Walk to campus.  I'm going to try to memorize a new route – maybe I'll discover a hidden gem! I'm daydreaming about building a little app that helps people find secret spots in the city.",
-    "interaction_target": "Environment, potential passersby"
+    "start_time": "09:00",
+    "end_time": "12:00",
+    "what_to_do": "Help Dad with weeding the vegetable garden. It's hard work, but I love seeing the plants grow. We'll talk about the upcoming harvest festival and what dishes we should prepare.",
+    "interaction_target": "Dad"
   },
   {
-    "start_time": "09:45",
-    "end_time": "12:30",
-    "what_to_do": "Algorithms class. Ugh, this is always a brain workout. I need to focus and take detailed notes. I'm hoping Professor Chen will explain the dynamic programming concepts a little clearer today. I'm also going to try to ask a clarifying question – even if it feels silly.",
-    "interaction_target": "Professor Chen, classmates"
+    "start_time": "12:00",
+    "end_time": "13:00",
+    "what_to_do": "Lunch! Grandma always makes the best lunch – today I'm hoping for some of her famous mushroom soup made with mushrooms we foraged yesterday.  I'll eat on the porch and enjoy the view.",
+    "interaction_target": "Grandma"
   },
   {
-    "start_time": "12:30",
-    "end_time": "13:30",
-    "what_to_do": "Lunch with Mei-Ling and Kevin. We're going to the student union – probably just grab some noodles. I want to ask Mei-Ling about her photography project – she's so talented! I also need to remind Kevin about our group project deadline next week.",
-    "interaction_target": "Mei-Ling, Kevin"
+    "start_time": "13:00",
+    "end_time": "15:00",
+    "what_to_do": "Explore the nearby forest! I want to see if I can find any wild berries or interesting plants. I'll bring my notebook to sketch what I find.  Maybe I'll dream up a new recipe using foraged ingredients!",
+    "interaction_target": "None"
   },
   {
-    "start_time": "13:30",
-    "end_time": "16:30",
-    "what_to_do": "Data Structures lab.  We're working on implementing a binary search tree today. I'm going to pair up with David – he's really good at debugging. I'm also going to try to find a short online tutorial on tree traversal algorithms for later.",
-    "interaction_target": "David, lab assistant"
+    "start_time": "15:00",
+    "end_time": "16:00",
+    "what_to_do": "Visit the local market. I'm hoping to find some fresh ingredients for a special dinner I want to try making. I'll chat with the vendors and see if they have any interesting stories to share.",
+    "interaction_target": "Market Vendors"
   },
   {
-    "start_time": "16:30",
+    "start_time": "16:00",
     "end_time": "17:00",
-    "what_to_do": "Quick coffee break. I'm feeling a little drained. I'm going to try a new flavor at the campus coffee shop – maybe a matcha latte with a little something extra. I'm also going to browse Reddit for a few minutes – gotta see what's trending.",
-    "interaction_target": "Cafe staff, Reddit community"
+    "what_to_do": "Practice my jump rope skills in the field. I'm trying to improve my speed for the village games next month.",
+    "interaction_target": "None"
   },
   {
     "start_time": "17:00",
-    "end_time": "18:30",
-    "what_to_do": "Online Python tutorial. I'm going to dedicate some time to brushing up on my Python skills. I found a course on Udemy about building web scrapers – that sounds really interesting! I'm also going to try to implement a simple script to download images from a specific website.",
-    "interaction_target": "Online tutorial platform"
+    "end_time": "18:00",
+    "what_to_do": "Help prepare dinner. I'm going to try making a new dish using some of the ingredients I got from the market – maybe a stir-fry with local greens and tofu.",
+    "interaction_target": "Grandma, Dad"
   },
   {
-    "start_time": "18:30",
-    "end_time": "19:30",
-    "what_to_do": "Dinner. I'm craving dumplings! I'm going to try that new dumpling place near the library. I'm hoping they have a spicy option. I'm also going to listen to a podcast while I eat – maybe something about tech or design.",
-    "interaction_target": "Restaurant staff, podcast host"
+    "start_time": "18:00",
+    "end_time": "19:00",
+    "what_to_do": "Dinner with the family. We'll talk about our day and share stories. I'll try out my new recipe and see what everyone thinks!",
+    "interaction_target": "Grandma, Dad"
   },
   {
-    "start_time": "19:30",
+    "start_time": "19:00",
+    "end_time": "20:00",
+    "what_to_do": "Relax on the porch swing, read a book, and watch the sunset. I love the colors in the sky!",
+    "interaction_target": "None"
+  },
+  {
+    "start_time": "20:00",
     "end_time": "21:00",
-    "what_to_do": "Group project meeting with Kevin and Amy. We need to finalize the presentation slides. I'm a little nervous about presenting, but I'm going to try to be confident! I'm also going to suggest we practice our delivery a few times.",
-    "interaction_target": "Kevin, Amy"
+    "what_to_do": "Help Grandma tidy up the kitchen and prepare for the next day. We'll talk about our dreams and hopes for the future.",
+    "interaction_target": "Grandma"
   },
   {
     "start_time": "21:00",
-    "end_time": "22:30",
-    "what_to_do": "Relaxation time. Face mask, some chill music, and maybe a little bit of sketching. I'm thinking about designing a cute sticker for my laptop. I also want to look up some braiding tutorials – I really want to learn a fishtail braid!",
-    "interaction_target": "Self"
+    "end_time": "22:00",
+    "what_to_do": "Write in my journal, reflecting on the day and sketching some ideas for new recipes or stories.  Maybe dream up a new adventure!",
+    "interaction_target": "None"
   },
   {
-    "start_time": "22:30",
+    "start_time": "22:00",
     "end_time": "23:00",
-    "what_to_do": "Plan tomorrow. Check my calendar, make a to-do list. I need to remember to buy groceries and schedule a dentist appointment. I'm also going to jot down some ideas for my personal coding project.",
-    "interaction_target": "Self"
-  },
-  {
-    "start_time": "23:00",
-    "end_time": "00:00",
-    "what_to_do": "Wind down and sleep. Read a few pages of a book. Hopefully, I'm not too wired from all the caffeine!",
-    "interaction_target": "Self"
+    "what_to_do": "Get ready for bed. A final look out the window to see the stars.  Listen to the sounds of the farm settling down for the night.",
+    "interaction_target": "None"
   }
 ]
