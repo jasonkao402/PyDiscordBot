@@ -1,0 +1,86 @@
+[
+    {
+      "start_time": "07:30",
+      "end_time": "08:00",
+      "what_to_do": "Wake up naturally, stretch, and enjoy the morning sunlight filtering through the curtains. A few moments of quiet contemplation and a quick check of weather forecast for potential photo opportunities.",
+      "interaction_target": "Bed, curtains, smartphone"
+    },
+    {
+      "start_time": "08:00",
+      "end_time": "08:30",
+      "what_to_do": "Prepare a simple breakfast – probably some yogurt with granola and fresh berries. Enjoy it on the balcony, listening to the birds and planning the day's photographic adventures.",
+      "interaction_target": "Refrigerator, stove, balcony"
+    },
+    {
+      "start_time": "08:30",
+      "end_time": "09:30",
+      "what_to_do": "Review yesterday's photos (April 19th) and do some light editing using Lightroom.  Focus on color correction and cropping.  Also, research potential locations for today's shoot – maybe a local park with cherry blossoms or a charming cafe.",
+      "interaction_target": "Laptop, Lightroom, external hard drive"
+    },
+    {
+      "start_time": "09:30",
+      "end_time": "10:00",
+      "what_to_do": "Pack camera gear: camera body, two lenses (50mm and 35mm), extra batteries, memory cards, and a small tripod.  Also, grab a reusable water bottle and a small notebook for jotting down ideas.",
+      "interaction_target": "Camera bag, camera, lenses, tripod, notebook"
+    },
+    {
+      "start_time": "10:00",
+      "end_time": "12:00",
+      "what_to_do": "Head to the local park (likely Sakura Park) for a morning photography session. Focus on capturing the cherry blossoms in soft morning light. Experiment with different angles and compositions. Take breaks to simply observe and daydream.",
+      "interaction_target": "Camera, lenses, tripod, park environment"
+    },
+    {
+      "start_time": "12:00",
+      "end_time": "13:00",
+      "what_to_do": "Lunch at a cute cafe near the park.  Something light and refreshing – maybe a salad or a pastry.  People-watching and sketching in my notebook.",
+      "interaction_target": "Cafe, notebook, pen"
+    },
+    {
+      "start_time": "13:00",
+      "end_time": "15:00",
+      "what_to_do": "Explore a different area of the park, focusing on details – textures, patterns, and interesting light.  Try some black and white photography.",
+      "interaction_target": "Camera, lenses"
+    },
+    {
+      "start_time": "15:00",
+      "end_time": "16:00",
+      "what_to_do": "Return home.  Unpack camera gear and have a cup of herbal tea while reviewing the day's photos on the camera's LCD screen.",
+      "interaction_target": "Camera, tea, kettle"
+    },
+    {
+      "start_time": "16:00",
+      "end_time": "18:00",
+      "what_to_do": "More detailed photo editing.  This time, I'll focus on a smaller selection of images, really refining the colors and tones.  Also, I'll upload a few of my favorites to Instagram with thoughtful captions.",
+      "interaction_target": "Laptop, Lightroom, Instagram app"
+    },
+    {
+      "start_time": "18:00",
+      "end_time": "19:00",
+      "what_to_do": "Prepare a simple dinner – probably pasta with pesto. Listen to some relaxing music while cooking.",
+      "interaction_target": "Refrigerator, stove, speakers"
+    },
+    {
+      "start_time": "19:00",
+      "end_time": "20:00",
+      "what_to_do": "Enjoy dinner on the balcony, watching the sunset.  Reflect on the day and make a few notes in my journal.",
+      "interaction_target": "Balcony, journal, pen"
+    },
+    {
+      "start_time": "20:00",
+      "end_time": "21:00",
+      "what_to_do": "Read a book – something light and inspiring.  Maybe a photography book or a collection of poetry.",
+      "interaction_target": "Book, reading lamp"
+    },
+    {
+      "start_time": "21:00",
+      "end_time": "22:00",
+      "what_to_do": "Gentle stretching and skincare routine.  Prepare for a restful sleep.",
+      "interaction_target": "Yoga mat, skincare products"
+    },
+    {
+      "start_time": "22:00",
+      "end_time": "07:30",
+      "what_to_do": "Sleep. Dream of beautiful light and captivating moments.",
+      "interaction_target": "Bed"
+    }
+  ]

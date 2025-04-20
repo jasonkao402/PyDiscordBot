@@ -6,12 +6,17 @@ from PIL import Image
 from io import BytesIO
 from typing import List
 
-if not os.path.exists('./acc/config.toml'):
-    print('config.toml not found, please check the file')
-    configToml = {}
-with open('./acc/config.toml', 'r+') as tomlFile:
+configToml = {}
+
+def load_config(config_path: str = './acc/config.toml'):
+    if not os.path.exists(config_path):
+        print('config.toml not found, please check the file')
+        configToml = {}
+    configToml = toml.load(config_path)
     print('config.toml loaded')
-    configToml = toml.load(tomlFile)
+    return configToml
+
+configToml = load_config()
 
 dict_system = {
     "role": "system",
