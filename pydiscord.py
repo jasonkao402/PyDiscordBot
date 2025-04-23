@@ -6,7 +6,7 @@ from typing import Optional
 
 configToml = loadToml()
 
-def main():
+def run_discord():
     absFilePath = os.path.abspath(__file__)
     currWorkDir = os.path.dirname(absFilePath)
     os.chdir(currWorkDir)
@@ -14,7 +14,7 @@ def main():
     global client, COG_LIST, LOADED_COG
     
     # PreLoad
-    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'msglog'}
+    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'msglog', 'personality', 'dashboard'}
     cog_folder = os.path.join(currWorkDir, 'cog')
     for file in os.listdir(cog_folder):
         if file.endswith('.py'):
@@ -128,4 +128,4 @@ def main():
     client.run(TOKEN)
 
 if __name__ == "__main__":
-    main()
+    run_discord()

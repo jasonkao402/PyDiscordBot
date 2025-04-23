@@ -1,0 +1,59 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Control Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Discord Bot Control Panel</h1>
+        
+        <h2>Feature Toggles</h2>
+        <div id="features">
+            {% for feature, enabled in features.items() %}
+                <div class="feature">
+                    <span>{{ feature.replace('_', ' ').title() }}</span>
+                    <label class="switch">
+                        <input type="checkbox" {{ 'checked' if enabled else '' }} onchange="toggleFeature('{{ feature }}')">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            {% endfor %}
+        </div>
+
+        <h2>Bot Metrics</h2>
+        <div id="metrics">
+            <p>Average Messages per Minute: <span id="avg-messages">0</span></p>
+            <p>Average Commands per Minute: <span id="avg-commands">0</span></p>
+        </div>
+    </div>
+    <script>
+        const socket = io();
+        socket.on('feature_update', (features) => {
+            Object.keys(features).forEach(feature => {
+                const checkbox = document.querySelector(`input[onchange="toggleFeature('${feature}')"]`);
+                checkbox.checked = features[feature];
+            });
+        });
+
+        socket.on('metrics_update', (metrics) => {
+            document.getElementById('avg-messages').textContent = metrics.avg_messages_per_min;
+            document.getElementById('avg-commands').textContent = metrics.avg_commands_per_min;
+        });
+
+        function toggleFeature(feature) {
+            fetch('/api/toggle_feature', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ feature })
+            }).then(response => response.json()).then(data => {
+                if (data.status !== 'success') {
+                    alert('Error toggling feature');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
