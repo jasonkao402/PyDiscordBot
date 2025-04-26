@@ -1,0 +1,7 @@
+/* static/style.css */
+body { font-family: Arial, sans-serif; margin: 20px; }
+.session { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; position: relative; }
+.timer { font-weight: bold; color: red; }
+.progress-bar-container { width: 100%; background: #eee; height: 8px; margin-top: 5px; }
+.progress-bar { width: 0%; height: 100%; background: green; }
+.controls button { margin-right: 5px; }
