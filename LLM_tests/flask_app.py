@@ -2,8 +2,6 @@ from flask import Flask, render_template, request, jsonify, session
 from flask_socketio import SocketIO, emit
 import asyncio
 import json
-import threading
-import time
 from datetime import datetime, timedelta
 from ScheduleGenerator import ScheduleManager, Event, list_events, TIME_ZONE
 import uuid
@@ -20,8 +18,6 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global schedule manager instance
 schedule_manager = None
-simulation_active = False
-simulation_thread = None
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 
 def get_schedule_manager():
@@ -77,8 +73,7 @@ def get_current_schedule():
     """Get current schedule information"""
     try:
         sm = get_schedule_manager()
-        current_task = sm.get_task_at(sm.internal_time)
-        
+        current_task = sm.get_task_at(sm.internal_time)        
         return jsonify({
             'success': True,
             'current_time': sm.internal_time.strftime('%Y-%m-%d %H:%M'),
@@ -87,8 +82,7 @@ def get_current_schedule():
                 'end_time': current_task.end_time.strftime('%H:%M'),
                 'what_to_do': current_task.what_to_do,
                 'interaction_target': current_task.interaction_target
-            },
-            'simulation_active': simulation_active
+            }
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -121,7 +115,11 @@ def get_today_schedule():
 def load_schedule():
     """Load schedule from file"""
     try:
-        data = request.json
+        # Handle both JSON and form data
+        if request.is_json:
+            data = request.json
+        else:
+            data = request.form.to_dict()
         filename = data.get('filename', 'schedule_20250724.json')
         
         sm = get_schedule_manager()
@@ -143,7 +141,11 @@ def load_schedule():
 def generate_schedule():
     """Generate new schedule"""
     try:
-        data = request.json
+        # Handle both JSON and form data
+        if request.is_json:
+            data = request.json
+        else:
+            data = request.form.to_dict()
         name = data.get('name', '伊莉亞')
         personality = data.get('personality', '熟悉日本名古屋美食和景點的攝影師女孩')
         behavior = data.get('behavior', '擅長規劃旅遊行程')
@@ -175,7 +177,11 @@ def inject_mind():
     """Inject a thought and get AI response"""
     try:
         logger.info("Mind injection request received")
-        data = request.json
+        # Handle both JSON and form data
+        if request.is_json:
+            data = request.json
+        else:
+            data = request.form.to_dict()
         mind_injection = data.get('mind_injection', '')
         
         sm = get_schedule_manager()
@@ -183,7 +189,7 @@ def inject_mind():
         # If no mind injection provided, use current event to generate narration
         if not mind_injection.strip():
             current_task = sm.get_task_at(sm.internal_time)
-            mind_injection = f"我現在正在{current_task.what_to_do}，使用{current_task.interaction_target}"
+            mind_injection = f"我現在正在{current_task.what_to_do}，附近有{current_task.interaction_target}"
             is_auto_generated = True
             logger.info("Using auto-generated mind injection")
         else:
@@ -209,39 +215,37 @@ def inject_mind():
         logger.error(f"Error in mind injection: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/api/simulation/start', methods=['POST'])
-def start_simulation():
-    """Start schedule simulation"""
-    global simulation_active, simulation_thread
-    
-    if simulation_active:
-        return jsonify({'success': False, 'error': 'Simulation already running'})
-    
-    simulation_active = True
-    simulation_thread = threading.Thread(target=run_simulation)
-    simulation_thread.daemon = True
-    simulation_thread.start()
-    
-    return jsonify({'success': True, 'message': 'Simulation started'})
 
-@app.route('/api/simulation/stop', methods=['POST'])
-def stop_simulation():
-    """Stop schedule simulation"""
-    global simulation_active
-    simulation_active = False
-    return jsonify({'success': True, 'message': 'Simulation stopped'})
 
-@app.route('/api/simulation/step', methods=['POST'])
+@app.route('/api/simulation/step', methods=['POST', 'GET'])
 def simulation_step():
-    """Advance simulation by one step"""
+    """Advance simulation by specified time interval"""
     try:
         logger.info("Simulation step requested")
+        # Handle GET, JSON and form data
+        if request.method == 'GET':
+            data = request.args.to_dict()
+        elif request.is_json:
+            data = request.json or {}
+        else:
+            data = request.form.to_dict()
+          # Get interval from request, default to 90 minutes
+        interval_minutes = int(data.get('interval_minutes', 90))
+        
+        # Validate interval options (30min, 60min, 90min)
+        valid_intervals = [30, 60, 90]
+        if interval_minutes not in valid_intervals:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid interval. Valid options: {valid_intervals} minutes (30min, 60min, 90min)'
+            })
+        
         sm = get_schedule_manager()
         oldtime = sm.internal_time
         
-        # Advance time by 90 minutes
-        sm.internal_time += timedelta(minutes=90)
-        logger.info(f"Time advanced from {oldtime.strftime('%H:%M')} to {sm.internal_time.strftime('%H:%M')}")
+        # Advance time by specified interval
+        sm.internal_time += timedelta(minutes=interval_minutes)
+        logger.info(f"Time advanced from {oldtime.strftime('%H:%M')} to {sm.internal_time.strftime('%H:%M')} (+{interval_minutes} minutes)")
         
         # Check if we moved to next day
         if sm.internal_time.day != oldtime.day:
@@ -258,52 +262,26 @@ def simulation_step():
                 'end_time': current.end_time.strftime('%H:%M'),
                 'what_to_do': current.what_to_do,
                 'interaction_target': current.interaction_target
-            }
-        })
+            },
+            'interval_minutes': interval_minutes        })
         logger.info("Time update emitted to clients")
         
         return jsonify({
             'success': True,
             'current_time': sm.internal_time.strftime('%Y-%m-%d %H:%M'),
-            'current_task': str(current)
+            'current_task': str(current),
+            'interval_minutes': interval_minutes,
+            'available_intervals': {
+                '30min': 30,
+                '1hour': 60,
+                '1.5hour': 90
+            }
         })
     except Exception as e:
         logger.error(f"Error in simulation step: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
-def run_simulation():
-    """Background simulation runner"""
-    global simulation_active
-    sm = get_schedule_manager()
-    
-    while simulation_active:
-        try:
-            oldtime = sm.internal_time
-            sm.internal_time += timedelta(minutes=90)
-            
-            if sm.internal_time.day != oldtime.day:
-                sm.today_todo_list = sm.parse_schedule_text(sm.today_schedule_text)
-            
-            current = sm.get_task_at(sm.internal_time)
-            
-            # Emit real-time update
-            socketio.emit('time_update', {
-                'current_time': sm.internal_time.strftime('%Y-%m-%d %H:%M'),
-                'current_task': {
-                    'start_time': current.start_time.strftime('%H:%M'),
-                    'end_time': current.end_time.strftime('%H:%M'),
-                    'what_to_do': current.what_to_do,
-                    'interaction_target': current.interaction_target
-                }
-            })
-            
-            time.sleep(5)  # Wait 5 seconds between updates
-            
-        except Exception as e:
-            print(f"Simulation error: {e}")
-            break
-    
-    simulation_active = False
+
 
 @socketio.on('connect')
 def handle_connect():

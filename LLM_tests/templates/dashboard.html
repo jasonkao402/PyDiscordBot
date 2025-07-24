@@ -123,22 +123,20 @@
                                 <i class="fas fa-magic"></i> Generate New Schedule
                             </button>
                         </div>
-                    </div>
-
-                    <!-- Simulation Controls -->
+                    </div>                    <!-- Simulation Controls -->
                     <div class="mb-3">
                         <h6>Simulation Controls</h6>
-                        <div class="btn-group w-100 mb-2">
-                            <button class="btn btn-success" id="startBtn" onclick="startSimulation()">
-                                <i class="fas fa-play"></i> Start
-                            </button>
-                            <button class="btn btn-warning" id="stopBtn" onclick="stopSimulation()" disabled>
-                                <i class="fas fa-stop"></i> Stop
-                            </button>
-                            <button class="btn btn-info" onclick="stepSimulation()">
-                                <i class="fas fa-step-forward"></i> Step
-                            </button>
+                        <div class="mb-2">
+                            <label for="stepInterval" class="form-label">Step Interval</label>
+                            <select class="form-select" id="stepInterval">
+                                <option value="30">30 minutes</option>
+                                <option value="60">1 hour</option>
+                                <option value="90" selected>1.5 hours</option>
+                            </select>
                         </div>
+                        <button class="btn btn-info w-100" onclick="stepSimulation()">
+                            <i class="fas fa-step-forward"></i> Step Forward
+                        </button>
                     </div>
                 </div>
 
@@ -169,7 +167,7 @@
                             <textarea class="form-control" id="mindInput" rows="3" placeholder="Enter thoughts (optional - leave empty for auto-narration of current event)..."></textarea>
                         </div>
                         <button class="btn btn-primary w-100" onclick="injectMind()">
-                            <i class="fas fa-comment-dots"></i> Get AI Narration
+                            <i class="fas fa-comment-dots"></i> Get AI Thoughts
                         </button>
                         <div id="aiResponseArea"></div>
                     </div>
@@ -273,49 +271,20 @@
             } catch (error) {
                 showToast('Error generating schedule: ' + error.message, 'danger');
             }
-        }
-
-        async function startSimulation() {
+        }        async function stepSimulation() {
             try {
-                const response = await fetch('/api/simulation/start', {method: 'POST'});
+                const interval = document.getElementById('stepInterval').value;
+                const response = await fetch('/api/simulation/step', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({interval_minutes: parseInt(interval)})
+                });
                 const data = await response.json();
                 
                 if (data.success) {
-                    document.getElementById('startBtn').disabled = true;
-                    document.getElementById('stopBtn').disabled = false;
-                    showToast('Simulation started', 'success');
-                } else {
-                    showToast(data.error, 'danger');
-                }
-            } catch (error) {
-                showToast('Error starting simulation: ' + error.message, 'danger');
-            }
-        }
-
-        async function stopSimulation() {
-            try {
-                const response = await fetch('/api/simulation/stop', {method: 'POST'});
-                const data = await response.json();
-                
-                if (data.success) {
-                    document.getElementById('startBtn').disabled = false;
-                    document.getElementById('stopBtn').disabled = true;
-                    showToast('Simulation stopped', 'info');
-                } else {
-                    showToast(data.error, 'danger');
-                }
-            } catch (error) {
-                showToast('Error stopping simulation: ' + error.message, 'danger');
-            }
-        }
-
-        async function stepSimulation() {
-            try {
-                const response = await fetch('/api/simulation/step', {method: 'POST'});
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast('Time advanced: ' + data.current_time, 'info');
+                    const intervalText = interval == 30 ? '30 minutes' : 
+                                       interval == 60 ? '1 hour' : '1.5 hours';
+                    showToast(`Time advanced by ${intervalText}: ${data.current_time}`, 'info');
                     refreshCurrentStatus();
                 } else {
                     showToast(data.error, 'danger');
@@ -353,24 +322,13 @@
             } catch (error) {
                 showToast('Error communicating with AI: ' + error.message, 'danger');
             }
-        }
-
-        async function refreshCurrentStatus() {
+        }        async function refreshCurrentStatus() {
             try {
                 const response = await fetch('/api/schedule/current');
                 const data = await response.json();
                 
                 if (data.success) {
                     updateCurrentStatus(data);
-                    
-                    // Update simulation buttons based on status
-                    if (data.simulation_active) {
-                        document.getElementById('startBtn').disabled = true;
-                        document.getElementById('stopBtn').disabled = false;
-                    } else {
-                        document.getElementById('startBtn').disabled = false;
-                        document.getElementById('stopBtn').disabled = true;
-                    }
                 }
             } catch (error) {
                 console.error('Error refreshing status:', error);
@@ -444,7 +402,7 @@
                 </div>
                 <div class="ai-response">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <strong><i class="fas fa-robot"></i> AI Response</strong>
+                        <strong><i class="fas fa-robot"></i> AI Thoughts</strong>
                         <small class="text-muted">${data.timestamp}</small>
                     </div>
                     ${data.response}
