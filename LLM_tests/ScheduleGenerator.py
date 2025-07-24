@@ -95,7 +95,7 @@ class ScheduleManager:
     def get_task_at(self, reference_time: datetime = None):
         """獲取當前活動"""
         reference_time = reference_time or self.internal_time
-        print(f"reference_time: {reference_time}")
+        # print(f"reference_time: {reference_time}")
         # parsed_schedule = self.parse_schedule_text(self.today_schedule_text)
         for item in self.today_todo_list:
             start = item.start_time

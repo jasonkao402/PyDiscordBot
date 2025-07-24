@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Generator Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        .current-time {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+        .current-task {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .schedule-item {
+            transition: all 0.3s ease;
+            border-left: 4px solid #dee2e6;
+        }
+        .schedule-item:hover {
+            transform: translateX(5px);
+            border-left-color: #0d6efd;
+        }
+        .schedule-item.current {
+            background-color: #e7f3ff;
+            border-left-color: #0d6efd;
+        }
+        .mind-injection {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+        }
+        .ai-response {
+            background-color: #e8f5e8;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        .mind-injection-auto {
+            background-color: #fff3cd;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-active { background-color: #28a745; }
+        .status-inactive { background-color: #dc3545; }
+        .control-panel {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Header -->
+            <div class="col-12">
+                <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+                    <div class="container">
+                        <a class="navbar-brand" href="#">
+                            <i class="fas fa-calendar-alt"></i> Schedule Generator Dashboard
+                        </a>
+                        <div class="navbar-nav ms-auto">
+                            <span class="navbar-text">
+                                <span class="status-indicator" id="connectionStatus"></span>
+                                <span id="connectionText">Connecting...</span>
+                            </span>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <!-- Left Column - Controls and Current Status -->
+            <div class="col-md-4">
+                <!-- Control Panel -->
+                <div class="control-panel">
+                    <h4><i class="fas fa-cogs"></i> Control Panel</h4>
+                    
+                    <!-- Character Settings -->
+                    <div class="mb-3">
+                        <h6>Character Settings</h6>
+                        <div class="mb-2">
+                            <label for="characterName" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="characterName" value="伊莉亞">
+                        </div>
+                        <div class="mb-2">
+                            <label for="personality" class="form-label">Personality</label>
+                            <input type="text" class="form-control" id="personality" value="熟悉日本名古屋美食和景點的攝影師女孩">
+                        </div>
+                        <div class="mb-3">
+                            <label for="behavior" class="form-label">Behavior</label>
+                            <input type="text" class="form-control" id="behavior" value="擅長規劃旅遊行程">
+                        </div>
+                    </div>
+
+                    <!-- Schedule Controls -->
+                    <div class="mb-3">
+                        <h6>Schedule Controls</h6>
+                        <div class="btn-group-vertical w-100 mb-2">
+                            <button class="btn btn-success" onclick="loadSchedule()">
+                                <i class="fas fa-upload"></i> Load Schedule
+                            </button>
+                            <button class="btn btn-primary" onclick="generateSchedule()">
+                                <i class="fas fa-magic"></i> Generate New Schedule
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Simulation Controls -->
+                    <div class="mb-3">
+                        <h6>Simulation Controls</h6>
+                        <div class="btn-group w-100 mb-2">
+                            <button class="btn btn-success" id="startBtn" onclick="startSimulation()">
+                                <i class="fas fa-play"></i> Start
+                            </button>
+                            <button class="btn btn-warning" id="stopBtn" onclick="stopSimulation()" disabled>
+                                <i class="fas fa-stop"></i> Stop
+                            </button>
+                            <button class="btn btn-info" onclick="stepSimulation()">
+                                <i class="fas fa-step-forward"></i> Step
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Status -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-clock"></i> Current Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="current-time text-center" id="currentTime">--:--</div>
+                        <div class="current-task" id="currentTask">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="badge bg-light text-dark" id="taskTime">--:-- → --:--</span>
+                                <span class="badge bg-warning" id="taskTarget">Target</span>
+                            </div>
+                            <div id="taskDescription">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mind Injection -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5><i class="fas fa-brain"></i> Mind Injection</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <textarea class="form-control" id="mindInput" rows="3" placeholder="Enter thoughts (optional - leave empty for auto-narration of current event)..."></textarea>
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="injectMind()">
+                            <i class="fas fa-comment-dots"></i> Get AI Narration
+                        </button>
+                        <div id="aiResponseArea"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Schedule Display -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-calendar-day"></i> Today's Schedule</h5>
+                        <button class="btn btn-outline-primary btn-sm" onclick="refreshSchedule()">
+                            <i class="fas fa-refresh"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="scheduleList">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Loading schedule...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+    <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // Connection status
+        socket.on('connect', function() {
+            document.getElementById('connectionStatus').className = 'status-indicator status-active';
+            document.getElementById('connectionText').textContent = 'Connected';
+            showToast('Connected to server', 'success');
+        });
+
+        socket.on('disconnect', function() {
+            document.getElementById('connectionStatus').className = 'status-indicator status-inactive';
+            document.getElementById('connectionText').textContent = 'Disconnected';
+            showToast('Disconnected from server', 'warning');
+        });
+
+        // Real-time updates
+        socket.on('time_update', function(data) {
+            updateCurrentStatus(data);
+        });
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshCurrentStatus();
+            refreshSchedule();
+        });
+
+        // API Functions
+        async function loadSchedule() {
+            try {
+                const response = await fetch('/api/schedule/load', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({filename: 'schedule_20250724.json'})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    refreshSchedule();
+                } else {
+                    showToast(data.error, 'danger');
+                }
+            } catch (error) {
+                showToast('Error loading schedule: ' + error.message, 'danger');
+            }
+        }
+
+        async function generateSchedule() {
+            try {
+                const name = document.getElementById('characterName').value;
+                const personality = document.getElementById('personality').value;
+                const behavior = document.getElementById('behavior').value;
+
+                showToast('Generating schedule... This may take a moment.', 'info');
+
+                const response = await fetch('/api/schedule/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, personality, behavior})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    refreshSchedule();
+                } else {
+                    showToast(data.error, 'danger');
+                }
+            } catch (error) {
+                showToast('Error generating schedule: ' + error.message, 'danger');
+            }
+        }
+
+        async function startSimulation() {
+            try {
+                const response = await fetch('/api/simulation/start', {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    showToast('Simulation started', 'success');
+                } else {
+                    showToast(data.error, 'danger');
+                }
+            } catch (error) {
+                showToast('Error starting simulation: ' + error.message, 'danger');
+            }
+        }
+
+        async function stopSimulation() {
+            try {
+                const response = await fetch('/api/simulation/stop', {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = true;
+                    showToast('Simulation stopped', 'info');
+                } else {
+                    showToast(data.error, 'danger');
+                }
+            } catch (error) {
+                showToast('Error stopping simulation: ' + error.message, 'danger');
+            }
+        }
+
+        async function stepSimulation() {
+            try {
+                const response = await fetch('/api/simulation/step', {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Time advanced: ' + data.current_time, 'info');
+                    refreshCurrentStatus();
+                } else {
+                    showToast(data.error, 'danger');
+                }
+            } catch (error) {
+                showToast('Error stepping simulation: ' + error.message, 'danger');
+            }
+        }
+
+        async function injectMind() {
+            try {
+                const mindInput = document.getElementById('mindInput');
+                const mindText = mindInput.value.trim();
+                
+                // Show different messages for manual vs auto-generated input
+                if (!mindText) {
+                    showToast('Generating narration from current event...', 'info');
+                } else {
+                    showToast('Sending to AI...', 'info');
+                }
+
+                const response = await fetch('/api/mind/inject', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mind_injection: mindText})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayAIResponse(data);
+                    mindInput.value = '';
+                } else {
+                    showToast(data.error, 'danger');
+                }
+            } catch (error) {
+                showToast('Error communicating with AI: ' + error.message, 'danger');
+            }
+        }
+
+        async function refreshCurrentStatus() {
+            try {
+                const response = await fetch('/api/schedule/current');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateCurrentStatus(data);
+                    
+                    // Update simulation buttons based on status
+                    if (data.simulation_active) {
+                        document.getElementById('startBtn').disabled = true;
+                        document.getElementById('stopBtn').disabled = false;
+                    } else {
+                        document.getElementById('startBtn').disabled = false;
+                        document.getElementById('stopBtn').disabled = true;
+                    }
+                }
+            } catch (error) {
+                console.error('Error refreshing status:', error);
+            }
+        }
+
+        async function refreshSchedule() {
+            try {
+                const response = await fetch('/api/schedule/today');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displaySchedule(data.schedule);
+                } else {
+                    document.getElementById('scheduleList').innerHTML = 
+                        '<div class="alert alert-warning">No schedule loaded</div>';
+                }
+            } catch (error) {
+                document.getElementById('scheduleList').innerHTML = 
+                    '<div class="alert alert-danger">Error loading schedule</div>';
+            }
+        }
+
+        // UI Functions
+        function updateCurrentStatus(data) {
+            document.getElementById('currentTime').textContent = data.current_time;
+            document.getElementById('taskTime').textContent = 
+                `${data.current_task.start_time} → ${data.current_task.end_time}`;
+            document.getElementById('taskTarget').textContent = data.current_task.interaction_target;
+            document.getElementById('taskDescription').textContent = data.current_task.what_to_do;
+        }
+
+        function displaySchedule(schedule) {
+            const scheduleList = document.getElementById('scheduleList');
+            
+            if (!schedule || schedule.length === 0) {
+                scheduleList.innerHTML = '<div class="alert alert-info">No schedule items found</div>';
+                return;
+            }
+
+            let html = '';
+            schedule.forEach((item, index) => {
+                html += `
+                    <div class="schedule-item p-3 mb-2 border rounded" data-index="${index}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-primary me-2">${item.start_time} - ${item.end_time}</span>
+                                    <span class="badge bg-secondary">${item.duration_minutes} min</span>
+                                </div>
+                                <div class="fw-bold mb-1">${item.what_to_do}</div>
+                                <div class="text-muted small">
+                                    <i class="fas fa-target"></i> ${item.interaction_target}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            scheduleList.innerHTML = html;
+        }
+
+        function displayAIResponse(data) {
+            const responseArea = document.getElementById('aiResponseArea');
+            const mindInjectionClass = data.is_auto_generated ? 'mind-injection-auto' : 'mind-injection';
+            const mindLabel = data.is_auto_generated ? 'Auto-Narration:' : 'Mind:';
+            const responseHtml = `
+                <div class="${mindInjectionClass} mt-3">
+                    <strong>${mindLabel}</strong> ${data.mind_injection}
+                </div>
+                <div class="ai-response">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong><i class="fas fa-robot"></i> AI Response</strong>
+                        <small class="text-muted">${data.timestamp}</small>
+                    </div>
+                    ${data.response}
+                </div>
+            `;
+            responseArea.innerHTML = responseHtml;
+        }
+
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toastContainer');
+            const toastId = 'toast_' + Date.now();
+            
+            const toastHtml = `
+                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="toast-header bg-${type} text-white">
+                        <strong class="me-auto">Schedule Generator</strong>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+                    </div>
+                    <div class="toast-body">${message}</div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement);
+            toast.show();
+            
+            // Remove toast element after it's hidden
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+        }
+
+        // Auto-refresh current status every 30 seconds
+        setInterval(refreshCurrentStatus, 30000);
+    </script>
+</body>
+</html>
