@@ -62,7 +62,7 @@ class Ollama_API_Handler:
         # hard_limit
         token_limit = min(token_limit, 2048)
         data = {
-            "model": configToml["modelChat"],
+            "model": configToml["modelVision"],
             "messages": messages,
             "stream": False,
             "options": {
@@ -108,17 +108,18 @@ async def main():
             break
         print()
         # fetch the image from url, encode it to base64
-        image = requests.get(user_input)
+        # image = requests.get(user_input)
         # Image.open(BytesIO(image.content)).show()
-        image = base64.b64encode(image.content).decode('utf-8')
+        # image = base64.b64encode(image.content).decode('utf-8')
         # print(image)
         # messages = [dict_system, {"role": "user", "content": f"主人說 {user_input}"}]
         messages = [
             dict_system,
             {
                 "role": "user",
-                "content": f"Describe the image as if explaining it to someone who cannot see it, using natural and human-like language.",
-                "images": [image],
+                "content": f"主人說 {user_input}",
+                # "content": f"Describe the image as if explaining it to someone who cannot see it, using natural and human-like language.",
+                # "images": [image],
             }
         ]
         # embed = await api.embed(user_input)

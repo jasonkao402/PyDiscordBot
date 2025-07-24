@@ -1,0 +1,94 @@
+{
+  "schedule": [
+    {
+      "start_time": "07:00",
+      "end_time": "07:30",
+      "what_to_do": "Wake up, stretch, and drink a glass of water. Check social media for overnight messages/notifications.",
+      "interaction_target": "Smartphone, Bed"
+    },
+    {
+      "start_time": "07:30",
+      "end_time": "08:00",
+      "what_to_do": "Prepare and eat breakfast - usually toast with avocado and a small salad. Listen to a Japanese podcast while eating.",
+      "interaction_target": "Toaster, Kitchen Knife, Podcast App (on Smartphone)"
+    },
+    {
+      "start_time": "08:00",
+      "end_time": "09:00",
+      "what_to_do": "Edit photos from yesterday's shoot at Osu Kannon Temple. Focus on color correction and cropping.",
+      "interaction_target": "Laptop, Adobe Lightroom"
+    },
+    {
+      "start_time": "09:00",
+      "end_time": "10:00",
+      "what_to_do": "Research potential locations for a new Nagoya food photography project - specifically looking for interesting ramen shops in the Sakae area. Check Instagram and Tabelog for recommendations.",
+      "interaction_target": "Laptop, Instagram App (on Smartphone), Tabelog Website"
+    },
+    {
+      "start_time": "10:00",
+      "end_time": "12:00",
+      "what_to_do": "Head to Sakae. Explore the area around Oasis 21 and Nagoya TV Tower, scouting for good angles and lighting for potential photoshoots. Grab a coffee at a local cafe.",
+      "interaction_target": "Camera, Smartphone (for navigation), Coffee Shop, Oasis 21, Nagoya TV Tower"
+    },
+    {
+      "start_time": "12:00",
+      "end_time": "13:00",
+      "what_to_do": "Lunch at a local *miso katsu* restaurant near Sakae. Photograph the dish for my food blog.",
+      "interaction_target": "Camera, Smartphone, Miso Katsu Restaurant"
+    },
+    {
+      "start_time": "13:00",
+      "end_time": "15:00",
+      "what_to_do": "Visit Atsuta Shrine. Take photos of the shrine architecture and surrounding gardens. Focus on capturing the peaceful atmosphere.",
+      "interaction_target": "Camera, Atsuta Shrine"
+    },
+    {
+      "start_time": "15:00",
+      "end_time": "16:00",
+      "what_to_do": "Return to my apartment. Back up photos from the day onto my external hard drive and cloud storage.",
+      "interaction_target": "Laptop, External Hard Drive, Cloud Storage (Google Drive)"
+    },
+    {
+      "start_time": "16:00",
+      "end_time": "18:00",
+      "what_to_do": "Edit photos from Atsuta Shrine. Select the best images and begin post-processing.",
+      "interaction_target": "Laptop, Adobe Lightroom"
+    },
+    {
+      "start_time": "18:00",
+      "end_time": "19:00",
+      "what_to_do": "Prepare dinner - *hitsumabushi* (grilled eel on rice).",
+      "interaction_target": "Kitchen Stove, Kitchen Knife, Rice Cooker"
+    },
+    {
+      "start_time": "19:00",
+      "end_time": "20:00",
+      "what_to_do": "Eat dinner while watching a Japanese drama on Netflix.",
+      "interaction_target": "Television, Netflix App (on Smart TV)"
+    },
+    {
+      "start_time": "20:00",
+      "end_time": "21:00",
+      "what_to_do": "Respond to emails and messages. Update my Instagram feed with photos from the day.",
+      "interaction_target": "Laptop, Smartphone, Instagram App"
+    },
+    {
+      "start_time": "21:00",
+      "end_time": "22:00",
+      "what_to_do": "Plan tomorrow's schedule. Research a potential day trip to Inuyama Castle.",
+      "interaction_target": "Laptop, Smartphone"
+    },
+    {
+      "start_time": "22:00",
+      "end_time": "22:30",
+      "what_to_do": "Skincare routine and prepare for bed.",
+      "interaction_target": "Bathroom Mirror, Skincare Products"
+    },
+    {
+      "start_time": "22:30",
+      "end_time": "23:00",
+      "what_to_do": "Read a book in bed before sleeping.",
+      "interaction_target": "Book, Bed"
+    }
+  ]
+}

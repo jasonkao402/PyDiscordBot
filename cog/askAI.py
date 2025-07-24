@@ -17,6 +17,8 @@ from opencc import OpenCC
 from cog.utilFunc import *
 from pydiscord import configToml
 import json, re, base64
+from discord import SelectOption
+from discord.ui import View, Select
 
 MEMOLEN = 8
 READLEN = 20
@@ -297,7 +299,7 @@ class askAI(commands.Cog):
                 assert reply.role != 'error'
                 
                 reply2 = reply.content
-                if (configToml['modelChat'] == 'deepseek-r1:32b'):
+                if '<think>' in reply2 and '</think>' in reply2:
                     # need to split the reply into thinking and reply
                     reply_think = reply2[reply2.find('<think>')  + 7 : reply2.find('</think>')]
                     reply.content = reply2[reply2.find('</think>') + 8 :]
@@ -374,18 +376,45 @@ class askAI(commands.Cog):
         l = sepLines(f'{wcformat(id2name[int(i)], w=8)}{v : <8}{ v/s :<2.3%}' for i, v in zip(t.index, t.values))
         await ctx.send(f'Bot List:\n```{l}```')
     
-    @commands.hybrid_command(name = 'selectmodel')
-    @commands.is_owner()
-    async def _selectModel(self, ctx:commands.Context, model:str):
-        # hardcode
-        # print(configToml["modelList"])
-        if model in ('help', 'list', 'ls'):
-            await ctx.send(f'目前可用模型：\n```{sepLines(configToml["modelList"])}```')
-        elif model in configToml["modelList"]:
-            await ctx.send(f'已從 {configToml['modelChat']} 切換至 {model}')
-            configToml['modelChat'] = model
-        else:
-            await ctx.send(f'客官不可以，目前為 {configToml["modelChat"]}')
+    @app_commands.command(name="selectmodel", description="選擇要使用的模型")
+    async def _selectModel(self, interaction: Interaction):
+
+        class ModelSelect(Select):
+            def __init__(self):
+                options = [
+                    SelectOption(
+                        label=model,
+                        value=model,
+                        description="目前使用" if model == configToml["modelChat"] else None,
+                        default=(model == configToml["modelChat"])
+                    )
+                    for model in configToml["modelList"]
+                ]
+                super().__init__(
+                    placeholder="選擇一個模型...",
+                    min_values=1,
+                    max_values=1,
+                    options=options,
+                )
+
+            async def callback(self, interaction2: Interaction):
+                selected_model = self.values[0]
+                configToml["modelChat"] = selected_model
+                await interaction2.response.edit_message(
+                    content=f"已切換至 `{selected_model}`",
+                    view=None
+                )
+
+        class ModelSelectView(View):
+            def __init__(self):
+                super().__init__(timeout=60)
+                self.add_item(ModelSelect())
+
+        await interaction.response.send_message(
+            "請從下拉選單選擇要切換的模型：",
+            view=ModelSelectView(),
+            ephemeral=True
+        )
 
     @commands.command(name = 'bl')
     @commands.is_owner()
