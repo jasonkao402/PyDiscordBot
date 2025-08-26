@@ -3,6 +3,7 @@ import pandas as pd
 from discord import RawReactionActionEvent
 from discord.ext import commands
 from cog.utilFunc import sepLines, wcformat
+import numpy as np
 
 MEMOLEN = 32
 cachedMsg = deque(maxlen=MEMOLEN)
@@ -13,7 +14,7 @@ okok = '''👌 🆗
 😡
 '''.splitlines()
 
-emojiArr = pd.read_csv('./acc/emojiArr.csv', index_col='uid', dtype=int).fillna(0)
+emojiArr = pd.read_csv('./acc/emojiArr.csv', index_col='uid', dtype=np.int64).fillna(0)
 
 def localRead():
     global emoji2id, id2emoji, okok
@@ -44,7 +45,7 @@ class okgoodjoke(commands.Cog):
             uid = msg.author.id
             emoji_count = {str(emoji) : emoji.count for emoji in msg.reactions}[emj]
             
-            if emoji_count >= 2 and (eid:=nameChk(emj)) != -1:
+            if emoji_count >= 1 and (eid:=nameChk(emj)) != -1:
                 cachedMsg.append(mid)
                 if uid not in emojiArr.index:
                     emojiArr.loc[uid, :] = 0
@@ -80,4 +81,9 @@ async def setup(bot:commands.Bot):
 async def teardown(bot):
     print('emoji saved')
     # print(emojiArr)
+    # emojiArr = emojiArr.astype(np.int64)
     emojiArr.to_csv('./acc/emojiArr.csv')
+    print(emojiArr)
+
+if __name__ == '__main__':
+    print(emojiArr)

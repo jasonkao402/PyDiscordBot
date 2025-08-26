@@ -6,7 +6,7 @@ convertDict = defaultdict(list)
 backDict = {}
 nameDict = {}
 
-with open('./acc/scoreArr_backup.csv', 'r') as f:
+with open('./acc/emojiArr_backup.csv', 'r') as f:
     df = pd.read_csv(f)
 # print(df)
 for memberList in os.listdir('./acc/'):
@@ -39,5 +39,5 @@ df_g = df.groupby('hexuid').sum()
 # df_g['username'] = df_g.index.map(lambda x: nameDict[x])
 # new_order = ['username'] + [col for col in df_g.columns if col != 'username']
 # df_g = df_g[new_order]
-df_g.to_csv('./acc/scoreArr2.csv')
+df_g.to_csv('./acc/emojiArr2.csv')
 print(df_g)
