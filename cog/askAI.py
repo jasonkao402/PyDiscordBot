@@ -104,7 +104,9 @@ class Ollama_APIHandler():
             chatMem[botid].popleft()
             chatMem[botid].popleft()
             print(f"token warning:{chatTok[botid]}, popped last msg.")
-        rd = replyDict(**response['message'])
+        rd = replyDict(response['message']['role'], response['message']['content'])
+        if 'thinking' in response['message']:
+            rd.content = f"<think>{response['message']['thinking']}</think>\n{response['message']['content']}"
         rd.content = cc.convert(rd.content)
         return rd
 
@@ -298,19 +300,21 @@ class askAI(commands.Cog):
                     reply = await self.ollamaAPI.chat([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum, tokens)
                 assert reply.role != 'error'
                 
-                reply2 = reply.content
-                if '<think>' in reply2 and '</think>' in reply2:
+                
+                if '<think>' in reply.content and '</think>' in reply.content:
                     # need to split the reply into thinking and reply
+                    print('reply with thinking')
+                    reply2 = reply.content
                     reply_think = reply2[reply2.find('<think>')  + 7 : reply2.find('</think>')]
                     reply.content = reply2[reply2.find('</think>') + 8 :]
                     # make a txt file for the thinking part
-                    think_fileName = f'./acc/thinkLog/{strftime("%Y_%m%d_%H%M%S")}.txt'
-                    with open(think_fileName, 'w+', encoding='utf-8') as f:
-                        f.write(reply_think)
-                    await message.channel.send(file=File(think_fileName))
-                    await message.channel.send(reply.content)
-                else:
-                    await message.channel.send(reply2)
+                    # think_fileName = f'./acc/thinkLog/{strftime("%Y_%m%d_%H%M%S")}.txt'
+                    # with open(think_fileName, 'w+', encoding='utf-8') as f:
+                        # f.write(reply_think)
+                    # await message.channel.send(reply_think[:1900])
+                    print(f'Thinking:\n{reply_think}')
+                # else:
+                await message.channel.send(reply.content)
             except TimeoutError:
                 print(f'[!] {aiNam} TimeoutError')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
@@ -318,10 +322,9 @@ class askAI(commands.Cog):
                 # if embed.vector[0] == 0:
                 #     print(f'Embed error:\n{embed.text}')
                 if reply.role == 'error':
-                    reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
-                    print(f'Reply error:\n{aiNam}:\n{reply2}')
+                    print(f'Reply error:\n{aiNam}:\n{reply.content}')
                 
-                await message.channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}') 
+                await message.channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply.content}') 
             else:
                 chatMem[aiNum].append(prompt.asdict)
                 chatMem[aiNum].append(reply.asdict)

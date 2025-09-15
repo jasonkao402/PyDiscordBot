@@ -1,4 +1,4 @@
-import asyncio, aiohttp, requests
+import asyncio, aiohttp, requests, json
 import numpy as np
 import os, toml
 import base64
@@ -62,7 +62,7 @@ class Ollama_API_Handler:
         # hard_limit
         token_limit = min(token_limit, 2048)
         data = {
-            "model": configToml["modelVision"],
+            "model": configToml["modelChat"],
             "messages": messages,
             "stream": False,
             "options": {
@@ -74,6 +74,8 @@ class Ollama_API_Handler:
             configToml["linkChat"], json=data
         ) as request:
             response = await request.json()
+        
+        print(json.dumps(response, indent=2, ensure_ascii=False))
         if 'error' in response:
             return replyDict(role='error', content=response['error'])
         
