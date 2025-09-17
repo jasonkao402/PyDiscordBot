@@ -55,8 +55,9 @@ class ScheduleManager:
         self.name = ""
         self.personality = ""
         self.behavior = ""
-        self.start_time = datetime.now(TIME_ZONE)
-        self.internal_time = datetime.now(TIME_ZONE)
+        # self.start_time = datetime.now(TIME_ZONE)
+        self.start_time = datetime.now(TIME_ZONE).replace(hour=8, minute=0, second=0, microsecond=0)
+        self.internal_time = datetime.now(TIME_ZONE).replace(hour=8, minute=0, second=0, microsecond=0)
         self.schedule_doing_update_interval = 300
 
     def initialize(
@@ -73,8 +74,9 @@ class ScheduleManager:
         self.behavior = behavior
         self.schedule_doing_update_interval = interval
         self.personality = personality
-        self.start_time = datetime.now(TIME_ZONE)
-        self.internal_time = datetime.now(TIME_ZONE)
+        self.start_time = datetime.now(TIME_ZONE).replace(hour=8, minute=0, second=0, microsecond=0)
+        self.internal_time = datetime.now(TIME_ZONE).replace(hour=8, minute=0, second=0, microsecond=0)
+        
 
     def build_schedule_prompt(self, target_date: datetime):
         """構建日程生成prompt"""
@@ -227,6 +229,9 @@ class ScheduleManager:
         print(f"生成的日程：\n{parse_txt}")
         # self.today_schedule_text = parse_txt[parse_txt.find("```jsons") + 7 : parse_txt.rfind("```")]
         # print(self.today_schedule_text)
+        fileName = f"schedule_{self.internal_time.strftime('%Y%m%d_%H%M')}.json"
+        with open(fileName, "w+", encoding="utf8") as f:
+            f.write(parse_txt)
 
     async def react_to_task(self, status_prompt):
         """對當前任務進行反應"""
@@ -260,8 +265,8 @@ async def simulate_schedule_generator():
     # with open(f"schedule_{schedule_manager.internal_time.strftime('%Y%m%d')}.json", "w", encoding='utf8') as f:
         # f.write(schedule_manager.today_schedule_text)
 
-    with open("schedule_20250724.json", "r", encoding="utf8") as f:
-        schedule_manager.today_schedule_text = f.read()
+    # with open("schedule_20250724.json", "r", encoding="utf8") as f:
+    #     schedule_manager.today_schedule_text = f.read()
 
     schedule_manager.today_todo_list = schedule_manager.parse_schedule_text(
         schedule_manager.today_schedule_text

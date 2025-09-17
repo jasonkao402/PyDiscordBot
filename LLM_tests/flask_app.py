@@ -120,9 +120,17 @@ def load_schedule():
             data = request.json
         else:
             data = request.form.to_dict()
-        filename = data.get('filename', 'schedule_20250724.json')
+        filename = data.get('filename')
+        
+        if not filename:
+            return jsonify({'success': False, 'error': 'No filename provided'})
         
         sm = get_schedule_manager()
+        
+        # Check if file exists
+        import os
+        if not os.path.exists(filename):
+            return jsonify({'success': False, 'error': f'File {filename} not found'})
         
         with open(filename, "r", encoding="utf8") as f:
             sm.today_schedule_text = f.read()
@@ -298,6 +306,58 @@ def handle_disconnect():
 def cleanup_executor(error):
     """Cleanup executor when app context tears down"""
     pass
+
+@app.route('/api/schedule/files')
+def list_schedule_files():
+    """List available schedule files"""
+    try:
+        import os
+        import glob
+        
+        # Get all JSON files that match the schedule pattern
+        schedule_files = []
+        
+        # Look for files with pattern: schedule_*.json
+        pattern = "schedule_*.json"
+        files = glob.glob(pattern)
+        
+        for file in files:
+            try:
+                # Get file modification time
+                mtime = os.path.getmtime(file)
+                file_date = datetime.fromtimestamp(mtime)
+                
+                # Try to extract date from filename
+                filename_parts = file.replace('.json', '').split('_')
+                if len(filename_parts) >= 2:
+                    date_part = filename_parts[1][:8]  # YYYYMMDD
+                    try:
+                        schedule_date = datetime.strptime(date_part, '%Y%m%d')
+                        display_name = f"{schedule_date.strftime('%Y-%m-%d')} ({file})"
+                    except:
+                        display_name = file
+                else:
+                    display_name = file
+                
+                schedule_files.append({
+                    'filename': file,
+                    'display_name': display_name,
+                    'modified': file_date.strftime('%Y-%m-%d %H:%M'),
+                    'size': os.path.getsize(file)
+                })
+            except Exception as e:
+                # If there's an error with a specific file, skip it
+                continue
+        
+        # Sort by modification time (newest first)
+        schedule_files.sort(key=lambda x: x['modified'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'files': schedule_files
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     try:

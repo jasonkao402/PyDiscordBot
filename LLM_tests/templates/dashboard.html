@@ -110,20 +110,29 @@
                             <label for="behavior" class="form-label">Behavior</label>
                             <input type="text" class="form-control" id="behavior" value="擅長規劃旅遊行程">
                         </div>
-                    </div>
-
-                    <!-- Schedule Controls -->
+                    </div>                    <!-- Schedule Controls -->
                     <div class="mb-3">
                         <h6>Schedule Controls</h6>
+                        <div class="mb-2">
+                            <label for="scheduleFileSelect" class="form-label">Select Schedule File</label>
+                            <div class="input-group">
+                                <select class="form-select" id="scheduleFileSelect">
+                                    <option value="">Select a schedule file...</option>
+                                </select>
+                                <button class="btn btn-outline-secondary" onclick="refreshScheduleFiles()" title="Refresh file list">
+                                    <i class="fas fa-refresh"></i>
+                                </button>
+                            </div>
+                        </div>
                         <div class="btn-group-vertical w-100 mb-2">
-                            <button class="btn btn-success" onclick="loadSchedule()">
-                                <i class="fas fa-upload"></i> Load Schedule
+                            <button class="btn btn-success" onclick="loadSchedule()" id="loadScheduleBtn" disabled>
+                                <i class="fas fa-upload"></i> Load Selected Schedule
                             </button>
                             <button class="btn btn-primary" onclick="generateSchedule()">
                                 <i class="fas fa-magic"></i> Generate New Schedule
                             </button>
                         </div>
-                    </div>                    <!-- Simulation Controls -->
+                    </div><!-- Simulation Controls -->
                     <div class="mb-3">
                         <h6>Simulation Controls</h6>
                         <div class="mb-2">
@@ -218,36 +227,85 @@
         // Real-time updates
         socket.on('time_update', function(data) {
             updateCurrentStatus(data);
-        });
-
-        // Initialize dashboard
+        });        // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             refreshCurrentStatus();
             refreshSchedule();
-        });
+            refreshScheduleFiles();
+            
+            // Enable/disable load button based on file selection
+            document.getElementById('scheduleFileSelect').addEventListener('change', function() {
+                const loadBtn = document.getElementById('loadScheduleBtn');
+                loadBtn.disabled = !this.value;
+            });
+        });        // API Functions
+        async function refreshScheduleFiles() {
+            try {
+                const response = await fetch('/api/schedule/files');
+                const data = await response.json();
+                
+                const select = document.getElementById('scheduleFileSelect');
+                const loadBtn = document.getElementById('loadScheduleBtn');
+                
+                if (data.success) {
+                    // Clear existing options
+                    select.innerHTML = '<option value="">Select a schedule file...</option>';
+                    
+                    // Add file options
+                    data.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file.filename;
+                        option.textContent = `${file.display_name} (${file.size} bytes, ${file.modified})`;
+                        select.appendChild(option);
+                    });
+                    
+                    if (data.files.length === 0) {
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = 'No schedule files found';
+                        option.disabled = true;
+                        select.appendChild(option);
+                    }
+                } else {
+                    select.innerHTML = '<option value="">Error loading files</option>';
+                    showToast('Error loading schedule files: ' + data.error, 'danger');
+                }
+                
+                // Reset load button state
+                loadBtn.disabled = true;
+            } catch (error) {
+                showToast('Error refreshing file list: ' + error.message, 'danger');
+            }
+        }
 
-        // API Functions
         async function loadSchedule() {
             try {
+                const select = document.getElementById('scheduleFileSelect');
+                const filename = select.value;
+                
+                if (!filename) {
+                    showToast('Please select a schedule file first', 'warning');
+                    return;
+                }
+
                 const response = await fetch('/api/schedule/load', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({filename: 'schedule_20250724.json'})
+                    body: JSON.stringify({filename: filename})
                 });
                 const data = await response.json();
                 
                 if (data.success) {
                     showToast(data.message, 'success');
                     refreshSchedule();
+                    refreshCurrentStatus();
                 } else {
                     showToast(data.error, 'danger');
                 }
             } catch (error) {
                 showToast('Error loading schedule: ' + error.message, 'danger');
             }
-        }
-
-        async function generateSchedule() {
+        }        async function generateSchedule() {
             try {
                 const name = document.getElementById('characterName').value;
                 const personality = document.getElementById('personality').value;
@@ -265,13 +323,15 @@
                 if (data.success) {
                     showToast(data.message, 'success');
                     refreshSchedule();
+                    refreshCurrentStatus();
+                    refreshScheduleFiles(); // Refresh file list to show new file
                 } else {
                     showToast(data.error, 'danger');
                 }
             } catch (error) {
                 showToast('Error generating schedule: ' + error.message, 'danger');
             }
-        }        async function stepSimulation() {
+        }async function stepSimulation() {
             try {
                 const interval = document.getElementById('stepInterval').value;
                 const response = await fetch('/api/simulation/step', {
