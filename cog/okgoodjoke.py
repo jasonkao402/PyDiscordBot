@@ -3,6 +3,7 @@ import pandas as pd
 from discord import RawReactionActionEvent
 from discord.ext import commands
 from cog.utilFunc import sepLines, wcformat
+import numpy as np
 
 MEMOLEN = 32
 cachedMsg = deque(maxlen=MEMOLEN)
@@ -13,7 +14,8 @@ okok = '''👌 🆗
 😡
 '''.splitlines()
 
-emojiArr = pd.read_csv('./acc/emojiArr.csv', index_col='uid', dtype=int).fillna(0)
+emojiArr = pd.read_csv('./acc/emojiArr.csv', index_col='uid', dtype=np.int64).fillna(0)
+whitelistGuild = [477839636404633600]
 
 def localRead():
     global emoji2id, id2emoji, okok
@@ -34,20 +36,25 @@ class okgoodjoke(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.emojiArr = pd.read_csv('./acc/emojiArr.csv', index_col='uid', dtype=np.int64).fillna(0)
+        localRead()
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload:RawReactionActionEvent):
         emj, mid = str(payload.emoji), payload.message_id
-        if payload.guild_id == 477839636404633600 and mid not in cachedMsg:
+        global emojiArr
+        if payload.guild_id in whitelistGuild and mid not in cachedMsg:
             ch = self.bot.get_partial_messageable(payload.channel_id, guild_id=payload.guild_id)
             msg = await ch.fetch_message(payload.message_id)
             uid = msg.author.id
             emoji_count = {str(emoji) : emoji.count for emoji in msg.reactions}[emj]
             
-            if emoji_count >= 2 and (eid:=nameChk(emj)) != -1:
+            if emoji_count >= 3 and (eid:=nameChk(emj)) != -1:
                 cachedMsg.append(mid)
                 if uid not in emojiArr.index:
-                    emojiArr.loc[uid, :] = 0
+                    new_row = pd.Series(0, index=emojiArr.columns, name=uid)
+                    emojiArr = pd.concat([emojiArr, new_row.to_frame().T])
+                    # emojiArr.loc[uid, :] = 0
                 print(emojiArr)
                 emojiArr.loc[uid, str(eid)] += 1
                 top_users  = emojiArr.iloc[:,eid].nlargest(5)
@@ -55,14 +62,17 @@ class okgoodjoke(commands.Cog):
                     f'{username.name if (username := self.bot.get_user(i)) else "ERROR"}: {v}'
                     for i, v in zip(top_users.index, top_users.values)
                 )
-                return await ch.send(f'{emj} Emoji Rank:\n```{ranking_text}```', reference=msg, silent=True)
+                return await ch.send(f'{emj} Emoji Rank:\n```{ranking_text}```', reference=msg, silent=True, delete_after=30)
     
     @commands.hybrid_command(name = 'erank')
     async def _emojiRank(self, ctx:commands.Context, emj:str):
         uid, eid = ctx.author.id, nameChk(emj)
-        if ctx.guild.id == 477839636404633600:
+        global emojiArr
+        if ctx.guild.id in whitelistGuild:
             if uid not in emojiArr.index:
-                emojiArr.loc[uid, :] = 0
+                new_row = pd.Series(0, index=emojiArr.columns, name=uid)
+                emojiArr = pd.concat([emojiArr, new_row.to_frame().T])
+                # emojiArr.loc[uid, :] = 0
             if eid == -1:
                 return await ctx.send(f'{emj} Emoji Rank 404 not found.', silent=True)
             # print('debug', eid)
@@ -74,10 +84,35 @@ class okgoodjoke(commands.Cog):
             return await ctx.send(f'{emj} Emoji Rank:\n```{ranking_text}```', silent=True)
 
 async def setup(bot:commands.Bot):
-    localRead()
+    # localRead()
     await bot.add_cog(okgoodjoke(bot))
-    
-async def teardown(bot):
-    print('emoji saved')
+
+async def teardown(bot:commands.Bot):
+    global emojiArr
     # print(emojiArr)
+    # emojiArr = bot.get_cog('okgoodjoke').emojiArr
     emojiArr.to_csv('./acc/emojiArr.csv')
+    print(emojiArr)
+    print('emoji saved')
+
+if __name__ == '__main__':
+    localRead()
+    print(emojiArr)
+    debug_emj = '👌'
+    eid = nameChk(debug_emj)
+    top_users  = emojiArr.iloc[:,eid].nlargest(5)
+    ranking_text = sepLines(
+        f'{user_id}: {v}' for user_id, v in zip(top_users.index, top_users.values)
+    )
+    print(f'{eid} Emoji Rank:\n```{ranking_text}```')
+    debug_uid = 123456789
+    new_row = pd.Series(0, index=emojiArr.columns, name=debug_uid)
+    emojiArr = pd.concat([emojiArr, new_row.to_frame().T])
+    emojiArr.loc[debug_uid, str(eid)] += 1
+    top_users  = emojiArr.iloc[:,eid].nlargest(5)
+    ranking_text = sepLines(
+                    f'{user_id}: {v}'
+                    for user_id, v in zip(top_users.index, top_users.values)
+                )
+    print(f'{eid} Emoji Rank:\n```{ranking_text}```')
+    print(emojiArr)
