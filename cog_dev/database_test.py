@@ -28,17 +28,24 @@ class NoteDatabase:
         """Initialize database tables"""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id TEXT UNIQUE NOT NULL
+                )
+            """)
+
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS notes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
                     content TEXT NOT NULL,
-                    owner_id TEXT NOT NULL,
+                    owner_id INTEGER NOT NULL,
                     visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (owner_id) REFERENCES users (rowid)
                 )
             """)
-            
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS user_selections (
                     user_id TEXT PRIMARY KEY,
@@ -188,6 +195,47 @@ class NoteDatabase:
                 DELETE FROM user_selections 
                 WHERE user_id = ?
             """, (user_id,))
+    
+    def _get_or_create_user_serial(self, user_id: str) -> int:
+        """Get or create a serial number for a user."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT rowid FROM users WHERE user_id = ?
+            """, (user_id,))
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+
+            cursor = conn.execute("""
+                INSERT INTO users (user_id) VALUES (?)
+            """, (user_id,))
+            return cursor.lastrowid
+
+    def _get_user_id_by_serial(self, serial: int) -> Optional[str]:
+        """Retrieve user ID by serial number."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT user_id FROM users WHERE rowid = ?
+            """, (serial,))
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def import_notes_from_file(self, file_path: str, user_id: str):
+        """Import notes from a text file."""
+        user_serial = self._get_or_create_user_serial(user_id)
+        now = datetime.now().isoformat()
+
+        with open(file_path, 'r', encoding='utf-8') as file, sqlite3.connect(self.db_path) as conn:
+            for line in file:
+                try:
+                    title, content, visibility = line.strip().split('|')
+                    visibility_enum = NoteVisibility(visibility.strip().lower())
+                    conn.execute("""
+                        INSERT INTO notes (title, content, owner_id, visibility, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (title.strip(), content.strip(), user_serial, visibility_enum.value, now, now))
+                except ValueError:
+                    print(f"Skipping invalid line: {line.strip()}")
 
 class NoteManager:
     def __init__(self, db_path: str = "llm_character_cards.db"):
@@ -293,8 +341,8 @@ if __name__ == "__main__":
     
     # Create notes
     note1 = manager.create_note("My Private Note", "This is private", NoteVisibility.PRIVATE)
-    note2 = manager.create_note("Public Note", "This is public", NoteVisibility.PUBLIC)
-    
+    note2 = manager.create_note("Public Note", "This is first public", NoteVisibility.PUBLIC)
+    note3 = manager.create_note("Public Note 2", "This is second public", NoteVisibility.PUBLIC)
     # Select and work with a note
     manager.select_note(note1.id)
     selected = manager.get_selected_note()

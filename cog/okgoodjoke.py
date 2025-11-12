@@ -92,7 +92,7 @@ async def teardown(bot:commands.Bot):
     # print(emojiArr)
     # emojiArr = bot.get_cog('okgoodjoke').emojiArr
     emojiArr.to_csv('./acc/emojiArr.csv')
-    print(emojiArr)
+    # print(emojiArr)
     print('emoji saved')
 
 if __name__ == '__main__':

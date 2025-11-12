@@ -37,9 +37,11 @@ def run_discord():
         # PreLoad
         for c in LOADED_COG:
             await client.load_extension(f'cog.{c}')
-        # await client.tree.sync()
+        # avail_cmds = await client.tree.sync()
+        await sync_tree(None)
         print('Bot is online.')
         print('Default cogs loaded : ', LOADED_COG)
+        # print(f'synced {len(avail_cmds)} commands')
 
     @client.event
     async def on_connect():
@@ -53,7 +55,7 @@ def run_discord():
             await client.reload_extension(f'cog.{c}')
             suc += 1
         
-        await ctx.send(f'{suc} reloaded and sync done')
+        await ctx.send(f'{suc} reloaded and sync done in {ctx.guild.name}')
         await sync_tree(ctx.guild)
 
     @client.command()
