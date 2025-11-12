@@ -28,21 +28,14 @@ class NoteDatabase:
         """Initialize database tables"""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id TEXT UNIQUE NOT NULL
-                )
-            """)
-
-            conn.execute("""
                 CREATE TABLE IF NOT EXISTS notes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
                     content TEXT NOT NULL,
-                    owner_id INTEGER NOT NULL,
+                    owner_id TEXT NOT NULL,  -- Store Discord UID directly
                     visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY (owner_id) REFERENCES users (rowid)
+                    updated_at TEXT NOT NULL
                 )
             """)
 
@@ -337,7 +330,7 @@ if __name__ == "__main__":
     manager = NoteManager()
     
     # User operations
-    manager.login("user1")
+    manager.login("225833749156331520")
     
     # Create notes
     note1 = manager.create_note("My Private Note", "This is private", NoteVisibility.PRIVATE)
@@ -357,6 +350,6 @@ if __name__ == "__main__":
         print(f"- {note.title} ({note.visibility.value})")
     
     # Switch user
-    manager.login("user2")
+    manager.login("511412168386674691")
     user2_notes = manager.list_notes()
     print(f"User2 can see {len(user2_notes)} notes")  # Should only see public notes

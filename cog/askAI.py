@@ -108,7 +108,7 @@ class Ollama_APIHandler():
         rd = replyDict(response['message']['role'], response['message']['content'])
         if 'thinking' in response['message']:
             rd.content = f"<think>{response['message']['thinking']}</think>\n{response['message']['content']}"
-        rd.content = cc.convert(rd.content)
+        # rd.content = cc.convert(rd.content)
         return rd
 
     async def ps(self):
@@ -116,27 +116,6 @@ class Ollama_APIHandler():
             request.raise_for_status()
             response = await request.json()
         return response
-
-# def localRead(resetMem = False) -> None:
-#     with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
-#         global setsys_extra, name2ID, id2name, chatMem, chatTok, dfDict
-#         setsys_tmp = set1_file.readlines()
-#         setsys_extra = []
-#         name2ID, id2name = {}, []
-#         for i in range(len(setsys_tmp)//2):
-#             id2name.append(setsys_tmp[2*i].split(maxsplit=1)[0])
-#             name2ID.update((alias, i) for alias in setsys_tmp[2*i].split())
-#             setsys_extra.append(setsys_tmp[2*i+1])
-#         if resetMem:
-#             chatMem = [deque(maxlen=MEMOLEN) for _ in range(len(setsys_extra))]
-#             chatTok = [0 for _ in range(len(setsys_extra))]
-#             dfDict = defaultdict(pd.DataFrame)
-#         print(name2ID)
-
-# def nameChk(s) -> tuple:
-#     for name in name2ID:
-#         if name in s: return name2ID[name], name
-#     return -1, ''
 
 def injectCheck(val):
     return True if val > THRESHOLD and val < 0.99 else False
@@ -157,32 +136,14 @@ class askAI(commands.Cog):
         self.bot = bot
         self.db = NoteDatabase("llm_character_cards.db")  # Initialize the database for character cards
         # self.channel = self.bot.get_channel(1088253899871371284)
-        # self.ignore = 0.5
-        # self.my_task.start()
-        # self._mindLoop.start()
-        # self._loneMeter.start()
-        # self.loneMeter = 0
-        # self.loneMsg = 0
-        # self.loneLimit = LONELYMETER
-        # self.sch_FullUser = None
         self.ollamaAPI = Ollama_APIHandler()
         self.sdimageAPI = SDImage_APIHandler()
+        self.persona_memory = {} # id to deque of messages
         # self.last_reply = replydict()
         
     async def cog_unload(self):
         await self.ollamaAPI.close()
         await self.sdimageAPI.close()
-        # self.my_task.cancel()
-        # self._mindLoop.cancel()
-        # self._loneMeter.cancel()
-        
-    # @commands.hybrid_command(name="createpersona")
-    # async def create_persona(self, ctx: commands.Context, title: str, content: str, visibility: str):
-    #     """Create a new LLM persona."""
-    #     user_id = str(ctx.author.id)
-    #     visibility_enum = NoteVisibility.PUBLIC if visibility.lower() == "public" else NoteVisibility.PRIVATE
-    #     persona = self.db.create_note(title, content, user_id, visibility_enum)
-    #     await ctx.send(f"Persona '{persona.title}' created successfully.")
 
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     @app_commands.describe(title="Title of the persona", content="Content of the persona", visibility="Visibility of the persona (public/private)")
@@ -225,6 +186,8 @@ class askAI(commands.Cog):
         """Select an LLM persona for interaction."""
         user_id = str(ctx.author.id)
         success = self.db.set_selected_note(user_id, persona_id)
+        if persona_id not in self.persona_memory:
+            self.persona_memory[persona_id] = deque(maxlen=MEMOLEN)
         if success:
             await ctx.send(f"Persona {persona_id} selected successfully.")
         else:
@@ -244,65 +207,62 @@ class askAI(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message:Message):
-        user, text = message.author, message.content
+        user, messageText = message.author, message.content
         uid, userName = user.id, user.name
         displayName = user.display_name
         userName = re.sub(r'[.#]', '', userName)
-        n = min(len(text), READLEN)
-        
+        # ignore self messages
         if uid == self.bot.user.id:
             return
         
         # 2025 refatctor: use mentions to trigger bot llm chat
         if self.bot.user.mentioned_in(message):
             user_id = str(message.author.id)
+            # Use the selected persona for interaction
             persona = self.db.get_selected_note(user_id)
-            # logging 
             
             if not persona:
                 await message.channel.send("No persona selected. Use /selectpersona to select one.")
                 return
             
-            print(f'{wcformat(userName)}[{persona.title}]: {text}')
-            # Use the selected persona for interaction
-            prompt = replyDict('user', f'{displayName} said {message.content}', userName).asdict
-            setupmsg  = replyDict('system', f'{persona.content} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system').asdict
+            user_persona_pair = f'{wcformat(userName)}[{persona.title}]'
+            
+            # filter out mention bot part
+            content = messageText.replace(self.bot.user.mention, '', 1).strip()
+            print(f'{user_persona_pair}: {content}')
+            prompt = replyDict('user', f'{displayName} said {content}', userName)
+            setupmsg  = replyDict('system', f'{persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}', 'system')
             async with message.channel.typing():
+                if persona.id not in self.persona_memory:
+                    self.persona_memory[persona.id] = deque(maxlen=MEMOLEN)
+                chatMem = self.persona_memory[persona.id]
                 try:
-                    reply = await self.ollamaAPI.chat([setupmsg, prompt], botid=0)
+                    reply = await self.ollamaAPI.chat([setupmsg.asdict, *chatMem, prompt.asdict], botid=0)
+                    if '<think>' in reply.content and '</think>' in reply.content:
+                        # need to split the reply into thinking and reply
+                        print('reply with thinking')
+                        reply2 = reply.content
+                        reply_think = reply2[reply2.find('<think>')  + 7 : reply2.find('</think>')]
+                        reply.content = reply2[reply2.find('</think>') + 8 :]
+                        # make a txt file for the thinking part
+                        # think_fileName = f'./acc/thinkLog/{strftime("%Y_%m%d_%H%M%S")}.txt'
+                        # with open(think_fileName, 'w+', encoding='utf-8') as f:
+                            # f.write(reply_think)
+                        # await message.channel.send(reply_think[:1900])
+                        print(f'Thinking:\n{reply_think}')
+                    # else:
                     await message.channel.send(reply.content)
                 except TimeoutError:
                     await message.channel.send("The bot is currently unavailable. Please try again later.")
-
-        # elif (aiInfo:=nameChk(text[:n])) != (-1, ''):
-            # aiNum, aiNam = aiInfo
-            
-            
-            # hehe
-            # if uid in banList:
-            #     if random() < self.ignore:
-            #         if random() < 0.9:
-            #             async with message.channel.typing():
-            #                 await asyncio.sleep(randint(5, 15))
-            #             await message.channel.send(choice(whatever))
-            #         print("已敷衍.")
-            #         return
-            #     else:
-            #         print("嘖")
-                    
-            # elif ('洗腦' in text[:n]):
-            #     if devChk(uid):
-            #         chatMem[aiNum].clear()
-            #         return await message.channel.send(f'阿 {aiNam} 被洗腦了 🫠')
-            #     else:
-            #         return await message.channel.send('客官不可以')
-                
-            # elif ('人設' in text[:n]) and devChk(uid):
-            #     if ('更新人設' in text[:n]):
-            #         msg = text
-            #         setsys_extra[aiNum] = msg[msg.find('更新人設')+4:]
-            #     return await message.channel.send(setsys_extra[aiNum])
-            
+                except AssertionError:
+                    if reply.role == 'error':
+                        print(f'Reply error:\n{user_persona_pair}:\n{reply.content}')
+                    await message.channel.send(f'{user_persona_pair} 發生錯誤，請聯繫主人\n{reply.content}')
+                else:
+                    chatMem.append(prompt.asdict)
+                    chatMem.append(reply.asdict)
+                    for i in chatMem:
+                        print(i['content'][:20])
             # elif ('-t' in text[:n]) and devChk(uid):
             #     return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
             
@@ -382,30 +342,11 @@ class askAI(commands.Cog):
                 assert reply.role != 'error'
                 
                 
-                if '<think>' in reply.content and '</think>' in reply.content:
-                    # need to split the reply into thinking and reply
-                    print('reply with thinking')
-                    reply2 = reply.content
-                    reply_think = reply2[reply2.find('<think>')  + 7 : reply2.find('</think>')]
-                    reply.content = reply2[reply2.find('</think>') + 8 :]
-                    # make a txt file for the thinking part
-                    # think_fileName = f'./acc/thinkLog/{strftime("%Y_%m%d_%H%M%S")}.txt'
-                    # with open(think_fileName, 'w+', encoding='utf-8') as f:
-                        # f.write(reply_think)
-                    # await message.channel.send(reply_think[:1900])
-                    print(f'Thinking:\n{reply_think}')
-                # else:
-                await message.channel.send(reply.content)
+                
             except TimeoutError:
                 print(f'[!] {aiNam} TimeoutError')
                 await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
-            except AssertionError:
-                # if embed.vector[0] == 0:
-                #     print(f'Embed error:\n{embed.text}')
-                if reply.role == 'error':
-                    print(f'Reply error:\n{aiNam}:\n{reply.content}')
-                
-                await message.channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply.content}') 
+             
             else:
                 chatMem[aiNum].append(prompt.asdict)
                 chatMem[aiNum].append(reply.asdict)
@@ -501,46 +442,7 @@ class askAI(commands.Cog):
             f"已切換至 `{model}`",
             ephemeral=True  # Confirmation messages are better as ephemeral
         )
-    # @app_commands.command(name="selectmodel", description="選擇要使用的模型")
-    # async def _selectModel(self, interaction: Interaction):
-
-    #     class ModelSelect(Select):
-    #         def __init__(self):
-    #             options = [
-    #                 SelectOption(
-    #                     label=model,
-    #                     value=model,
-    #                     description="目前使用" if model == modelConfig["modelChat"] else None,
-    #                     default=(model == modelConfig["modelChat"])
-    #                 )
-    #                 for model in modelConfig["modelList"]
-    #             ]
-    #             super().__init__(
-    #                 placeholder="選擇一個模型...",
-    #                 min_values=1,
-    #                 max_values=1,
-    #                 options=options,
-    #             )
-
-    #         async def callback(self, interaction2: Interaction):
-    #             selected_model = self.values[0]
-    #             modelConfig["modelChat"] = selected_model
-    #             await interaction2.response.edit_message(
-    #                 content=f"已切換至 `{selected_model}`",
-    #                 view=None
-    #             )
-
-    #     class ModelSelectView(View):
-    #         def __init__(self):
-    #             super().__init__(timeout=60)
-    #             self.add_item(ModelSelect())
-
-    #     await interaction.response.send_message(
-    #         "請從下拉選單選擇要切換的模型：",
-    #         view=ModelSelectView(),
-    #         ephemeral=True
-    #     )
-
+    
     # @commands.command(name = 'bl')
     # @commands.is_owner()
     # async def _blacklist(self, ctx:commands.Context, uid:int):
@@ -688,6 +590,25 @@ class askAI(commands.Cog):
             
     #         # await channel.send(f'{talkList[self.loneMsg % len(talkList)]}\n({-consume} energy) (meter: {self.loneMeter}/{limit}))')
     #         self.loneMsg += 1
+
+    @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
+    async def bonk(self, interaction: Interaction):
+        """Erase the current chat session memory for the selected persona."""
+        user_id = str(interaction.user.id)
+        
+        # Get the selected persona
+        persona = self.db.get_selected_note(user_id)
+        
+        if not persona:
+            await interaction.response.send_message("No persona selected. Use /selectpersona to select one.", ephemeral=True)
+            return
+
+        # Clear the memory for the selected persona
+        if persona.id in self.persona_memory:
+            self.persona_memory[persona.id].clear()
+            await interaction.response.send_message(f"Session memory for persona '{persona.title}' has been erased.")
+        else:
+            await interaction.response.send_message("No session memory to erase for the selected persona.")
 
 async def setup(bot:commands.Bot):
     # localRead(True)
