@@ -2,28 +2,19 @@ import os
 from datetime import datetime, timedelta, timezone
 from numpy import argsort, array, dot, ndarray
 from numpy.linalg import norm
-import toml
 from typing import List
 from wcwidth import wcswidth
+from config_loader import configToml
 
 TWTZ = timezone(timedelta(hours = 8))
-
-def loadToml():
-    if not os.path.exists('./acc/config.toml'):
-        print('config.toml not found, please check the file')
-        return {}
-    with open('./acc/config.toml', 'r+') as tomlFile:
-        print('config.toml loaded')
-        configToml = toml.load(tomlFile)
-        return configToml
     
 def clamp(n:int, minn=0, maxn=100) -> float:
     '''clamp n in set range'''
     return max(min(maxn, n), minn)
 
 def devChk(id:int) -> bool:
-    admin = [225833749156331520, 316141566173642752, 304589833484107786, 619168250487504916, 868448833556840478, 662585167432646668, 336527947299028992]
-    return int(id) in admin
+    # admin = 
+    return int(id) in configToml.get('auth', {}).get('adminList', [])
 
 def sepLines(itr, sep='\n'):
     return sep.join(itr)

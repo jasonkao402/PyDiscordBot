@@ -1,10 +1,10 @@
+import json
 import os
 import discord
 from discord.ext import commands
-from cog.utilFunc import devChk, loadToml
+import toml
 from typing import Optional
-
-configToml = loadToml()
+from config_loader import configToml, loadToml
 
 def run_discord():
     absFilePath = os.path.abspath(__file__)
@@ -120,7 +120,15 @@ def run_discord():
     async def close(ctx:commands.Context):
         await ctx.send(f'cya {ctx.author.mention}')
         await client.close()
-
+        
+    @client.hybrid_command(name = 'toml')
+    @commands.is_owner()
+    async def _toml(ctx:commands.Context):
+        global configToml
+        configToml = loadToml()
+        configToml.pop('apiToken', None)
+        await ctx.send(f'toml reload done.```json\n{json.dumps(configToml, indent=2, ensure_ascii=False)}```')
+    
     # Load API token, and delete it from configToml
     TOKEN = configToml['apiToken']['discord']
     configToml.pop('apiToken', None)
