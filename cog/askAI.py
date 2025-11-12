@@ -87,7 +87,7 @@ class Ollama_APIHandler():
             "options": {
                 "num_predict": 640,
             }
-            | modelConfig["chatParams"],
+            | configToml["chatParams"],
         }
         # print(messages[-1])
 
@@ -429,7 +429,7 @@ class askAI(commands.Cog):
             return
         try:
             uid = int(uid)
-            if uid not in banList and devChk(user.id):
+            if uid not in banList:
                 banList.append(uid)
                 with open('./acc/banList.txt', 'a') as bfile:
                     bfile.write(f'{uid}\n')

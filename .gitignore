@@ -127,3 +127,4 @@ dmypy.json
 Q*g
 subsystem_tests/imgs/*.jpg
 subsystem_tests/chat_history/*
+llm_character_cards.db
