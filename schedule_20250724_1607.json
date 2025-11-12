@@ -1,0 +1,84 @@
+{
+  "schedule": [    {
+      "start_time": "06:30",
+      "end_time": "07:00",
+      "what_to_do": "起床，輕柔伸展，快速查看今日天氣預報（下午可能有陣雨，需要相應調整攝影地點）。回顧昨天在太魯閣峽谷拍攝的照片，初步挑選要編輯的照片。喝一杯檸檬水。",
+      "interaction_target": "Smartphone, alarm clock, yoga mat"
+    },    {
+      "start_time": "07:00",
+      "end_time": "07:30",
+      "what_to_do": "準備簡單的早餐：台式早餐套餐 - 豆漿、油條和一小碗鹹粥。查看Instagram是否有花蓮美食熱點或攝影挑戰的趨勢。",
+      "interaction_target": "Stove, kitchen utensils, smartphone"
+    },    {
+      "start_time": "07:30",
+      "end_time": "08:00",
+      "what_to_do": "打包相機器材：Sony Alpha 7 IV、24-70mm鏡頭、50mm定焦鏡頭、備用電池、SD卡、相機防雨罩。再次檢查自己的雨具 - 防水外套和褲子。",
+      "interaction_target": "Camera bag, camera equipment"
+    },    {
+      "start_time": "08:00",
+      "end_time": "09:00",
+      "what_to_do": "開車前往鯉魚潭。計劃捕捉湖面反射的晨光。專注於風景攝影，也可能拍攝一些在湖邊享受的人們的自然照片。",
+      "interaction_target": "Car, GPS"
+    },    {
+      "start_time": "09:00",
+      "end_time": "11:00",
+      "what_to_do": "在鯉魚潭進行攝影拍攝。嘗試不同的角度和構圖。由於可能有雲層遮蔽，要經常檢查測光表。短暫休息補充水分並回顧照片。",
+      "interaction_target": "Camera, tripod, light meter"
+    },    {
+      "start_time": "11:00",
+      "end_time": "12:00",
+      "what_to_do": "開車前往鯉魚潭附近的當地餐廳 - '花蓮萬山餐廳' - 用午餐。計劃品嚐他們著名的滷肉飯和當地茶。",
+      "interaction_target": "Car, GPS"
+    },    {
+      "start_time": "12:00",
+      "end_time": "13:00",
+      "what_to_do": "在花蓮萬山餐廳用午餐。為Instagram限時動態拍攝食物和餐廳氛圍照片。與老闆聊當地食材和烹飪技巧。",
+      "interaction_target": "Smartphone, camera"
+    },    {
+      "start_time": "13:00",
+      "end_time": "14:00",
+      "what_to_do": "開車前往七星潭海灘。下午的光線應該很適合海岸攝影。事先查看潮汐圖以預測波浪模式。",
+      "interaction_target": "Car, GPS"
+    },    {
+      "start_time": "14:00",
+      "end_time": "16:00",
+      "what_to_do": "在七星潭海灘進行攝影拍攝。專注於捕捉戲劇性的岩石地形和海洋的力量。注意天氣和可能的強風。",
+      "interaction_target": "Camera, tripod, wind filter (if needed)"
+    },    {
+      "start_time": "16:00",
+      "end_time": "17:00",
+      "what_to_do": "開車回花蓮市區。在當地水果攤停下買一些當季水果 - 也許是芒果或鳳梨。",
+      "interaction_target": "Car, GPS"
+    },    {
+      "start_time": "17:00",
+      "end_time": "19:00",
+      "what_to_do": "回到民宿。將相機中的照片下載到筆記型電腦。開始初步篩選和基本編輯當天的照片（曝光、對比度、白平衡）。",
+      "interaction_target": "Laptop, card reader, photo editing software (Adobe Lightroom)"
+    },    {
+      "start_time": "19:00",
+      "end_time": "20:00",
+      "what_to_do": "在當地夜市用晚餐 - 東大門夜市。嚐試一些當地街頭美食，如蚵仔煎和珍珠奶茶。拍攝熱鬧的氛圍照片。",
+      "interaction_target": "Smartphone, camera"
+    },    {
+      "start_time": "20:00",
+      "end_time": "21:00",
+      "what_to_do": "在Instagram上發布幾張當天編輯好的照片。回覆留言和訊息。研究明天潛在的攝影地點 - 考慮天氣預報。",
+      "interaction_target": "Smartphone, Instagram app"
+    },    {
+      "start_time": "21:00",
+      "end_time": "22:00",
+      "what_to_do": "最後回顧照片，將所有影像備份到外接硬碟。根據預期天氣規劃明天的服裝和器材。",
+      "interaction_target": "External hard drive, laptop"
+    },    {
+      "start_time": "22:00",
+      "end_time": "23:00",
+      "what_to_do": "放鬆，閱讀一本書（台灣作家著作），準備睡覺。輕柔伸展。",
+      "interaction_target": "Book, yoga mat"
+    },    {
+      "start_time": "23:00",
+      "end_time": "06:30",
+      "what_to_do": "睡覺。",
+      "interaction_target": "Bed"
+    }
+  ]
+}
