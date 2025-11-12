@@ -1,7 +1,6 @@
 from discord.ext import commands
 from discord import Message
-from cog.utilFunc import devChk, loadToml
-import re, json
+import re
 import logging
 
 logger = logging.getLogger(__name__)

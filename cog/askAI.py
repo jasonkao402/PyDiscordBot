@@ -15,12 +15,12 @@ from discord import Color, Embed, Interaction, Message, app_commands, File
 from discord.ext import commands, tasks
 from opencc import OpenCC
 from cog.utilFunc import *
-from pydiscord import configToml
+from config_loader import configToml
 import json, re, base64
 from discord import SelectOption
 from discord.ui import View, Select
 
-MEMOLEN = 8
+MEMOLEN = 16
 READLEN = 20
 THRESHOLD = 0.8575
 TOKENPRESET = [150, 250, 700]
@@ -35,7 +35,7 @@ tempTime = tempTime.time()
 banList = []
 
 scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
-
+modelConfig = configToml.get("llmChat", {})
 class SDImage_APIHandler():
     def __init__(self):
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
@@ -60,7 +60,7 @@ class SDImage_APIHandler():
             "sampler_name": "DPM++ 2S a",
             "cfg_scale": 8.0,
         }
-        async with self.clientSession.post(configToml['linkSDImg'], json=payload) as request:
+        async with self.clientSession.post(modelConfig['linkSDImg'], json=payload) as request:
             response = await request.json()
         return response
     
@@ -81,17 +81,17 @@ class Ollama_APIHandler():
 
     async def chat(self, messages:list, botid:int, tokens:int) -> replyDict:
         json = {
-            "model": configToml["modelChat"],
+            "model": modelConfig["modelChat"],
             "messages": messages,
             "stream": False,
             "options": {
                 "num_predict": 640,
             }
-            | configToml["chatParams"],
+            | modelConfig["chatParams"],
         }
         # print(messages[-1])
 
-        async with self.clientSession.post(configToml['linkChat'], json=json) as request:
+        async with self.clientSession.post(modelConfig['linkChat'], json=json) as request:
             # request.raise_for_status()
             response = await request.json()
 
@@ -100,7 +100,7 @@ class Ollama_APIHandler():
 
         self.completion_tokens += response['eval_count']
         chatTok[botid] = response['prompt_eval_count'] + response['eval_count']
-        if chatTok[botid] > 3000:
+        if chatTok[botid] > 8000:
             chatMem[botid].popleft()
             chatMem[botid].popleft()
             print(f"token warning:{chatTok[botid]}, popped last msg.")
@@ -111,7 +111,7 @@ class Ollama_APIHandler():
         return rd
 
     async def ps(self):
-        async with self.clientSession.get(configToml['linkStatus']) as request:
+        async with self.clientSession.get(modelConfig['linkStatus']) as request:
             request.raise_for_status()
             response = await request.json()
         return response
@@ -178,6 +178,7 @@ class askAI(commands.Cog):
     async def on_message(self, message:Message):
         user, text = message.author, message.content
         uid, userName = user.id, user.name
+        displayName = user.display_name
         # userName = userName.replace('.', '').replace('#', '')
         userName = re.sub(r'[.#]', '', userName)
         n = min(len(text), READLEN)
@@ -235,7 +236,7 @@ class askAI(commands.Cog):
                     userName = 'Ning'
                     prompt = replyDict('user'  , f'嘎零 said {text}', userName)
                 else:
-                    prompt = replyDict('user'  , f'{userName} said {text}', userName)
+                    prompt = replyDict('user'  , f'{displayName} said {text}', userName)
                 
                 if message.attachments:
                     # with the individual images encoded in Base64
@@ -388,10 +389,10 @@ class askAI(commands.Cog):
                     SelectOption(
                         label=model,
                         value=model,
-                        description="目前使用" if model == configToml["modelChat"] else None,
-                        default=(model == configToml["modelChat"])
+                        description="目前使用" if model == modelConfig["modelChat"] else None,
+                        default=(model == modelConfig["modelChat"])
                     )
-                    for model in configToml["modelList"]
+                    for model in modelConfig["modelList"]
                 ]
                 super().__init__(
                     placeholder="選擇一個模型...",
@@ -402,7 +403,7 @@ class askAI(commands.Cog):
 
             async def callback(self, interaction2: Interaction):
                 selected_model = self.values[0]
-                configToml["modelChat"] = selected_model
+                modelConfig["modelChat"] = selected_model
                 await interaction2.response.edit_message(
                     content=f"已切換至 `{selected_model}`",
                     view=None
