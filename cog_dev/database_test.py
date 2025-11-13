@@ -39,6 +39,7 @@ class PersonaDatabase:
     def _init_db(self):
         """Initialize database tables"""
         with sqlite3.connect(self.db_path) as conn:
+            # Table to store personas
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS personas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +53,7 @@ class PersonaDatabase:
                     interaction_count INTEGER DEFAULT 0
                 )
             """)
-
+            # Table to track Discord users and their selected personas
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS discord_user (
                     user_id INTEGER PRIMARY KEY,
@@ -62,17 +63,40 @@ class PersonaDatabase:
                     FOREIGN KEY (selected_persona_id) REFERENCES personas (id)
                 )
             """)
+            # Table to track user-persona interactions
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_persona_interactions (
+                    user_id INTEGER NOT NULL,
+                    persona_id INTEGER NOT NULL,
+                    interaction_count INTEGER DEFAULT 1,
+                    last_interaction_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, persona_id),
+                    FOREIGN KEY (user_id) REFERENCES discord_user (user_id),
+                    FOREIGN KEY (persona_id) REFERENCES personas (id)
+                )
+            """)
 
-    def create_persona(self, persona: str, content: str, owner_id: int, visibility: PersonaVisibility) -> Persona:
-        """Create a new persona"""
+    def create_persona(self, persona: str, content: str, owner_id: int, visibility: PersonaVisibility) -> Optional[Persona]:
+        """Create a new persona, ensuring the user does not exceed the limit."""
+        # Check if the user already has 5 personas
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM personas
+                WHERE owner_id = ?
+            """, (owner_id,))
+            persona_count = cursor.fetchone()[0]
+
+        if persona_count >= 5:
+            print(f"User {owner_id} has reached the persona limit.")
+            return None
+
         now = datetime.now().isoformat(timespec='milliseconds')
-        
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 INSERT INTO personas (persona, content, owner_id, visibility, created_at, updated_at, last_interaction_recv_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (persona, content, owner_id, visibility.value, now, now, now))
-            
+
             persona_id = cursor.lastrowid
             return Persona(persona_id, persona, content, owner_id, visibility, now, now, now, 0)
     
@@ -253,18 +277,33 @@ class PersonaDatabase:
         """Increment the interaction count for a user and persona."""
         now = datetime.now().isoformat(timespec='milliseconds')
         with sqlite3.connect(self.db_path) as conn:
+            # 1. Update the Persona's global counts
             conn.execute("""
                 UPDATE personas
                 SET interaction_count = interaction_count + 1,
                     last_interaction_recv_at = ?
                 WHERE id = ?
             """, (now, persona_id))
+            
+            # 2. Update the User's global counts (already in your code)
             conn.execute("""
-                UPDATE discord_user
-                SET interaction_count = interaction_count + 1,
-                    last_interaction_send_at = ?
-                WHERE user_id = ?
-            """, (now, user_id))
+                INSERT INTO discord_user (user_id, interaction_count, last_interaction_send_at)
+                VALUES (?, 1, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    interaction_count = interaction_count + 1,
+                    last_interaction_send_at = excluded.last_interaction_send_at
+            """, (user_id, now))
+
+            # 3. Track the specific User-Persona interaction (The new logic)
+            # Use INSERT OR REPLACE or ON CONFLICT for UPSERT logic
+            # This logic will either insert a new record or update the existing one
+            conn.execute("""
+                INSERT INTO user_persona_interactions (user_id, persona_id, interaction_count, last_interaction_at)
+                VALUES (?, ?, 1, ?)
+                ON CONFLICT(user_id, persona_id) DO UPDATE SET
+                    interaction_count = interaction_count + 1,
+                    last_interaction_at = excluded.last_interaction_at
+            """, (user_id, persona_id, now))
 
 class PersonaManager:
     def __init__(self, db_path: str = "llm_character_cards.db"):

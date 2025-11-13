@@ -94,10 +94,6 @@ class askAI(commands.Cog):
         
     async def cog_unload(self):
         await self.ollamaAPI.close()
-        
-    # def build_persona_cache(self, personas: List[Persona]):
-    #     for p in personas:
-    #         self.persona_cache[p.id] = p
             
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     @app_commands.describe(persona="Name of the persona", content="Content of the persona", visibility="Visibility of the persona (public/private)")
@@ -108,6 +104,14 @@ class askAI(commands.Cog):
 
         # Create the persona
         _persona = self.db.create_persona(persona, content, user_id, visibility_enum)
+
+        if not _persona:
+            # Send a warning message if persona creation fails
+            await interaction.response.send_message(
+                content="You have reached the maximum limit of 5 personas. Please delete an existing persona to create a new one.",
+                ephemeral=True
+            )
+            return
 
         # Create an embed to confirm the creation
         embed = Embed(title=f"{_persona.persona} (#{_persona.id}) Created", color=Color.green())
@@ -282,7 +286,7 @@ class askAI(commands.Cog):
             #     tmp = sepLines((m['content'] for m in chatMem[aiNum]))
             #     return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
-    
+    # TODO: fix scoreboard command to use db interaction counts
     # @commands.hybrid_command(name='scoreboard')
     # async def _scoreboard(self, ctx: commands.Context):
     #     user = ctx.author
@@ -360,7 +364,7 @@ class askAI(commands.Cog):
         status = await self.ollamaAPI.ps()
         await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
     
-    # TODO: gotowork command: I want to create a gameplay mechanic similar to earning hourly wages with some added randomnesswhile staying true to the character's backstory
+    # TODO: gotowork command: I want to create a gameplay chatbot mechanic similar to earning hourly wages with some added randomnesswhile staying true to the character's backstory
     # @app_commands.command(name = 'schedule')
     # async def _schedule(self, interaction: Interaction, delay_time:int, text:Optional[str] = ''):
     #     dt = datetime.now(timezone.utc) + timedelta(seconds=int(delay_time))
