@@ -9,7 +9,7 @@ def loadToml():
     with open('./acc/config.toml', 'r+') as tomlFile:
         print('config.toml loaded')
         _configToml = toml.load(tomlFile)
-        print(json.dumps(_configToml, indent=2, ensure_ascii=False))
+        # print(json.dumps(_configToml, indent=2, ensure_ascii=False))
         return _configToml
 
 # Load the configuration once and make it accessible

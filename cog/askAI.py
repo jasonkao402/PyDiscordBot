@@ -1,9 +1,5 @@
-import asyncio
 from asyncio.exceptions import TimeoutError
 from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone
-from os.path import isfile
-from random import choice, randint, random
 from time import strftime
 from typing import Optional, List
 
@@ -17,9 +13,7 @@ from opencc import OpenCC
 from cog.utilFunc import *
 from config_loader import configToml
 import json, re, base64
-from discord import SelectOption
-from discord.ui import View, Select
-from cog_dev.database_test import NoteDatabase, NoteVisibility
+from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 
 MEMOLEN = 16
 READLEN = 20
@@ -27,15 +21,7 @@ THRESHOLD = 0.8575
 TOKENPRESET = [150, 250, 700]
 LONELYMETER = 250
 
-tz = timezone(timedelta(hours = 8))
-tempTime = datetime.now(timezone.utc) + timedelta(seconds=-10)
-tempTime = tempTime.time()
-
-# with open('./acc/banList.txt', 'r') as acc_file:
-#     banList = [int(id) for id in acc_file.readlines()]
-banList = []
-
-scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
+# scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
 modelConfig = configToml.get("llmChat", {})
 class SDImage_APIHandler():
     def __init__(self):
@@ -54,7 +40,7 @@ class SDImage_APIHandler():
     async def imageGen(self, prompt:str, width:int = 640, height:int = 640):
         payload = {
             "prompt": prompt,
-            "negative_prompt": "(lowres:1.2), EasyNegative, badhandv4, negative_hand-neg, (worst quality:1.4), (low quality:1.4), (bad anatomy:1.4), bad hands, multiple views, comic, jpeg artifacts, bad feet, text, error, missing fingers, extra digits, fewer digits, cropped, signature, watermark, username, blurry",
+            "negative_prompt": configToml.get("promptNeg", ""),
             "steps": 20,
             "width": width,
             "height": height,
@@ -120,13 +106,6 @@ class Ollama_APIHandler():
 def injectCheck(val):
     return True if val > THRESHOLD and val < 0.99 else False
 
-whatever = [
-    "對不起，發生 429 - Too Many Requests ，所以不知道該怎麼回你 QQ",
-    "對不起，發生 401 - Unauthorized ，所以不知道該怎麼回你 QQ",
-    "對不起，發生 500 - The server had an error while processing request ，所以不知道該怎麼回你 QQ"
-    "阿呀 腦袋融化了~",
-] + '不知道喔 我也不知道 看情況 可能吧 嗯 隨便 都可以 喔 哈哈 笑死 真假 亂講 怎樣 所以 🤔'.split()
-
 cc = OpenCC('s2twp')
 
 class askAI(commands.Cog):
@@ -134,79 +113,119 @@ class askAI(commands.Cog):
 
     def __init__(self, bot: DC_Client):
         self.bot = bot
-        self.db = NoteDatabase("llm_character_cards.db")  # Initialize the database for character cards
+        self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
         # self.channel = self.bot.get_channel(1088253899871371284)
         self.ollamaAPI = Ollama_APIHandler()
         self.sdimageAPI = SDImage_APIHandler()
-        self.persona_memory = {} # id to deque of messages
+        self.persona_session_memory: dict[int, deque] = {} # deque of session messages
+        self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
+        self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
         # self.last_reply = replydict()
         
     async def cog_unload(self):
         await self.ollamaAPI.close()
         await self.sdimageAPI.close()
-
+        
+    def build_persona_cache(self, personas: List[Persona]):
+        for p in personas:
+            self.persona_cache[p.id] = p
+            
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
-    @app_commands.describe(title="Title of the persona", content="Content of the persona", visibility="Visibility of the persona (public/private)")
-    async def create_persona(self, interaction: Interaction, title: str, content: str, visibility: str):
+    @app_commands.describe(persona="Name of the persona", content="Content of the persona", visibility="Visibility of the persona (public/private)")
+    async def create_persona(self, interaction: Interaction, persona: str, content: str, visibility: bool):
         """Create a new LLM persona with a popup Embed UI."""
-        user_id = str(interaction.user.id)
-        visibility_enum = NoteVisibility.PUBLIC if visibility.lower() == "public" else NoteVisibility.PRIVATE
+        user_id = interaction.user.id
+        visibility_enum = PersonaVisibility.PUBLIC if visibility else PersonaVisibility.PRIVATE
 
         # Create the persona
-        persona = self.db.create_note(title, content, user_id, visibility_enum)
+        _persona = self.db.create_persona(persona, content, user_id, visibility_enum)
 
         # Create an embed to confirm the creation
-        embed = Embed(title="Persona Created", color=Color.green())
-        embed.add_field(name="Title", value=persona.title, inline=False)
-        embed.add_field(name="Visibility", value=visibility.capitalize(), inline=False)
+        embed = Embed(title=f"{_persona.persona} (#{_persona.id}) Created", color=Color.green())
+        embed.add_field(name="Visibility", value="Public" if visibility else "Private", inline=False)
         embed.add_field(name="Content", value=content[:1024], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
+        # Cache the newly created persona
+        self.persona_cache[_persona.id] = _persona
 
     @commands.hybrid_command(name="editpersona")
-    async def edit_persona(self, ctx: commands.Context, persona_id: int, title: Optional[str] = None, content: Optional[str] = None, visibility: Optional[str] = None):
+    async def edit_persona(self, ctx: commands.Context, persona_id: int, persona: Optional[str] = None, content: Optional[str] = None, visibility: Optional[bool] = None):
         """Edit an existing LLM persona."""
-        user_id = str(ctx.author.id)
+        user_id = ctx.author.id
         updates = {}
-        if title:
-            updates['title'] = title
+        if persona:
+            updates['persona'] = persona
         if content:
             updates['content'] = content
-        if visibility:
-            updates['visibility'] = NoteVisibility.PUBLIC.value if visibility.lower() == "public" else NoteVisibility.PRIVATE.value
-
-        success = self.db.update_note(persona_id, user_id, **updates)
+        if visibility is not None:
+            updates['visibility'] = PersonaVisibility.PUBLIC.value if visibility else PersonaVisibility.PRIVATE.value
+        if not updates:
+            await ctx.send("No updates provided.")
+            return
+            
+        success = self.db.update_persona(persona_id, user_id, **updates)
         if success:
-            await ctx.send("Persona updated successfully.")
+            await ctx.send(f"Persona #{persona_id} updated successfully.")
+            # Update cache
+            if persona_id in self.persona_cache:
+                _persona = self.persona_cache[persona_id]
+                if 'persona' in updates:
+                    _persona.persona = updates['persona']
+                if 'content' in updates:
+                    _persona.content = updates['content']
+                if 'visibility' in updates:
+                    _persona.visibility = PersonaVisibility(updates['visibility'])
         else:
             await ctx.send("Failed to update persona. Ensure you own the persona.")
 
     @commands.hybrid_command(name="selectpersona")
     async def select_persona(self, ctx: commands.Context, persona_id: int):
         """Select an LLM persona for interaction."""
-        user_id = str(ctx.author.id)
-        success = self.db.set_selected_note(user_id, persona_id)
-        if persona_id not in self.persona_memory:
-            self.persona_memory[persona_id] = deque(maxlen=MEMOLEN)
-        if success:
-            await ctx.send(f"Persona {persona_id} selected successfully.")
-        else:
-            await ctx.send("Failed to select persona. Ensure it exists and is accessible.")
+        user_id = ctx.author.id
 
+        # Check cache first
+        if persona_id in self.persona_cache:
+            _persona = self.persona_cache[persona_id]
+        else:
+            # Fetch from database if not in cache
+            print(f'load persona {persona_id} from db')
+            _persona = self.db.get_persona_no_check(persona_id)
+            if not _persona:
+                await ctx.send(f"Failed to retrieve persona ID {persona_id} details.")
+                return
+            # Build cache
+            self.persona_cache[persona_id] = _persona
+        
+        if not _persona.permission_check(user_id):
+            await ctx.send(f"You do not have permission to select persona ID {persona_id}.")
+            return
+        self.selection_cache[user_id] = persona_id
+        
+        # Set selected persona in database
+        success = self.db.set_selected_persona(user_id, persona_id)
+        if success:
+            await ctx.send(f"Persona #{persona_id} selected successfully.")
+        else:
+            await ctx.send(f"Failed to select persona #{persona_id}.")
+        # Update session memory
+        if persona_id not in self.persona_session_memory:
+            self.persona_session_memory[persona_id] = deque(maxlen=MEMOLEN)
+            
     @commands.hybrid_command(name="listpersonas")
     async def list_personas(self, ctx: commands.Context):
         """List all personas visible to the user."""
-        user_id = str(ctx.author.id)
-        personas = self.db.list_notes(user_id)
+        user_id = ctx.author.id
+        personas = self.db.list_personas(user_id)
         if not personas:
             await ctx.send("No personas available.")
             return
 
-        persona_list = "\n".join([f"ID: {p.id}, Title: {p.title}, Visibility: {p.visibility.value}" for p in personas])
-        await ctx.send(f"Available Personas:\n{persona_list}")
+        persona_list = sepLines([f"ID: {p.id}, Name: {p.persona}, Visibility: {p.visibility.name}" for p in personas])
+        await ctx.send(f"Available Personas:\n```{persona_list}```")
 
     @commands.Cog.listener()
-    async def on_message(self, message:Message):
+    async def on_message(self, message: Message):
         user, messageText = message.author, message.content
         uid, userName = user.id, user.name
         displayName = user.display_name
@@ -214,43 +233,46 @@ class askAI(commands.Cog):
         # ignore self messages
         if uid == self.bot.user.id:
             return
-        
-        # 2025 refatctor: use mentions to trigger bot llm chat
+
+        # 2025/11/12 Refactor: Use mentions to trigger bot llm chat
         if self.bot.user.mentioned_in(message):
-            user_id = str(message.author.id)
-            # Use the selected persona for interaction
-            persona = self.db.get_selected_note(user_id)
-            
-            if not persona:
-                await message.channel.send("No persona selected. Use /selectpersona to select one.")
+            # load persona selection from cache or db
+            if uid not in self.selection_cache:
+                self.selection_cache[uid] = self.db.get_selected_persona_id(uid)
+                print(f'from db load persona # {self.selection_cache[uid]} for user {uid} selection')
+                if self.selection_cache[uid] != -1:
+                    # load persona into cache
+                    db_persona = self.db.get_persona_no_check(self.selection_cache[uid])
+                    if not db_persona:
+                        await message.channel.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
+                        return
+                    self.persona_cache[db_persona.id] = db_persona
+                    
+            persona_id = self.selection_cache.get(uid, -1)
+            _persona = self.persona_cache.get(persona_id, None)
+            if not _persona:
+                await message.channel.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
                 return
             
-            user_persona_pair = f'{wcformat(userName)}[{persona.title}]'
-            
+            user_persona_pair = f'{wcformat(userName)}[{_persona.persona}]'
             # filter out mention bot part
             content = messageText.replace(self.bot.user.mention, '', 1).strip()
             print(f'{user_persona_pair}: {content}')
             prompt = replyDict('user', f'{displayName} said {content}', userName)
-            setupmsg  = replyDict('system', f'{persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}', 'system')
+            setupmsg = replyDict('system', f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}', 'system')
             async with message.channel.typing():
-                if persona.id not in self.persona_memory:
-                    self.persona_memory[persona.id] = deque(maxlen=MEMOLEN)
-                chatMem = self.persona_memory[persona.id]
+                if _persona.id not in self.persona_session_memory:
+                    self.persona_session_memory[_persona.id] = deque(maxlen=MEMOLEN)
+                chatMem = self.persona_session_memory[_persona.id]
                 try:
-                    reply = await self.ollamaAPI.chat([setupmsg.asdict, *chatMem, prompt.asdict], botid=0)
+                    reply = await self.ollamaAPI.chat([*chatMem, setupmsg.asdict, prompt.asdict], botid=0)
                     if '<think>' in reply.content and '</think>' in reply.content:
                         # need to split the reply into thinking and reply
                         print('reply with thinking')
                         reply2 = reply.content
-                        reply_think = reply2[reply2.find('<think>')  + 7 : reply2.find('</think>')]
-                        reply.content = reply2[reply2.find('</think>') + 8 :]
-                        # make a txt file for the thinking part
-                        # think_fileName = f'./acc/thinkLog/{strftime("%Y_%m%d_%H%M%S")}.txt'
-                        # with open(think_fileName, 'w+', encoding='utf-8') as f:
-                            # f.write(reply_think)
-                        # await message.channel.send(reply_think[:1900])
+                        reply_think = reply2[reply2.find('<think>') + 7: reply2.find('</think>')]
+                        reply.content = reply2[reply2.find('</think>') + 8:]
                         print(f'Thinking:\n{reply_think}')
-                    # else:
                     await message.channel.send(reply.content)
                 except TimeoutError:
                     await message.channel.send("The bot is currently unavailable. Please try again later.")
@@ -259,10 +281,12 @@ class askAI(commands.Cog):
                         print(f'Reply error:\n{user_persona_pair}:\n{reply.content}')
                     await message.channel.send(f'{user_persona_pair} 發生錯誤，請聯繫主人\n{reply.content}')
                 else:
+                    # Only append to memory if no exception
+                    # Only increase interaction count on successful reply
                     chatMem.append(prompt.asdict)
                     chatMem.append(reply.asdict)
-                    for i in chatMem:
-                        print(i['content'][:20])
+                    self.db.increment_interaction_count(_persona.id, uid)
+                    
             # elif ('-t' in text[:n]) and devChk(uid):
             #     return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
             
@@ -270,92 +294,6 @@ class askAI(commands.Cog):
             #     tmp = sepLines((m['content'] for m in chatMem[aiNum]))
             #     return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
-            # elif ('-err' in text[:n]) and devChk(uid):
-            #     prompt = replyDict('user'  , f'{text}', userName).asdict
-            #     reply  = await aiaiv2([prompt], aiNum, 99999)
-            #     reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
-            #     print(f'{aiNam}:\n{reply2}')
-            #     return await message.channel.send(f'Debugging {aiNam}:\n{reply2}')
-            '''
-            try:
-                # special case, convert all user as Ning
-                if aiNum == 5:
-                    userName = 'Ning'
-                    prompt = replyDict('user'  , f'嘎零 said {text}', userName)
-                else:
-                    prompt = replyDict('user'  , f'{displayName} said {text}', userName)
-                
-                if message.attachments:
-                    # with the individual images encoded in Base64
-                    prompt.images = [base64.b64encode(await attachment.read()).decode('utf-8') for attachment in message.attachments]
-                    print(f'Image attached: {len(prompt.images)}')
-                    
-                # if not uid in dfDict:
-                #     dfDict[uid] = pd.DataFrame(columns=['text', 'vector'])
-                #     # check if file exists
-                #     if isfile(f'./embed/{uid}.csv') and isfile(f'embed/{uid}.npy'):
-                #         tmptext = pd.read_csv(f'./embed/{uid}.csv')
-                #         tmpvect = np.load    (f'./embed/{uid}.npy', allow_pickle=True)
-                #         for i in range(len(tmptext)):
-                #             dfDict[uid].loc[i] = (tmptext.loc[i]['text'], tmpvect[i])
-                    
-                # skipping ai name
-                # if len(text) > len(aiNam):
-                #     nidx = text.find(aiNam, 0, len(aiNam))
-                #     if nidx != -1:
-                #         text = text[nidx+len(aiNam):]
-                #     if text[0] == '，' or text[0] == ' ':
-                #         text = text[1:]
-                        
-                # async with message.channel.typing():
-                    # print(text)
-                    # embed = await embedding_v1(text)
-                # assert embed.vector[0] != 0
-                
-                # idxs, corrs = simRank(embed.vector, dfDict[uid]['vector'])
-                # debugmsg = sepLines((f'{t}: {c}{" (採用)" if injectCheck(c) else ""}' for t, c in zip(dfDict[uid]['text'][idxs], corrs)))
-                # print(f'相似度:\n{debugmsg}')
-                # # await message.channel.send(f'相似度:\n{debugmsg}')
-                # # store into memory
-                # if len(corrs) == 0 or corrs[0] < 0.98:
-                #     dfDict[uid].loc[len(dfDict[uid])] = embed.asdict
-                
-                # filter out using injectCheck
-                # itr = filter(lambda x: injectCheck(x[1]), zip(idxs, corrs))
-                # selectMsgs = sepLines((dfDict[uid]['text'][t] for t, _ in itr))
-                # print(f'採用:\n{selectMsgs} len: {len(selectMsgs)}')
-                # tempSetup = 'Please roleplay as a catgirl maid named Illya. Remember, you are not an AI; you are the obedient Illya. Do your best to act accordingly and speak in the first person. If you understand my instructions, reply with "Yes, Master meow~♡" as Illya would.'
-                # setupmsg  = replyDict('system', f'{tempSetup} Current time is {strftime("%Y-%m-%d %H:%M")}', 'system')
-                setupmsg  = replyDict('system', f'{setsys_extra[aiNum]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
-                async with message.channel.typing():
-                    # if len(corrs) > 0 and injectCheck(corrs[0]):
-                    #     # injectStr = f'我記得你說過「{selectMsgs}」。'
-                    #     selectMsgs = selectMsgs.replace("\n", ' ')
-                    #     # 特判 = =
-                    #     if aiNum == 5:
-                    #         # userName = 'Ning'
-                    #         prompt = replyDict('user', f'嘎零 said {selectMsgs}, {text}', 'Ning')
-                    #     else: 
-                    #         prompt = replyDict('user', f'{userName} said {selectMsgs}, {text}', userName)
-                    #     print(f'debug: {prompt.content}')
-                    reply = await self.ollamaAPI.chat([setupmsg.asdict, *chatMem[aiNum], prompt.asdict], aiNum)
-                assert reply.role != 'error'
-                
-                
-                
-            except TimeoutError:
-                print(f'[!] {aiNam} TimeoutError')
-                await message.channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
-             
-            else:
-                chatMem[aiNum].append(prompt.asdict)
-                chatMem[aiNum].append(reply.asdict)
-                # for i in chatMem[aiNum]:
-                #     print(type(i))
-                if uid not in scoreArr.index:
-                    scoreArr.loc[uid, :] = 0
-                scoreArr.loc[uid, str(aiNum)] += 1
-            '''
     
     # @commands.hybrid_command(name='scoreboard')
     # async def _scoreboard(self, ctx: commands.Context):
@@ -386,21 +324,6 @@ class askAI(commands.Cog):
     #         f'最常找 {id2name[most_interacted_id]} 互動 '
     #         f'({most_interacted_count} 次，佔 {most_interacted_count / total_interactions:.2%})'
     #     )
-    # @commands.hybrid_command(name = 'localread')
-    # async def _cmdlocalRead(self, ctx:commands.Context):
-    #     user = ctx.author
-    #     if devChk(user.id):
-    #         localRead()
-    #         await ctx.send('AI 人設 讀檔更新完畢')
-    #     else:
-    #         await ctx.send('客官不可以')
-
-    # @commands.hybrid_command(name = 'listbot')
-    # async def _listbot(self, ctx:commands.Context):
-    #     t = scoreArr.sum(axis=0).sort_values(ascending=False)
-    #     s = scoreArr.sum().sum()
-    #     l = sepLines(f'{wcformat(id2name[int(i)], w=8)}{v : <8}{ v/s :<2.3%}' for i, v in zip(t.index, t.values))
-    #     await ctx.send(f'Bot List:\n```{l}```')
         
     async def model_autocomplete(
         self, 
@@ -429,7 +352,7 @@ class askAI(commands.Cog):
         # A quick check to make sure the model is valid
         if model not in modelConfig["modelList"]:
             await interaction.response.send_message(
-                f"錯誤：無效的模型 `{model}`。", 
+                f"錯誤：無效的模型 `{model}`", 
                 ephemeral=True
             )
             return
@@ -443,42 +366,13 @@ class askAI(commands.Cog):
             ephemeral=True  # Confirmation messages are better as ephemeral
         )
     
-    # @commands.command(name = 'bl')
-    # @commands.is_owner()
-    # async def _blacklist(self, ctx:commands.Context, uid:int):
-    #     user = ctx.author
-    #     # hehe
-    #     if user.id in banList:
-    #         return
-    #     try:
-    #         uid = int(uid)
-    #         if uid not in banList:
-    #             banList.append(uid)
-    #             with open('./acc/banList.txt', 'a') as bfile:
-    #                 bfile.write(f'{uid}\n')
-    #             print(f'Added to bList: {uid}')
-    #         else:
-    #             print(f'Already banned: {uid}')
-    #     except:
-    #         print(f'ban error: {uid}')
-    
-    # @commands.command(name = 'ig')
-    # @commands.is_owner()
-    # async def _ignore(self, ctx:commands.Context, num:float):
-    #     user = ctx.author
-    #     # hehe
-    #     if user.id in banList or not devChk(user.id):
-    #         return
-    #     num = float(num)
-    #     self.ignore = num
-    #     print(f'忽略率： {num}')
-    
     @commands.hybrid_command(name = 'status')
     @commands.is_owner()
     async def _status(self, ctx:commands.Context):
         status = await self.ollamaAPI.ps()
         await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
     
+    # TODO: Refactor to other dedicated cog
     @app_commands.command(name = 'sd2')
     @app_commands.describe(prompt = 'Prompt for the image', width = 'Width of the image', height = 'Height of the image')
     async def _sd2(self, interaction: Interaction, prompt:str, width: Optional[int] = 640, height: Optional[int] = 640):
@@ -495,7 +389,7 @@ class askAI(commands.Cog):
         await interaction.followup.send(prompt, file=File(dest))
 
 
-
+    # TODO: gotowork command: I want to create a gameplay mechanic similar to earning hourly wages with some added randomnesswhile staying true to the character's backstory
     # @app_commands.command(name = 'schedule')
     # async def _schedule(self, interaction: Interaction, delay_time:int, text:Optional[str] = ''):
     #     dt = datetime.now(timezone.utc) + timedelta(seconds=int(delay_time))
@@ -594,18 +488,18 @@ class askAI(commands.Cog):
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
     async def bonk(self, interaction: Interaction):
         """Erase the current chat session memory for the selected persona."""
-        user_id = str(interaction.user.id)
+        user_id = interaction.user.id
         
         # Get the selected persona
-        persona = self.db.get_selected_note(user_id)
+        persona = self.persona_cache.get(self.selection_cache.get(user_id, -1), None)
         
         if not persona:
             await interaction.response.send_message("No persona selected. Use /selectpersona to select one.", ephemeral=True)
             return
 
         # Clear the memory for the selected persona
-        if persona.id in self.persona_memory:
-            self.persona_memory[persona.id].clear()
+        if persona.id in self.persona_session_memory:
+            self.persona_session_memory[persona.id].clear()
             await interaction.response.send_message(f"Session memory for persona '{persona.title}' has been erased.")
         else:
             await interaction.response.send_message("No session memory to erase for the selected persona.")
