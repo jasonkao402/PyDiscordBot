@@ -286,36 +286,42 @@ class askAI(commands.Cog):
             #     tmp = sepLines((m['content'] for m in chatMem[aiNum]))
             #     return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
             
-    # TODO: fix scoreboard command to use db interaction counts
-    # @commands.hybrid_command(name='scoreboard')
-    # async def _scoreboard(self, ctx: commands.Context):
-    #     user = ctx.author
-    #     uid, user_name = user.id, user.name
+    @commands.hybrid_command(name='scoreboard')
+    async def _scoreboard(self, ctx: commands.Context):
+        """Display interaction statistics and leaderboard."""
+        user = ctx.author
+        uid, user_name = user.id, user.name
 
-    #     # Check if the user has interacted with any AI
-    #     if uid not in scoreArr.index:
-    #         return await ctx.send(f'{user_name} 尚未和AI們對話過')
+        # Check if the user has interacted with any AI
+        user_stats = self.db.get_user_interaction_stats(uid)
+        if not user_stats:
+            return await ctx.send(f'{user_name} 尚未和AI們對話過')
 
-    #     # Retrieve user interaction data
-    #     user_scores = scoreArr.loc[uid]
-    #     total_interactions = user_scores.sum()
-    #     most_interacted_count = user_scores.max()
-    #     most_interacted_id = int(user_scores.idxmax())
+        # Retrieve user interaction data
+        total_interactions = user_stats['total_interactions']
+        most_interacted_count = user_stats['most_interacted_count']
+        most_interacted_name = user_stats['most_interacted_persona_name']
 
-    #     # Retrieve top 5 users with the most interactions
-    #     top_users = scoreArr.sum(axis=1).sort_values(ascending=False).head(5)
-    #     top_users_list = sepLines(
-    #         f'{username.name if (username := self.bot.get_user(user_id)) else "ERROR"}: {count}'
-    #         for user_id, count in zip(top_users.index, top_users.values)
-    #     )
+        # Retrieve top 5 users with the most interactions
+        top_users = self.db.get_top_users(limit=5)
+        top_users_list = sepLines(
+            f'{username.name if (username := self.bot.get_user(user_id)) else "ERROR"}: {count}'
+            for user_id, count in top_users
+        )
 
-    #     # Prepare and send the scoreboard message
-    #     await ctx.send(
-    #         f'```{top_users_list}```\n'
-    #         f'{user_name}共對話 {total_interactions} 次，'
-    #         f'最常找 {id2name[most_interacted_id]} 互動 '
-    #         f'({most_interacted_count} 次，佔 {most_interacted_count / total_interactions:.2%})'
-    #     )
+        # Prepare and send the scoreboard message
+        if most_interacted_name:
+            await ctx.send(
+                f'```{top_users_list}```\n'
+                f'{user_name}共對話 {total_interactions} 次，'
+                f'最常找 {most_interacted_name} 互動 '
+                f'({most_interacted_count} 次，佔 {most_interacted_count / total_interactions:.2%})'
+            )
+        else:
+            await ctx.send(
+                f'```{top_users_list}```\n'
+                f'{user_name}共對話 {total_interactions} 次'
+            )
         
     async def model_autocomplete(
         self, 
