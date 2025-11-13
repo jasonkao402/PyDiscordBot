@@ -23,34 +23,6 @@ LONELYMETER = 250
 
 # scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
 modelConfig = configToml.get("llmChat", {})
-class SDImage_APIHandler():
-    def __init__(self):
-        self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
-        self.clientSession = ClientSession(connector=self.connector)
-    
-    async def close(self):
-        if not self.clientSession.closed:
-            await self.clientSession.close()
-            print("SDImage Client session closed")
-            
-        if not self.connector.closed:
-            await self.connector.close()
-            print("SDImage Connector closed")
-
-    async def imageGen(self, prompt:str, width:int = 640, height:int = 640):
-        payload = {
-            "prompt": prompt,
-            "negative_prompt": configToml.get("promptNeg", ""),
-            "steps": 20,
-            "width": width,
-            "height": height,
-            "sampler_name": "DPM++ 2S a",
-            "cfg_scale": 8.0,
-        }
-        async with self.clientSession.post(modelConfig['linkSDImg'], json=payload) as request:
-            response = await request.json()
-        return response
-    
 class Ollama_APIHandler():
     def __init__(self):
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
@@ -114,21 +86,18 @@ class askAI(commands.Cog):
     def __init__(self, bot: DC_Client):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
-        # self.channel = self.bot.get_channel(1088253899871371284)
+        
         self.ollamaAPI = Ollama_APIHandler()
-        self.sdimageAPI = SDImage_APIHandler()
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
-        # self.last_reply = replydict()
         
     async def cog_unload(self):
         await self.ollamaAPI.close()
-        await self.sdimageAPI.close()
         
-    def build_persona_cache(self, personas: List[Persona]):
-        for p in personas:
-            self.persona_cache[p.id] = p
+    # def build_persona_cache(self, personas: List[Persona]):
+    #     for p in personas:
+    #         self.persona_cache[p.id] = p
             
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     @app_commands.describe(persona="Name of the persona", content="Content of the persona", visibility="Visibility of the persona (public/private)")
@@ -223,7 +192,26 @@ class askAI(commands.Cog):
 
         persona_list = sepLines([f"ID: {p.id}, Name: {p.persona}, Visibility: {p.visibility.name}" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
+    
+    @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
+    async def bonk(self, interaction: Interaction):
+        """Erase the current chat session memory for the selected persona."""
+        user_id = interaction.user.id
+        
+        # Get the selected persona
+        _persona = self.persona_cache.get(self.selection_cache.get(user_id, -1), None)
 
+        if not _persona:
+            await interaction.response.send_message("No persona selected. Use /selectpersona to select one.", ephemeral=True)
+            return
+
+        # Clear the memory for the selected persona
+        if _persona.id in self.persona_session_memory:
+            self.persona_session_memory[_persona.id].clear()
+            await interaction.response.send_message(f"Session memory for persona '{_persona.persona}' has been erased.")
+        else:
+            await interaction.response.send_message("No session memory to erase for the selected persona.")
+            
     @commands.Cog.listener()
     async def on_message(self, message: Message):
         user, messageText = message.author, message.content
@@ -372,23 +360,6 @@ class askAI(commands.Cog):
         status = await self.ollamaAPI.ps()
         await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
     
-    # TODO: Refactor to other dedicated cog
-    @app_commands.command(name = 'sd2')
-    @app_commands.describe(prompt = 'Prompt for the image', width = 'Width of the image', height = 'Height of the image')
-    async def _sd2(self, interaction: Interaction, prompt:str, width: Optional[int] = 640, height: Optional[int] = 640):
-        # clip w and h to 512 - 1024, in step of 16
-        width = max(512, min(1024, (width + 8) // 16 * 16))
-        height = max(512, min(1024, (height + 8) // 16 * 16))
-
-        await interaction.response.defer()
-        response = await self.sdimageAPI.imageGen(prompt, width, height)
-        for image in response['images']:
-            dest = f'acc/imgLog/{strftime("%Y_%m%d_%H%M")}.png'
-            with open(dest, 'wb') as f:
-                f.write(base64.b64decode(image))
-        await interaction.followup.send(prompt, file=File(dest))
-
-
     # TODO: gotowork command: I want to create a gameplay mechanic similar to earning hourly wages with some added randomnesswhile staying true to the character's backstory
     # @app_commands.command(name = 'schedule')
     # async def _schedule(self, interaction: Interaction, delay_time:int, text:Optional[str] = ''):
@@ -485,34 +456,9 @@ class askAI(commands.Cog):
     #         # await channel.send(f'{talkList[self.loneMsg % len(talkList)]}\n({-consume} energy) (meter: {self.loneMeter}/{limit}))')
     #         self.loneMsg += 1
 
-    @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
-    async def bonk(self, interaction: Interaction):
-        """Erase the current chat session memory for the selected persona."""
-        user_id = interaction.user.id
-        
-        # Get the selected persona
-        persona = self.persona_cache.get(self.selection_cache.get(user_id, -1), None)
-        
-        if not persona:
-            await interaction.response.send_message("No persona selected. Use /selectpersona to select one.", ephemeral=True)
-            return
-
-        # Clear the memory for the selected persona
-        if persona.id in self.persona_session_memory:
-            self.persona_session_memory[persona.id].clear()
-            await interaction.response.send_message(f"Session memory for persona '{persona.title}' has been erased.")
-        else:
-            await interaction.response.send_message("No session memory to erase for the selected persona.")
 
 async def setup(bot:commands.Bot):
-    # localRead(True)
     await bot.add_cog(askAI(bot))
 
 async def teardown(bot:commands.Bot):
     print('ai saved')
-    # print(scoreArr)
-    # scoreArr.to_csv('./acc/scoreArr.csv')
-    # for k in dfDict.keys():
-    #     print(f'UID {k}: {len(dfDict[k])}')
-    #     dfDict[k]['text'].to_csv(f'./embed/{k}.csv', index=False)
-    #     np.save(f'./embed/{k}.npy', dfDict[k]['vector'].to_numpy())

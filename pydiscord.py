@@ -14,7 +14,7 @@ def run_discord():
     global client, COG_LIST, LOADED_COG
     
     # PreLoad
-    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'msglog', 'personality'}
+    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'msglog', 'personality', 'drawing_sd'}
     cog_folder = os.path.join(currWorkDir, 'cog')
     for file in os.listdir(cog_folder):
         if file.endswith('.py'):
