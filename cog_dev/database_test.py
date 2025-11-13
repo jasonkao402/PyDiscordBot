@@ -304,6 +304,61 @@ class PersonaDatabase:
                     interaction_count = interaction_count + 1,
                     last_interaction_at = excluded.last_interaction_at
             """, (user_id, persona_id, now))
+    
+    def get_user_interaction_stats(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get interaction statistics for a specific user."""
+        with sqlite3.connect(self.db_path) as conn:
+            # Get user's total interaction count
+            cursor = conn.execute("""
+                SELECT interaction_count
+                FROM discord_user
+                WHERE user_id = ?
+            """, (user_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+            
+            total_interactions = row[0]
+            
+            # Get user's most interacted persona
+            cursor = conn.execute("""
+                SELECT p.id, p.persona, upi.interaction_count
+                FROM user_persona_interactions upi
+                JOIN personas p ON upi.persona_id = p.id
+                WHERE upi.user_id = ?
+                ORDER BY upi.interaction_count DESC
+                LIMIT 1
+            """, (user_id,))
+            
+            most_interacted = cursor.fetchone()
+            
+            if most_interacted:
+                return {
+                    'total_interactions': total_interactions,
+                    'most_interacted_persona_id': most_interacted[0],
+                    'most_interacted_persona_name': most_interacted[1],
+                    'most_interacted_count': most_interacted[2]
+                }
+            else:
+                return {
+                    'total_interactions': total_interactions,
+                    'most_interacted_persona_id': None,
+                    'most_interacted_persona_name': None,
+                    'most_interacted_count': 0
+                }
+    
+    def get_top_users(self, limit: int = 5) -> List[tuple]:
+        """Get top users by total interaction count."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT user_id, interaction_count
+                FROM discord_user
+                ORDER BY interaction_count DESC
+                LIMIT ?
+            """, (limit,))
+            
+            return cursor.fetchall()
 
 class PersonaManager:
     def __init__(self, db_path: str = "llm_character_cards.db"):
