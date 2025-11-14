@@ -8,7 +8,7 @@ from typing import Optional
 from cog.utilFunc import clamp
 import base64
 import asyncio
-
+from datetime import datetime, timezone, timedelta
 class SDImage_APIHandler():
     def __init__(self):
         self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
@@ -48,6 +48,7 @@ class drawing_sd(commands.Cog):
         self.bot = bot
         self.sdimageAPI = SDImage_APIHandler()
         self.isEnabled = True
+        self.reenable_timestamp = None
         
     # TODO: Refactor to other dedicated cog
     @app_commands.command(name = 'sd2')
@@ -57,7 +58,7 @@ class drawing_sd(commands.Cog):
     async def _sd2(self, interaction: Interaction, prompt:str, width: Optional[int] = 640, height: Optional[int] = 640):
         
         if self.isEnabled is False:
-            await interaction.response.send_message("Drawing cog is currently disabled.", ephemeral=True)
+            await interaction.response.send_message(f"Drawing cog is currently disabled.\nRe-enable at <t:{int(self.reenable_timestamp.timestamp())}:R>", ephemeral=True)
             return
         
         # clip w and h to 512 - 1024, in step of 16
@@ -80,7 +81,7 @@ class drawing_sd(commands.Cog):
         if toggle is not None:
             self.isEnabled = toggle
             status = "enabled" if toggle else "disabled"
-            await interaction.response.send_message(f"Drawing cog has been {status}.", ephemeral=True)
+            await interaction.response.send_message(f"Drawing cog has been {status}.")
             return
         
         if duration <= 0:
@@ -88,12 +89,16 @@ class drawing_sd(commands.Cog):
             return
 
         self.isEnabled = False
-        await interaction.response.send_message(f"Drawing cog has been disabled for {duration} minutes.", ephemeral=True)
+        # convert to discord relative timestamp <t:1763075460:R>
+        self.reenable_timestamp = datetime.now(timezone.utc) + timedelta(minutes=duration)
+        timestamp = int(self.reenable_timestamp.timestamp())
+        await interaction.response.send_message(f"Drawing cog has been disabled for {duration} minutes. Re-enabling at <t:{timestamp}:R>")
 
         # Re-enable the cog after the specified duration
         async def reenable():
             await asyncio.sleep(duration * 60)  # Convert minutes to seconds
             self.isEnabled = True
+            self.reenable_timestamp = None
             print("Drawing cog has been re-enabled.")
 
         # Start the re-enabling task
