@@ -38,8 +38,8 @@ class SDImage_APIHandler():
             response = await request.json()
         return response
 
-# Rate limit per hour
-RATELIMIT_SDIMAGE_API = 6
+# Rate limit per 30min
+RATELIMIT_SDIMAGE_API = 5
 
 class drawing_sd(commands.Cog):
     __slots__ = ('bot')
@@ -53,12 +53,13 @@ class drawing_sd(commands.Cog):
     # TODO: Refactor to other dedicated cog
     @app_commands.command(name = 'sd2')
     @app_commands.describe(prompt = 'Prompt for the image', width = 'Width of the image', height = 'Height of the image')
-    @commands.cooldown(RATELIMIT_SDIMAGE_API, 3600.0, commands.BucketType.user)
+    @commands.cooldown(RATELIMIT_SDIMAGE_API, 1800.0, commands.BucketType.user)
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=False)
     async def _sd2(self, interaction: Interaction, prompt:str, width: Optional[int] = 640, height: Optional[int] = 640):
         
         if self.isEnabled is False:
-            await interaction.response.send_message(f"Drawing cog is currently disabled.\nRe-enable at <t:{int(self.reenable_timestamp.timestamp())}:R>", ephemeral=True)
+            extra = "unknown (notify bot owner!)" if self.reenable_timestamp is None else f"<t:{int(self.reenable_timestamp.timestamp())}:R>"
+            await interaction.response.send_message(f"Drawing cog is currently disabled.\nRe-enable time: {extra}", ephemeral=True)
             return
         
         # clip w and h to 512 - 1024, in step of 16
@@ -75,6 +76,7 @@ class drawing_sd(commands.Cog):
     
     @app_commands.command(name = 'sdtoggle')
     @app_commands.describe(duration = 'Duration to temporarily disable the drawing cog (in minutes)')
+    @commands.max_concurrency(1, per=commands.BucketType.default, wait=False)
     @commands.is_owner()
     async def _sdtoggle(self, interaction: Interaction, duration: Optional[int] = 0, toggle: Optional[bool] = None):
         """Temporarily disable the drawing cog"""
@@ -92,7 +94,7 @@ class drawing_sd(commands.Cog):
         # convert to discord relative timestamp <t:1763075460:R>
         self.reenable_timestamp = datetime.now(timezone.utc) + timedelta(minutes=duration)
         timestamp = int(self.reenable_timestamp.timestamp())
-        await interaction.response.send_message(f"Drawing cog has been disabled for {duration} minutes. Re-enabling at <t:{timestamp}:R>")
+        await interaction.response.send_message(f"Drawing cog has been disabled for {duration} minutes. Re-enable time: <t:{timestamp}:R>")
 
         # Re-enable the cog after the specified duration
         async def reenable():

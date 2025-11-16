@@ -14,6 +14,7 @@ from cog.utilFunc import *
 from config_loader import configToml
 import json, re, base64
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
+import openai
 
 MEMOLEN = 16
 READLEN = 20
