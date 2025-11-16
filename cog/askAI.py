@@ -23,17 +23,19 @@ class askAI(commands.Cog):
     def __init__(self, bot: DC_Client):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
-        
-        self.llm_api = openai.AsyncOpenAI(
+        self.round_robin_api_index = 0
+        self.round_robin_api_collection = configToml['apiToken'].get('megaLLM', [])
+        self.llm_apis = [openai.AsyncOpenAI(
             base_url = modelConfig["linkBase"],
-            api_key = configToml['apiToken']['megaLLM'][0],
-        )
+            api_key = api_key,
+        ) for api_key in self.round_robin_api_collection]
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
         
     async def cog_unload(self):
-        await self.llm_api.close()
+        for llm_api in self.llm_apis:
+            await llm_api.close()
     
     async def llm_chat_v3(self, messages):
         """
@@ -67,7 +69,7 @@ class askAI(commands.Cog):
         """
         
         try:
-            completion = await self.llm_api.chat.completions.create(
+            completion = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
                 model=modelConfig["modelChat"],
                 messages=messages,
                 temperature=0.7,
@@ -75,11 +77,12 @@ class askAI(commands.Cog):
                 # n=1,
                 # stop=None,
             )
+            self.round_robin_api_index = (self.round_robin_api_index + 1) % len(self.llm_apis)
         except openai.APIError as e:
             print(f"OpenAI API error: {e}")
-            return replyDict(rol='error', msg=json.dumps(e, indent=2, ensure_ascii=False))
+            return replyDict('error', json.dumps(e, indent=2, ensure_ascii=False))
         print(completion.usage.total_tokens)
-        return replyDict(role = completion.choices[0].message.role, content = completion.choices[0].message.content)
+        return replyDict(completion.choices[0].message.role, completion.choices[0].message.content)
 
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     @app_commands.describe(persona="Name of the persona", content="Content of the persona", visibility="Visibility of the persona (public/private)")
