@@ -83,7 +83,13 @@ class Ollama_API_Handler:
             role=response["message"]["role"],
             content=response["message"]["content"],
         )
-
+        
+    async def ps(self):
+        async with self.clientSession.get(modelConfig['linkStatus']) as request:
+            request.raise_for_status()
+            response = await request.json()
+        return response
+    
     # async def embed(self, inputStr: str):
     #     inputStr = inputStr.replace("\n", " ")
     #     json = {

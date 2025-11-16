@@ -1,26 +1,25 @@
 import openai
 import asyncio
-import os
 import pandas as pd
 import numpy as np
 from opencc import OpenCC
 from aiohttp import ClientSession, TCPConnector, ClientTimeout
 from collections import deque
-from cog.askAI import localRead
 from cog.utilFunc import embedVector, replyDict
-from sklearn.metrics.pairwise import cosine_similarity
+
+# from sklearn.metrics.pairwise import cosine_similarity
 from time import strftime
 
-with open('./acc/aiKey.txt', 'r') as acc_file:
-    k, o = acc_file.read().splitlines()[:2]
-    openai.api_key = k
-    openai.organization = o
+# with open('./acc/aiKey.txt', 'r') as acc_file:
+#     k, o = acc_file.read().splitlines()[:2]
+#     openai.api_key = k
+#     openai.organization = o
     
-with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
-    setsys_tmp = set1_file.readlines()
-    setsys_extra = []
-    for i in range(len(setsys_tmp)//2):
-        setsys_extra.append(setsys_tmp[2*i+1])
+# with open('./acc/aiSet_extra.txt', 'r', encoding='utf-8') as set1_file:
+#     setsys_tmp = set1_file.readlines()
+#     setsys_extra = []
+#     for i in range(len(setsys_tmp)//2):
+#         setsys_extra.append(setsys_tmp[2*i+1])
         
 def reactString(extra, context):
     reactBase = f"""{extra}，現在時間：{strftime("%Y-%m-%d %H:%M")}，反饋的上下文摘要：{context}
@@ -88,18 +87,18 @@ async def embedding_v1(inputStr:str):
     return embedVector(inputStr, np.array(response['data'][0]['embedding']))
 
 async def aiaiv2(msgs, tokens=256):
-    url = "https://api.openai.com/v1/chat/completions"
+    base_url = "https://ai.megallm.io/v1"
     async def Chat_Result(session, msgs, headers=headers):
         data = {
             "model": "gpt-3.5-turbo-0301",
             "messages": msgs,
-            "max_tokens": min(tokens, 4096-chatTok),
-            "temperature": 0.8,
-            "frequency_penalty": 0.6,
-            "presence_penalty": 0.6
+            "max_tokens": 1024,
+            # "temperature": 0.8,
+            # "frequency_penalty": 0.6,
+            # "presence_penalty": 0.6
         }
         # print(data)
-        async with session.post(url, headers=headers, json=data) as result:
+        async with session.post(base_url, headers=headers, json=data) as result:
             return await result.json()
 
     async def get_response():
@@ -119,15 +118,15 @@ async def main():
         try:
             prompt = replyDict('user'  , f'jasonZzz said {prompt}', 'jasonZzz')
             # embed  = await embedding_v1(prompt['content'])
-            embed  = embedVector(prompt.content, np.random.uniform(0, 1, 1536))
-            assert embed.vector[0] != 0
+            # embed  = embedVector(prompt.content, np.random.uniform(0, 1, 1536))
+            # assert embed.vector[0] != 0
             
-            sys_context = '\n'.join((f'{cc.convert(i["content"])}' for i in [*chatMem, prompt.asdict]))
-            setsys = replyDict('system', reactString(setsys_extra[6], sys_context))
+            # sys_context = '\n'.join((f'{cc.convert(i["content"])}' for i in [*chatMem, prompt.asdict]))
+            # setsys = replyDict('system', reactString(setsys_extra[6], sys_context))
             # print(setsys.content)
             
             # reply = replyDict(msg = '優咪 debug')
-            reply  = await aiaiv2([setsys.asdict, *chatMem, prompt.asdict])
+            reply  = await aiaiv2([*chatMem, setsys.asdict, prompt.asdict])
             assert reply.role != 'error'
             
             reply2 = reply.content
@@ -135,8 +134,8 @@ async def main():
         except TimeoutError:
             print('timeout')
         except AssertionError:
-            if embed.vector[0] == 0:
-                print(f'Embed error:\n{embed.text}')
+            # if embed.vector[0] == 0:
+                # print(f'Embed error:\n{embed.text}')
             if reply.role == 'error':
                 reply2 = '\n'.join((f'{k}: {v}' for k, v in reply.content.items()))
                 print(f'Reply error:\n{reply2}')
