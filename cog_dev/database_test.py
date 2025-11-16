@@ -308,15 +308,15 @@ class PersonaDatabase:
     def get_user_interaction_stats(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get interaction statistics for a specific user."""
         with sqlite3.connect(self.db_path) as conn:
-            # Get user's total interaction count
+            # Get user's total interaction count by summing up all interactions with personas
             cursor = conn.execute("""
-                SELECT interaction_count
-                FROM discord_user
+                SELECT SUM(interaction_count)
+                FROM user_persona_interactions
                 WHERE user_id = ?
             """, (user_id,))
             row = cursor.fetchone()
             
-            if not row:
+            if not row or row[0] is None:
                 return None
             
             total_interactions = row[0]
