@@ -128,12 +128,12 @@ def run_discord():
     async def _toml(ctx:commands.Context):
         global configToml
         configToml = loadToml()
-        configToml.pop('apiToken', None)
+        # configToml.pop('apiToken', None)
         await ctx.send(f'toml reload done.```json\n{json.dumps(configToml["llmChat"], indent=2, ensure_ascii=False)}```')
     
     # Load API token, and delete it from configToml
     TOKEN = configToml['apiToken']['discord']
-    configToml.pop('apiToken', None)
+    configToml['apiToken'].pop('discord', None)
     # Start!
     client.run(TOKEN)
 

@@ -1,85 +1,21 @@
 from asyncio.exceptions import TimeoutError
-from collections import defaultdict, deque
+from collections import deque
 from time import strftime
 from typing import Optional, List
 
-import numpy as np
-import pandas as pd
-from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands, File
 from discord.ext import commands, tasks
-from opencc import OpenCC
 from cog.utilFunc import *
 from config_loader import configToml
-import json, re, base64
+import json, re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 import openai
 
 MEMOLEN = 16
-READLEN = 20
 THRESHOLD = 0.8575
-TOKENPRESET = [150, 250, 700]
-LONELYMETER = 250
 
-# scoreArr = pd.read_csv('./acc/scoreArr.csv', index_col='uid', dtype=np.int64)
 modelConfig = configToml.get("llmChat", {})
-class Ollama_APIHandler():
-    def __init__(self):
-        self.connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
-        self.clientSession = ClientSession(connector=self.connector)
-        self.completion_tokens = 0
-        
-    async def close(self):
-        if not self.clientSession.closed:
-            await self.clientSession.close()
-            print("Ollama Client session closed")
-            
-        if not self.connector.closed:
-            await self.connector.close()
-            print("Ollama Connector closed")
-
-    async def chat(self, messages:list, botid:int) -> replyDict:
-        json = {
-            "model": modelConfig["modelChat"],
-            "messages": messages,
-            "stream": False,
-            "options": {
-                # "num_predict": 640,
-            }
-            | configToml["chatParams"],
-        }
-        # print(messages[-1])
-
-        async with self.clientSession.post(modelConfig['linkChat'], json=json) as request:
-            # request.raise_for_status()
-            response = await request.json()
-
-        if 'error' in response:
-            return replyDict(role = 'error', content = response['error'])
-
-        self.completion_tokens += response['eval_count']
-        # chatTok[botid] = response['prompt_eval_count'] + response['eval_count']
-        # if chatTok[botid] > 8000:
-        #     chatMem[botid].popleft()
-        #     chatMem[botid].popleft()
-        #     print(f"token warning:{chatTok[botid]}, popped last msg.")
-        rd = replyDict(response['message']['role'], response['message']['content'])
-        if 'thinking' in response['message']:
-            rd.content = f"<think>{response['message']['thinking']}</think>\n{response['message']['content']}"
-        # rd.content = cc.convert(rd.content)
-        return rd
-
-    async def ps(self):
-        async with self.clientSession.get(modelConfig['linkStatus']) as request:
-            request.raise_for_status()
-            response = await request.json()
-        return response
-
-def injectCheck(val):
-    return True if val > THRESHOLD and val < 0.99 else False
-
-cc = OpenCC('s2twp')
 
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
@@ -88,14 +24,63 @@ class askAI(commands.Cog):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
         
-        self.ollamaAPI = Ollama_APIHandler()
+        self.llm_api = openai.AsyncOpenAI(
+            base_url = modelConfig["linkBase"],
+            api_key = configToml['apiToken']['megaLLM'][0],
+        )
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
         
     async def cog_unload(self):
-        await self.ollamaAPI.close()
-            
+        await self.llm_api.close()
+    
+    async def llm_chat_v3(self, messages):
+        """
+        Asynchronous method to interact with a language model (LLM) API and generate a response 
+        based on the provided messages.
+        Args:
+            messages (list): A list of dictionaries representing the conversation history. 
+                             Each dictionary should contain keys like "role" (e.g., "user", "assistant") 
+                             and "content" (the message text).
+        Returns:
+            dict: A dictionary containing the role and content of the LLM's response, or an error 
+                  message if the API call fails. The dictionary structure is as follows:
+                  - If successful:
+                    {
+                        "role": <str>,  # Role of the response (e.g., "assistant").
+                        "content": <str>  # Content of the response.
+                    }
+                  - If an error occurs:
+                    {
+                        "rol": "error",
+                        "msg": <str>  # JSON-formatted error message.
+                    }
+        Raises:
+            openai.APIError: If an error occurs during the API call, it is caught and logged.
+        Notes:
+            - The method uses the OpenAI API to generate chat completions.
+            - The `modelConfig["modelChat"]` specifies the model to be used.
+            - The `temperature` parameter controls the randomness of the response.
+            - The `max_tokens` parameter limits the length of the response.
+            - The `completion.usage.total_tokens` is printed for debugging purposes.
+        """
+        
+        try:
+            completion = await self.llm_api.chat.completions.create(
+                model=modelConfig["modelChat"],
+                messages=messages,
+                temperature=0.7,
+                max_completion_tokens=4096,
+                # n=1,
+                # stop=None,
+            )
+        except openai.APIError as e:
+            print(f"OpenAI API error: {e}")
+            return replyDict(rol='error', msg=json.dumps(e, indent=2, ensure_ascii=False))
+        print(completion.usage.total_tokens)
+        return replyDict(role = completion.choices[0].message.role, content = completion.choices[0].message.content)
+
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     @app_commands.describe(persona="Name of the persona", content="Content of the persona", visibility="Visibility of the persona (public/private)")
     async def create_persona(self, interaction: Interaction, persona: str, content: str, visibility: bool):
@@ -258,7 +243,7 @@ class askAI(commands.Cog):
                     self.persona_session_memory[_persona.id] = deque(maxlen=MEMOLEN)
                 chatMem = self.persona_session_memory[_persona.id]
                 try:
-                    reply = await self.ollamaAPI.chat([*chatMem, setupmsg.asdict, prompt.asdict], botid=0)
+                    reply = await self.llm_chat_v3([*chatMem, setupmsg.asdict, prompt.asdict])
                     if '<think>' in reply.content and '</think>' in reply.content:
                         # need to split the reply into thinking and reply
                         print('reply with thinking')
@@ -365,11 +350,17 @@ class askAI(commands.Cog):
             ephemeral=True  # Confirmation messages are better as ephemeral
         )
     
-    @commands.hybrid_command(name = 'status')
-    @commands.is_owner()
-    async def _status(self, ctx:commands.Context):
-        status = await self.ollamaAPI.ps()
-        await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
+    # @commands.hybrid_command(name = 'status')
+    # @commands.is_owner()
+    # async def _status(self, ctx:commands.Context):
+    #     # status = await self.llm_api.ps()
+    #     connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
+    #     clientSession = ClientSession(connector=connector)
+        
+    #     async with clientSession.get(modelConfig['linkStatus']) as request:
+    #         request.raise_for_status()
+    #         status = await request.json()
+    #     await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
     
     # TODO: gotowork command: I want to create a gameplay chatbot mechanic similar to earning hourly wages with some added randomnesswhile staying true to the character's backstory
     # @app_commands.command(name = 'schedule')
@@ -430,7 +421,6 @@ class askAI(commands.Cog):
     #         #     assert reply.role != 'error'
                 
     #         #     reply2 = reply.content
-    #         #     await channel.send(f'{cc.convert(reply2)}')
     #         # except TimeoutError:
     #         #     print(f'[!] {aiNam} TimeoutError')
     #         #     await channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
@@ -466,7 +456,6 @@ class askAI(commands.Cog):
             
     #         # await channel.send(f'{talkList[self.loneMsg % len(talkList)]}\n({-consume} energy) (meter: {self.loneMeter}/{limit}))')
     #         self.loneMsg += 1
-
 
 async def setup(bot:commands.Bot):
     await bot.add_cog(askAI(bot))
