@@ -1,4 +1,5 @@
 from asyncio.exceptions import TimeoutError
+import base64
 from collections import deque
 from time import strftime
 from typing import Optional, List
@@ -82,7 +83,7 @@ class askAI(commands.Cog):
             self.round_robin_api_index = (self.round_robin_api_index + 1) % len(self.llm_apis)
         except openai.APIError as e:
             print(f"OpenAI API error: {e}")
-            return replyDict('error', json.dumps(e, indent=2, ensure_ascii=False))
+            return replyDict('error', e)
         print(completion.usage.total_tokens)
         return replyDict(completion.choices[0].message.role, completion.choices[0].message.content)
 
@@ -260,21 +261,29 @@ class askAI(commands.Cog):
             # filter out mention bot part
             content = messageText.replace(self.bot.user.mention, '', 1).strip()
             print(f'{user_persona_pair}: {content}')
-            prompt = replyDict('user', f'{displayName} said {content}', userName)
+            
             setupmsg = replyDict('system', f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}', 'system')
+            if message.attachments:
+                # with the "first" image encoded in Base64 (performance optimization)
+                image_url = message.attachments[0].url
+                print(image_url)
+                # print(f'Encoded image size: {len(prompt.images[0])} characters')
+                prompt = replyDict('user', f'{displayName} said {content}', userName, image_url=image_url)
+            else:
+                prompt = replyDict('user', f'{displayName} said {content}', userName)
             async with message.channel.typing():
                 if _persona.id not in self.persona_session_memory:
                     self.persona_session_memory[_persona.id] = deque(maxlen=MEMOLEN)
                 chatMem = self.persona_session_memory[_persona.id]
                 try:
                     reply = await self.llm_chat_v3([*chatMem, setupmsg.asdict, prompt.asdict])
-                    if '<think>' in reply.content and '</think>' in reply.content:
-                        # need to split the reply into thinking and reply
-                        print('reply with thinking')
-                        reply2 = reply.content
-                        reply_think = reply2[reply2.find('<think>') + 7: reply2.find('</think>')]
-                        reply.content = reply2[reply2.find('</think>') + 8:]
-                        print(f'Thinking:\n{reply_think}')
+                    # if '<think>' in reply.content and '</think>' in reply.content:
+                    #     # need to split the reply into thinking and reply
+                    #     print('reply with thinking')
+                    #     reply2 = reply.content
+                    #     reply_think = reply2[reply2.find('<think>') + 7: reply2.find('</think>')]
+                    #     reply.content = reply2[reply2.find('</think>') + 8:]
+                    #     print(f'Thinking:\n{reply_think}')
                     await message.channel.send(reply.content)
                 except TimeoutError:
                     await message.channel.send("The bot is currently unavailable. Please try again later.")
