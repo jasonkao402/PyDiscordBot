@@ -26,10 +26,12 @@ class askAI(commands.Cog):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
         self.round_robin_api_index = 0
-        self.round_robin_api_collection = configToml['apiToken'].get('megaLLM', [])
+        self.api_call_count = 0  # Counter to track the number of API calls
+        self.api_switch_threshold = 5  # Number of calls before switching to the next API
+        self.round_robin_api_collection = configToml['apiToken'].get('gcli2api', [])
         self.llm_apis = [openai.AsyncOpenAI(
-            base_url = modelConfig["linkBase"],
-            api_key = api_key,
+            base_url=modelConfig["linkBase"],
+            api_key=api_key,
         ) for api_key in self.round_robin_api_collection]
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
@@ -77,10 +79,16 @@ class askAI(commands.Cog):
                 messages=messages,
                 temperature=0.7,
                 max_completion_tokens=4096,
-                # n=1,
-                # stop=None,
             )
-            self.round_robin_api_index = (self.round_robin_api_index + 1) % len(self.llm_apis)
+            
+            # Increment the API call count
+            self.api_call_count += 1
+            
+            # Switch API only after N calls
+            if self.api_call_count >= self.api_switch_threshold:
+                self.round_robin_api_index = (self.round_robin_api_index + 1) % len(self.llm_apis)
+                self.api_call_count = 0
+            
         except openai.APIError as e:
             print(f"OpenAI API error: {e}")
             return replyDict('error', e)

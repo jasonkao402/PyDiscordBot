@@ -1,16 +1,15 @@
 from time import strftime
-from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
+from cog_dev.database_test import PersonaDatabase, Persona
 from cog.utilFunc import replyDict
 import asyncio
 import openai
 from collections import deque
 from config_loader import configToml
-import json
 
 N = 16
 oai_client = openai.AsyncClient(
-    base_url = "https://ai.megallm.io/v1",
-    api_key = configToml['apiToken']['megaLLM'][0],
+    base_url = "http://127.0.0.1:7861/v1",
+    api_key = configToml['apiToken']['gcli2api'],
 )
 
 async def llm_chat_v3(messages):
@@ -19,13 +18,13 @@ async def llm_chat_v3(messages):
             model="gemini-2.5-pro",
             messages=messages,
             temperature=0.7,
-            max_tokens=1024,
+            max_tokens=4096,
             # n=1,
             # stop=None,
         )
     except openai.APIError as e:
         print(f"OpenAI API error: {e}")
-        return replyDict(rol='error', msg=json.dumps(e, indent=2, ensure_ascii=False))
+        return replyDict(role='error', content=e)
     print(completion.usage)
     return replyDict(role = completion.choices[0].message.role, content = completion.choices[0].message.content)
 
@@ -46,16 +45,15 @@ async def main():
             reply  = await llm_chat_v3([*persona_session_memory, setupmsg.asdict, prompt.asdict])
             assert reply.role != 'error'
             
-            reply2 = reply.content
-            print(f'{_persona.persona}: {reply2}')
+            print(f'{_persona.persona}: {reply.content}')
         except TimeoutError:
             print('timeout')
         except AssertionError:
             # if embed.vector[0] == 0:
                 # print(f'Embed error:\n{embed.text}')
             if reply.role == 'error':
-                reply2 = '\n'.join((f'{k}: {v}' for k, v in reply.content.items()))
-                print(f'Reply error:\n{reply2}')
+                # reply2 = '\n'.join((f'{k}: {v}' for k, v in reply.content.items()))
+                print(f'Reply error:\n{reply.content}')
         else:
             persona_session_memory.append(prompt.asdict)
             persona_session_memory.append(reply.asdict)
