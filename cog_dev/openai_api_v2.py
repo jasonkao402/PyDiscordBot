@@ -8,7 +8,7 @@ from config_loader import configToml
 
 N = 16
 oai_client = openai.AsyncClient(
-    base_url = "http://127.0.0.1:7861/v1",
+    base_url = configToml['tempBase'],
     api_key = configToml['apiToken']['gcli2api'],
 )
 
