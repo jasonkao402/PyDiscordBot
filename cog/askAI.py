@@ -7,18 +7,23 @@ from typing import Optional, List
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands, File
 from discord.ext import commands, tasks
-from cog.utilFunc import *
+from cog.utilFunc import sepLines, wcformat, GeminiContentClass, replyDict
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
 import json, re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 import openai
+from google import genai
+from google.genai import types
 
-MEMOLEN = 16
+MEMOLEN = 22
 THRESHOLD = 0.8575
 
 modelConfig = configToml.get("llmChat", {})
 
+http_options = {
+    "base_url": configToml["llmChat"]["link_build"],
+}
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
@@ -28,10 +33,10 @@ class askAI(commands.Cog):
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
         self.api_switch_threshold = 5  # Number of calls before switching to the next API
-        self.round_robin_api_collection = configToml['apiToken'].get('gcli2api', [])
-        self.llm_apis = [openai.AsyncOpenAI(
-            base_url=modelConfig["linkBase"],
+        self.round_robin_api_collection = configToml['apiToken'].get('gemini_llm', [])
+        self.llm_apis = [genai.Client(
             api_key=api_key,
+            http_options=http_options,
         ) for api_key in self.round_robin_api_collection]
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
@@ -40,7 +45,7 @@ class askAI(commands.Cog):
         
     async def cog_unload(self):
         for llm_api in self.llm_apis:
-            await llm_api.close()
+            llm_api.close()
     
     async def llm_chat_v3(self, messages):
         """
@@ -94,7 +99,30 @@ class askAI(commands.Cog):
             return replyDict('error', e)
         print(completion.usage.total_tokens)
         return replyDict(completion.choices[0].message.role, completion.choices[0].message.content)
+    
+    async def llm_chat_v5(self, messages: list[dict], system: str) -> str:
+        """
+        messages: list of strings (system + user messages)
+        """
+        try:
+            # 將 messages 轉成 Google GenAI 的 contents
+            contents = [GeminiContentClass(role=msg['role'], parts=msg['content']).to_dict for msg in messages]
+            response = await self.llm_apis[self.round_robin_api_index].aio.models.generate_content(
+                model=configToml["llmChat"]["modelChat"],
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system,
+                    max_output_tokens=4096,
+                    thinking_config=types.ThinkingConfig(thinking_level="low"),
+                ),
+            )
+        except Exception as e:
+            print(f"GenAI Error: {e}")
+            return str(e)
 
+        # Google GenAI SDK 主要輸出為 `response.text`
+        print(response.usage_metadata.total_token_count)
+        return response.text
     
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     async def create_persona(self, interaction: Interaction):
@@ -270,40 +298,35 @@ class askAI(commands.Cog):
             content = messageText.replace(self.bot.user.mention, '', 1).strip()
             print(f'{user_persona_pair}: {content}')
             
-            setupmsg = replyDict('system', f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}', 'system')
-            if message.attachments:
-                # with the "first" image encoded in Base64 (performance optimization)
-                image_url = message.attachments[0].url
-                print(image_url)
-                # print(f'Encoded image size: {len(prompt.images[0])} characters')
-                prompt = replyDict('user', f'{displayName} said {content}', userName, image_url=image_url)
-            else:
-                prompt = replyDict('user', f'{displayName} said {content}', userName)
+            # setupmsg = replyDict('system', f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}', 'system')
+            system_instruction = f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}'
+            # if message.attachments:
+            #     # with the "first" image encoded in Base64 (performance optimization)
+            #     image_url = message.attachments[0].url
+            #     print(image_url)
+            #     # print(f'Encoded image size: {len(prompt.images[0])} characters')
+            #     prompt = replyDict('user', f'{displayName} said {content}', userName, image_url=image_url)
+            #  else:
+            #     prompt = replyDict('user', f'{displayName} said {content}', userName)
+            prompt = {'role': 'user', 'content': f'{displayName} said {content}'}
             async with message.channel.typing():
                 if _persona.id not in self.persona_session_memory:
                     self.persona_session_memory[_persona.id] = deque(maxlen=MEMOLEN)
                 chatMem = self.persona_session_memory[_persona.id]
                 try:
-                    reply = await self.llm_chat_v3([*chatMem, setupmsg.asdict, prompt.asdict])
-                    # if '<think>' in reply.content and '</think>' in reply.content:
-                    #     # need to split the reply into thinking and reply
-                    #     print('reply with thinking')
-                    #     reply2 = reply.content
-                    #     reply_think = reply2[reply2.find('<think>') + 7: reply2.find('</think>')]
-                    #     reply.content = reply2[reply2.find('</think>') + 8:]
-                    #     print(f'Thinking:\n{reply_think}')
-                    await message.channel.send(reply.content)
+                    # reply = await self.llm_chat_v3([*chatMem, setupmsg.asdict, prompt.asdict])
+                    reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
+                    await message.channel.send(reply_content)
                 except TimeoutError:
                     await message.channel.send("The bot is currently unavailable. Please try again later.")
-                except AssertionError:
-                    if reply.role == 'error':
-                        print(f'Reply error:\n{user_persona_pair}:\n{reply.content}')
-                    await message.channel.send(f'{user_persona_pair} 發生錯誤，請聯繫主人\n{reply.content}')
+                except Exception as e:
+                    print(f'Reply error:\n{user_persona_pair}:\n{e}')
+                    await message.channel.send(f'{user_persona_pair} 發生錯誤，請聯繫主人\n{e}')
                 else:
                     # Only append to memory if no exception
                     # Only increase interaction count on successful reply
-                    chatMem.append(prompt.asdict)
-                    chatMem.append(reply.asdict)
+                    chatMem.append(prompt)
+                    chatMem.append({'role': 'model', 'content': reply_content})
                     self.db.increment_interaction_count(_persona.id, uid)
                     
             # elif ('-t' in text[:n]) and devChk(uid):
