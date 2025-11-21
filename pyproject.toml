@@ -1,0 +1,10 @@
+[tool.pyright]
+enableTypeIgnoreComments = false
+reportOptionalMemberAccess = false
+reportIncompatibleMethodOverride = false
+reportIncompatibleVariableOverride = false
+reportUnnecessaryComparison = true
+reportUnnecessaryContains = true
+reportUnnecessaryIsInstance = true
+reportUnnecessaryTypeIgnoreComment = true
+typeCheckingMode = "standard"
