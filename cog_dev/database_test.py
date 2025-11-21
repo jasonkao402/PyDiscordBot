@@ -15,21 +15,22 @@ class PersonaVisibility(Enum):
 
 @dataclass
 class Persona:
-    id: Optional[int]
+    uid: int
     persona: str
     content: str
-    owner_id: int
+    owner_uid: int
     visibility: PersonaVisibility
     created_at: str
     updated_at: str
     last_interaction_recv_at: Optional[str] = None
     interaction_count: int = 0
     
-    def permission_check(self, user_id: int) -> bool:
-        """Check if the given user_id has permission to access this persona."""
-        if self.visibility == PersonaVisibility.PUBLIC:
-            return True
-        return self.owner_id == user_id
+    def permission_check(self, user_uid: int) -> bool:
+        """Check if the given user_uid has permission to access this persona."""
+        return self.visibility == PersonaVisibility.PUBLIC or self.owner_uid == user_uid
+    
+    def __str__(self):
+        return f"Persona(uid={self.uid:3d}, persona={self.persona}, owner_uid={self.owner_uid}, visibility={self.visibility.name})"
     
 class PersonaDatabase:
     def __init__(self, db_path: str = "llm_character_cards.db"):
@@ -42,10 +43,10 @@ class PersonaDatabase:
             # Table to store personas
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS personas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    uid INTEGER PRIMARY KEY AUTOINCREMENT,
                     persona TEXT NOT NULL,
                     content TEXT NOT NULL,
-                    owner_id INTEGER NOT NULL,  -- Store Discord UID directly
+                    owner_uid INTEGER NOT NULL,  -- Store Discord UID directly
                     visibility INTEGER NOT NULL CHECK(visibility IN (0, 1)),  -- 0: private, 1: public
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -56,66 +57,67 @@ class PersonaDatabase:
             # Table to track Discord users and their selected personas
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS discord_user (
-                    user_id INTEGER PRIMARY KEY,
-                    selected_persona_id INTEGER,
+                    user_uid INTEGER PRIMARY KEY,
+                    selected_persona_uid INTEGER,
                     last_interaction_send_at TEXT DEFAULT NULL,
                     interaction_count INTEGER DEFAULT 0,
-                    FOREIGN KEY (selected_persona_id) REFERENCES personas (id)
+                    FOREIGN KEY (selected_persona_uid) REFERENCES personas (uid)
                 )
             """)
             # Table to track user-persona interactions
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS user_persona_interactions (
-                    user_id INTEGER NOT NULL,
-                    persona_id INTEGER NOT NULL,
+                    user_uid INTEGER NOT NULL,
+                    persona_uid INTEGER NOT NULL,
                     interaction_count INTEGER DEFAULT 1,
                     last_interaction_at TEXT NOT NULL,
-                    PRIMARY KEY (user_id, persona_id),
-                    FOREIGN KEY (user_id) REFERENCES discord_user (user_id),
-                    FOREIGN KEY (persona_id) REFERENCES personas (id)
+                    PRIMARY KEY (user_uid, persona_uid),
+                    FOREIGN KEY (user_uid) REFERENCES discord_user (user_uid),
+                    FOREIGN KEY (persona_uid) REFERENCES personas (uid)
                 )
             """)
 
-    def create_persona(self, persona: str, content: str, owner_id: int, visibility: PersonaVisibility) -> Optional[Persona]:
+    def create_persona(self, persona: str, content: str, owner_uid: int, visibility: PersonaVisibility) -> None:
         """Create a new persona, ensuring the user does not exceed the limit."""
         # Check if the user already has 5 personas
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 SELECT COUNT(*) FROM personas
-                WHERE owner_id = ?
-            """, (owner_id,))
+                WHERE owner_uid = ?
+            """, (owner_uid,))
             persona_count = cursor.fetchone()[0]
 
         if persona_count >= 5:
-            print(f"User {owner_id} has reached the persona limit.")
-            return None
+            print(f"User {owner_uid} has reached the persona limit.")
+            return
 
         now = datetime.now().isoformat(timespec='milliseconds')
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                INSERT INTO personas (persona, content, owner_id, visibility, created_at, updated_at, last_interaction_recv_at)
+                INSERT INTO personas (persona, content, owner_uid, visibility, created_at, updated_at, last_interaction_recv_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (persona, content, owner_id, visibility.value, now, now, now))
+            """, (persona, content, owner_uid, visibility.value, now, now, now))
 
-            persona_id = cursor.lastrowid
-            return Persona(persona_id, persona, content, owner_id, visibility, now, now, now, 0)
+            persona_uid = cursor.lastrowid
+            if not persona_uid:
+                raise ValueError("Failed to retrieve the persona uid after insertion.")
     
-    def get_persona(self, persona_id: int, user_id: int) -> Optional[Persona]:
+    def get_persona(self, persona_uid: int, user_uid: int) -> Optional[Persona]:
         """Get a persona if user has permission to view it"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT id, persona, content, owner_id, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
+                SELECT uid, persona, content, owner_uid, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
                 FROM personas 
-                WHERE id = ? AND (visibility = 1 OR owner_id = ?)
-            """, (persona_id, user_id))
+                WHERE uid = ? AND (visibility = 1 OR owner_uid = ?)
+            """, (persona_uid, user_uid))
             
             row = cursor.fetchone()
             if row:
                 return Persona(
-                    id=row[0],
+                    uid=row[0],
                     persona=row[1],
                     content=row[2],
-                    owner_id=row[3],
+                    owner_uid=row[3],
                     visibility=PersonaVisibility(row[4]),
                     created_at=row[5],
                     updated_at=row[6],
@@ -123,22 +125,22 @@ class PersonaDatabase:
                     interaction_count=row[8]
                 )
             return None
-    def get_persona_no_check(self, persona_id: int) -> Optional[Persona]:
+    def get_persona_no_check(self, persona_uid: int) -> Optional[Persona]:
         """Get a persona without permission check, only for cache use"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT id, persona, content, owner_id, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
+                SELECT uid, persona, content, owner_uid, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
                 FROM personas 
-                WHERE id = ?
-            """, (persona_id,))
+                WHERE uid = ?
+            """, (persona_uid,))
             
             row = cursor.fetchone()
             if row:
                 return Persona(
-                    id=row[0],
+                    uid=row[0],
                     persona=row[1],
                     content=row[2],
-                    owner_id=row[3],
+                    owner_uid=row[3],
                     visibility=PersonaVisibility(row[4]),
                     created_at=row[5],
                     updated_at=row[6],
@@ -147,7 +149,7 @@ class PersonaDatabase:
                 )
             return None
 
-    def update_persona(self, persona_id: int, user_id: int, **updates) -> bool:
+    def update_persona(self, persona_uid: int, user_uid: int, **updates) -> bool:
         """Update a persona - only owner can update"""
         if not updates:
             return False
@@ -159,50 +161,50 @@ class PersonaDatabase:
         query = f"""
             UPDATE personas 
             SET {set_clause}, updated_at = ?
-            WHERE id = ? AND owner_id = ?
+            WHERE uid = ? AND owner_uid = ?
         """
         
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 query, 
-                list(updates.values()) + [persona_id, user_id]
+                list(updates.values()) + [persona_uid, user_uid]
             )
             return cursor.rowcount > 0
     
-    def delete_persona(self, persona_id: int, user_id: int) -> bool:
+    def delete_persona(self, persona_uid: int, user_uid: int) -> bool:
         """Delete a persona - only owner can delete"""
         
         with sqlite3.connect(self.db_path) as conn:
             # First, clear any user selections pointing to this persona
             conn.execute("""
                 DELETE FROM discord_user 
-                WHERE selected_persona_id = ?
-            """, (persona_id,))
+                WHERE selected_persona_uid = ?
+            """, (persona_uid,))
             
             # Then delete the persona
             cursor = conn.execute("""
                 DELETE FROM personas 
-                WHERE id = ? AND owner_id = ?
-            """, (persona_id, user_id))
+                WHERE uid = ? AND owner_uid = ?
+            """, (persona_uid, user_uid))
             
             return cursor.rowcount > 0
     
-    def list_personas(self, user_id: int) -> List[Persona]:
+    def list_personas(self, user_uid: int) -> List[Persona]:
         """List all personas visible to user (their own + public personas)"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT id, persona, content, owner_id, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
+                SELECT uid, persona, content, owner_uid, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
                 FROM personas 
-                WHERE visibility = 1 OR owner_id = ?
+                WHERE visibility = 1 OR owner_uid = ?
                 ORDER BY updated_at DESC
-            """, (user_id,))
+            """, (user_uid,))
             
             return [
                 Persona(
-                    id=row[0],
+                    uid=row[0],
                     persona=row[1],
                     content=row[2],
-                    owner_id=row[3],
+                    owner_uid=row[3],
                     visibility=PersonaVisibility(row[4]),
                     created_at=row[5],
                     updated_at=row[6],
@@ -211,38 +213,38 @@ class PersonaDatabase:
                 ) for row in cursor.fetchall()
             ]
     
-    def set_selected_persona(self, user_id: int, persona_id: int) -> bool:
+    def set_selected_persona(self, user_uid: int, persona_uid: int) -> bool:
         """Set user's selected persona"""
         # Verify persona exists and user has permission
-        persona = self.get_persona(persona_id, user_id)
+        persona = self.get_persona(persona_uid, user_uid)
         if not persona:
             return False
         
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO discord_user (user_id, selected_persona_id)
+                INSERT OR REPLACE INTO discord_user (user_uid, selected_persona_uid)
                 VALUES (?, ?)
-            """, (user_id, persona_id))
+            """, (user_uid, persona_uid))
             
         return True
     
-    def get_selected_persona(self, user_id: int) -> Optional[Persona]:
+    def get_selected_persona(self, user_uid: int) -> Optional[Persona]:
         """Get user's currently selected persona"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT p.id, p.persona, p.content, p.owner_id, p.visibility, p.created_at, p.updated_at, p.last_interaction_recv_at, p.interaction_count
+                SELECT p.uid, p.persona, p.content, p.owner_uid, p.visibility, p.created_at, p.updated_at, p.last_interaction_recv_at, p.interaction_count
                 FROM personas p
-                JOIN discord_user us ON p.id = us.selected_persona_id
-                WHERE us.user_id = ?
-            """, (user_id,))
+                JOIN discord_user us ON p.uid = us.selected_persona_uid
+                WHERE us.user_uid = ?
+            """, (user_uid,))
             
             row = cursor.fetchone()
             if row:
                 return Persona(
-                    id=row[0],
+                    uid=row[0],
                     persona=row[1],
                     content=row[2],
-                    owner_id=row[3],
+                    owner_uid=row[3],
                     visibility=PersonaVisibility(row[4]),
                     created_at=row[5],
                     updated_at=row[6],
@@ -251,29 +253,29 @@ class PersonaDatabase:
                 )
             return None
         
-    def get_selected_persona_id(self, user_id: int) -> int:
-        """Get user's currently selected persona ID"""
+    def get_selected_persona_uid(self, user_uid: int) -> int:
+        """Get user's currently selected persona uid"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT us.selected_persona_id
+                SELECT us.selected_persona_uid
                 FROM discord_user us
-                WHERE us.user_id = ?
-            """, (user_id,))
+                WHERE us.user_uid = ?
+            """, (user_uid,))
             
             row = cursor.fetchone()
             if row:
                 return row[0]
             return -1
         
-    def clear_selected_persona(self, user_id: int):
+    def clear_selected_persona(self, user_uid: int):
         """Clear user's selected persona"""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 DELETE FROM discord_user 
-                WHERE user_id = ?
-            """, (user_id,))
+                WHERE user_uid = ?
+            """, (user_uid,))
     
-    def increment_interaction_count(self, persona_id: int, user_id: int):
+    def increment_interaction_count(self, persona_uid: int, user_uid: int):
         """Increment the interaction count for a user and persona."""
         now = datetime.now().isoformat(timespec='milliseconds')
         with sqlite3.connect(self.db_path) as conn:
@@ -282,38 +284,38 @@ class PersonaDatabase:
                 UPDATE personas
                 SET interaction_count = interaction_count + 1,
                     last_interaction_recv_at = ?
-                WHERE id = ?
-            """, (now, persona_id))
+                WHERE uid = ?
+            """, (now, persona_uid))
             
             # 2. Update the User's global counts (already in your code)
             conn.execute("""
-                INSERT INTO discord_user (user_id, interaction_count, last_interaction_send_at)
+                INSERT INTO discord_user (user_uid, interaction_count, last_interaction_send_at)
                 VALUES (?, 1, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
+                ON CONFLICT(user_uid) DO UPDATE SET
                     interaction_count = interaction_count + 1,
                     last_interaction_send_at = excluded.last_interaction_send_at
-            """, (user_id, now))
+            """, (user_uid, now))
 
             # 3. Track the specific User-Persona interaction (The new logic)
             # Use INSERT OR REPLACE or ON CONFLICT for UPSERT logic
             # This logic will either insert a new record or update the existing one
             conn.execute("""
-                INSERT INTO user_persona_interactions (user_id, persona_id, interaction_count, last_interaction_at)
+                INSERT INTO user_persona_interactions (user_uid, persona_uid, interaction_count, last_interaction_at)
                 VALUES (?, ?, 1, ?)
-                ON CONFLICT(user_id, persona_id) DO UPDATE SET
+                ON CONFLICT(user_uid, persona_uid) DO UPDATE SET
                     interaction_count = interaction_count + 1,
                     last_interaction_at = excluded.last_interaction_at
-            """, (user_id, persona_id, now))
+            """, (user_uid, persona_uid, now))
     
-    def get_user_interaction_stats(self, user_id: int) -> Optional[Dict[str, Any]]:
+    def get_user_interaction_stats(self, user_uid: int) -> Optional[Dict[str, Any]]:
         """Get interaction statistics for a specific user."""
         with sqlite3.connect(self.db_path) as conn:
             # Get user's total interaction count by summing up all interactions with personas
             cursor = conn.execute("""
                 SELECT SUM(interaction_count)
                 FROM user_persona_interactions
-                WHERE user_id = ?
-            """, (user_id,))
+                WHERE user_uid = ?
+            """, (user_uid,))
             row = cursor.fetchone()
             
             if not row or row[0] is None:
@@ -323,27 +325,27 @@ class PersonaDatabase:
             
             # Get user's most interacted persona
             cursor = conn.execute("""
-                SELECT p.id, p.persona, upi.interaction_count
+                SELECT p.uid, p.persona, upi.interaction_count
                 FROM user_persona_interactions upi
-                JOIN personas p ON upi.persona_id = p.id
-                WHERE upi.user_id = ?
+                JOIN personas p ON upi.persona_uid = p.uid
+                WHERE upi.user_uid = ?
                 ORDER BY upi.interaction_count DESC
                 LIMIT 1
-            """, (user_id,))
+            """, (user_uid,))
             
             most_interacted = cursor.fetchone()
             
             if most_interacted:
                 return {
                     'total_interactions': total_interactions,
-                    'most_interacted_persona_id': most_interacted[0],
+                    'most_interacted_persona_uid': most_interacted[0],
                     'most_interacted_persona_name': most_interacted[1],
                     'most_interacted_count': most_interacted[2]
                 }
             else:
                 return {
                     'total_interactions': total_interactions,
-                    'most_interacted_persona_id': None,
+                    'most_interacted_persona_uid': None,
                     'most_interacted_persona_name': None,
                     'most_interacted_count': 0
                 }
@@ -352,134 +354,41 @@ class PersonaDatabase:
         """Get top users by total interaction count."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT user_id, interaction_count
+                SELECT user_uid, interaction_count
                 FROM discord_user
                 ORDER BY interaction_count DESC
                 LIMIT ?
             """, (limit,))
             
             return cursor.fetchall()
-
-class PersonaManager:
-    def __init__(self, db_path: str = "llm_character_cards.db"):
-        self.db = PersonaDatabase(db_path)
-        self.current_user: Optional[int] = None
-    
-    def login(self, user_id: int):
-        """Set current user"""
-        self.current_user = user_id
-        print(f"User {user_id} logged in")
-    
-    def create_persona(self, persona: str, content: str, visibility: PersonaVisibility) -> Optional[Persona]:
-        """Create a new persona for current user"""
-        if not self.current_user:
-            print("Please login first")
-            return None
         
-        persona = self.db.create_persona(persona, content, self.current_user, visibility)
-        print(f"Persona created with ID: {persona.id}")
-        return persona
-    
-    def select_persona(self, persona_id: int) -> bool:
-        """Select a persona for current user"""
-        if not self.current_user:
-            print("Please login first")
-            return False
-        
-        success = self.db.set_selected_persona(self.current_user, persona_id)
-        if success:
-            print(f"Persona {persona_id} selected")
-        else:
-            print(f"Failed to select persona {persona_id} - persona not found or no permission")
-        return success
-    
-    def get_selected_persona(self) -> Optional[Persona]:
-        """Get current user's selected persona"""
-        if not self.current_user:
-            print("Please login first")
-            return None
-        
-        return self.db.get_selected_persona(self.current_user)
-    
-    def update_selected_persona(self, persona: Optional[str] = None, content: Optional[str] = None, 
-                           visibility: Optional[PersonaVisibility] = None) -> bool:
-        """Update current user's selected persona"""
-        if not self.current_user:
-            print("Please login first")
-            return False
-        
-        selected_persona = self.get_selected_persona()
-        if not selected_persona:
-            print("No persona selected")
-            return False
-        
-        updates = {}
-        if persona is not None:
-            updates['persona'] = persona
-        if content is not None:
-            updates['content'] = content
-        if visibility is not None:
-            updates['visibility'] = visibility.value
-        
-        success = self.db.update_persona(selected_persona.id, self.current_user, **updates)
-        if success:
-            print("Persona updated successfully")
-        else:
-            print("Failed to update persona - you may not own this persona")
-        return success
-    
-    def delete_selected_persona(self) -> bool:
-        """Delete current user's selected persona"""
-        if not self.current_user:
-            print("Please login first")
-            return False
-        
-        selected_persona = self.get_selected_persona()
-        if not selected_persona:
-            print("No persona selected")
-            return False
-        
-        success = self.db.delete_persona(selected_persona.id, self.current_user)
-        if success:
-            print("Persona deleted successfully")
-            self.db.clear_selected_persona(self.current_user)
-        else:
-            print("Failed to delete persona - not owner of this persona")
-        return success
-    
-    def list_personas(self) -> List[Persona]:
-        """List all personas visible to current user"""
-        if not self.current_user:
-            print("Please login first")
-            return []
-        
-        return self.db.list_personas(self.current_user)
-
 # Example usage
 if __name__ == "__main__":
-    manager = PersonaManager()
-    
-    # User operations
-    manager.login("225833749156331520")
+    manager = PersonaDatabase()
     
     # Create personas
-    persona1 = manager.create_persona("My Private Persona", "This is private", PersonaVisibility.PRIVATE)
-    persona2 = manager.create_persona("Public Persona", "This is first public", PersonaVisibility.PUBLIC)
-    persona3 = manager.create_persona("Public Persona 2", "This is second public", PersonaVisibility.PUBLIC)
+    user1_uid = 225833749156331520
+    # manager.create_persona("My Private Persona", "This is private", user1_uid, PersonaVisibility.PRIVATE)
+    # manager.create_persona("Public Persona", "This is first public", user1_uid, PersonaVisibility.PUBLIC)
+    # manager.create_persona("Public Persona 2", "This is second public", user1_uid, PersonaVisibility.PUBLIC)
     # Select and work with a persona
-    manager.select_persona(persona1.id)
-    selected = manager.get_selected_persona()
-    print(f"Selected persona: {selected.persona}\n---\n{selected.content}")
-    
-    # Update selected persona
-    manager.update_selected_persona(persona="Updated Private Persona")
+    result = manager.set_selected_persona(user1_uid, 3)
+    print(f"Select persona result: {result}")
+    selected = manager.get_selected_persona(user1_uid)
+    if selected:
+        print(f"Selected persona: {selected.persona}\n---\n{selected.content[:50]}...")
+    else:
+        print("No persona selected.")
     
     # List all visible personas
-    personas = manager.list_personas()
+    personas = manager.list_personas(user1_uid)
+    print("User1 can see: ")
     for persona in personas:
-        print(f"- {persona.persona} ({persona.visibility.value})")
+        print(persona)
     
     # Switch user
-    manager.login("511412168386674691")
-    user2_personas = manager.list_personas()
-    print(f"User2 can see {len(user2_personas)} personas")  # Should only see public personas
+    user2_uid = 511412168386674691
+    user2_personas = manager.list_personas(user2_uid)
+    print("User2 can see: ")
+    for persona in user2_personas:
+        print(persona)
