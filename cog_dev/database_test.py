@@ -1,3 +1,4 @@
+from calendar import c
 import sqlite3
 import json
 from datetime import datetime, timezone, timedelta
@@ -31,6 +32,27 @@ class Persona:
     
     def __str__(self):
         return f"Persona(uid={self.uid:3d}, persona={self.persona}, owner_uid={self.owner_uid}, visibility={self.visibility.name})"
+@dataclass
+class DiscordUser:
+    user_uid: int
+    selected_persona_uid: int
+    last_interaction_send_at: Optional[str] = None
+    interaction_count: int = 0
+    last_payout_at: Optional[str] = None
+    balance: int = 0
+    
+    def __str__(self):
+        return f"DiscordUser(user_uid={self.user_uid}, selected_persona_uid={self.selected_persona_uid}, balance={self.balance})"
+    
+    def set_balance(self, amount: int):
+        self.balance = amount
+    
+    def adjust_balance(self, delta: int):
+        if self.balance + delta < 0:
+            raise ValueError("Insufficient balance")
+        self.balance += delta
+    
+    
     
 class PersonaDatabase:
     def __init__(self, db_path: str = "llm_character_cards.db"):
@@ -56,13 +78,18 @@ class PersonaDatabase:
             """)
             # Table to track Discord users and their selected personas
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS discord_user (
+                CREATE TABLE IF NOT EXISTS discord_users (
                     user_uid INTEGER PRIMARY KEY,
                     selected_persona_uid INTEGER,
                     last_interaction_send_at TEXT DEFAULT NULL,
                     interaction_count INTEGER DEFAULT 0,
+                    last_payout_at TEXT DEFAULT NULL,
+                    balance INTEGER DEFAULT 0,
                     FOREIGN KEY (selected_persona_uid) REFERENCES personas (uid)
-                )
+                    )
+                """)
+            conn.execute("""
+                DROP TABLE IF EXISTS discord_user;
             """)
             # Table to track user-persona interactions
             conn.execute("""
@@ -72,7 +99,7 @@ class PersonaDatabase:
                     interaction_count INTEGER DEFAULT 1,
                     last_interaction_at TEXT NOT NULL,
                     PRIMARY KEY (user_uid, persona_uid),
-                    FOREIGN KEY (user_uid) REFERENCES discord_user (user_uid),
+                    FOREIGN KEY (user_uid) REFERENCES discord_users (user_uid),
                     FOREIGN KEY (persona_uid) REFERENCES personas (uid)
                 )
             """)
@@ -177,7 +204,7 @@ class PersonaDatabase:
         with sqlite3.connect(self.db_path) as conn:
             # First, clear any user selections pointing to this persona
             conn.execute("""
-                DELETE FROM discord_user 
+                DELETE FROM discord_users 
                 WHERE selected_persona_uid = ?
             """, (persona_uid,))
             
@@ -222,7 +249,7 @@ class PersonaDatabase:
         
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO discord_user (user_uid, selected_persona_uid)
+                INSERT OR REPLACE INTO discord_users (user_uid, selected_persona_uid)
                 VALUES (?, ?)
             """, (user_uid, persona_uid))
             
@@ -234,7 +261,7 @@ class PersonaDatabase:
             cursor = conn.execute("""
                 SELECT p.uid, p.persona, p.content, p.owner_uid, p.visibility, p.created_at, p.updated_at, p.last_interaction_recv_at, p.interaction_count
                 FROM personas p
-                JOIN discord_user us ON p.uid = us.selected_persona_uid
+                JOIN discord_users us ON p.uid = us.selected_persona_uid
                 WHERE us.user_uid = ?
             """, (user_uid,))
             
@@ -258,7 +285,7 @@ class PersonaDatabase:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 SELECT us.selected_persona_uid
-                FROM discord_user us
+                FROM discord_users us
                 WHERE us.user_uid = ?
             """, (user_uid,))
             
@@ -271,7 +298,7 @@ class PersonaDatabase:
         """Clear user's selected persona"""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                DELETE FROM discord_user 
+                DELETE FROM discord_users 
                 WHERE user_uid = ?
             """, (user_uid,))
     
@@ -289,7 +316,7 @@ class PersonaDatabase:
             
             # 2. Update the User's global counts (already in your code)
             conn.execute("""
-                INSERT INTO discord_user (user_uid, interaction_count, last_interaction_send_at)
+                INSERT INTO discord_users (user_uid, interaction_count, last_interaction_send_at)
                 VALUES (?, 1, ?)
                 ON CONFLICT(user_uid) DO UPDATE SET
                     interaction_count = interaction_count + 1,
@@ -355,13 +382,56 @@ class PersonaDatabase:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 SELECT user_uid, interaction_count
-                FROM discord_user
+                FROM discord_users
                 ORDER BY interaction_count DESC
                 LIMIT ?
             """, (limit,))
             
             return cursor.fetchall()
         
+    def create_discord_user(self, user_uid: int) -> None:
+        """Create a new Discord user if they don't already exist."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT OR IGNORE INTO discord_users (user_uid, balance, interaction_count)
+                VALUES (?, 0, 0)
+            """, (user_uid,))
+
+    def get_discord_user(self, user_uid: int) -> Optional[DiscordUser]:
+        """Retrieve a Discord user by their UID."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT user_uid, selected_persona_uid, last_interaction_send_at, interaction_count, last_payout_at, balance
+                FROM discord_users
+                WHERE user_uid = ?
+            """, (user_uid,))
+            row = cursor.fetchone()
+            if row:
+                return DiscordUser(
+                    user_uid=row[0],
+                    selected_persona_uid=row[1],
+                    last_interaction_send_at=row[2],
+                    interaction_count=row[3],
+                    last_payout_at=row[4],
+                    balance=row[5]
+                )
+            return None
+
+    def update_discord_user(self, user_uid: int, **updates) -> bool:
+        """Update a Discord user's attributes."""
+        if not updates:
+            return False
+
+        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+        query = f"""
+            UPDATE discord_users
+            SET {set_clause}
+            WHERE user_uid = ?
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, list(updates.values()) + [user_uid])
+            return cursor.rowcount > 0
+
 # Example usage
 if __name__ == "__main__":
     manager = PersonaDatabase()
@@ -392,3 +462,18 @@ if __name__ == "__main__":
     print("User2 can see: ")
     for persona in user2_personas:
         print(persona)
+
+    # Create a new Discord user
+    user_uid = 123456789
+    manager.create_discord_user(user_uid)
+
+    # Retrieve the Discord user
+    user = manager.get_discord_user(user_uid)
+    if user:
+        print(f"Retrieved user: {user}")
+
+    # Update the Discord user's balance
+    manager.update_discord_user(user_uid, balance=100)
+    updated_user = manager.get_discord_user(user_uid)
+    if updated_user:
+        print(f"Updated user balance: {updated_user.balance}")
