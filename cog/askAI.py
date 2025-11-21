@@ -7,23 +7,24 @@ from typing import Optional, List
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands, File
 from discord.ext import commands, tasks
-from cog.utilFunc import sepLines, wcformat, GeminiContentClass, replyDict
+from cog.utilFunc import sepLines, wcformat
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
 import json, re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 import openai
 from google import genai
-from google.genai import types
+from google.genai import types as gtypes, errors
 
 MEMOLEN = 22
 THRESHOLD = 0.8575
 
-modelConfig = configToml.get("llmChat", {})
+chat_config = configToml.get("llmChat", {})
+link_config = configToml.get("llmLink", {})
 
-http_options = {
-    "base_url": configToml["llmChat"]["link_build"],
-}
+http_options = gtypes.HttpOptions(
+    base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
+)
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
@@ -46,83 +47,37 @@ class askAI(commands.Cog):
     async def cog_unload(self):
         for llm_api in self.llm_apis:
             llm_api.close()
-    
-    async def llm_chat_v3(self, messages):
-        """
-        Asynchronous method to interact with a language model (LLM) API and generate a response 
-        based on the provided messages.
-        Args:
-            messages (list): A list of dictionaries representing the conversation history. 
-                             Each dictionary should contain keys like "role" (e.g., "user", "assistant") 
-                             and "content" (the message text).
-        Returns:
-            dict: A dictionary containing the role and content of the LLM's response, or an error 
-                  message if the API call fails. The dictionary structure is as follows:
-                  - If successful:
-                    {
-                        "role": <str>,  # Role of the response (e.g., "assistant").
-                        "content": <str>  # Content of the response.
-                    }
-                  - If an error occurs:
-                    {
-                        "rol": "error",
-                        "msg": <str>  # JSON-formatted error message.
-                    }
-        Raises:
-            openai.APIError: If an error occurs during the API call, it is caught and logged.
-        Notes:
-            - The method uses the OpenAI API to generate chat completions.
-            - The `modelConfig["modelChat"]` specifies the model to be used.
-            - The `temperature` parameter controls the randomness of the response.
-            - The `max_tokens` parameter limits the length of the response.
-            - The `completion.usage.total_tokens` is printed for debugging purposes.
-        """
-        
-        try:
-            completion = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
-                model=modelConfig["modelChat"],
-                messages=messages,
-                temperature=0.7,
-                max_completion_tokens=4096,
-            )
-            
-            # Increment the API call count
-            self.api_call_count += 1
-            
-            # Switch API only after N calls
-            if self.api_call_count >= self.api_switch_threshold:
-                self.round_robin_api_index = (self.round_robin_api_index + 1) % len(self.llm_apis)
-                self.api_call_count = 0
-            
-        except openai.APIError as e:
-            print(f"OpenAI API error: {e}")
-            return replyDict('error', e)
-        print(completion.usage.total_tokens)
-        return replyDict(completion.choices[0].message.role, completion.choices[0].message.content)
-    
+
     async def llm_chat_v5(self, messages: list[dict], system: str) -> str:
         """
-        messages: list of strings (system + user messages)
+        messages: list of strings (model / user messages)
+        system: system instruction string
         """
         try:
             # 將 messages 轉成 Google GenAI 的 contents
-            contents = [GeminiContentClass(role=msg['role'], parts=msg['content']).to_dict for msg in messages]
+            message_contents = [
+                gtypes.Content(parts=list([gtypes.Part(text=msg['content'])]), role=msg["role"]) for msg in messages
+            ]
             response = await self.llm_apis[self.round_robin_api_index].aio.models.generate_content(
-                model=configToml["llmChat"]["modelChat"],
-                contents=contents,
-                config=types.GenerateContentConfig(
+                model=chat_config["modelChat"],
+                contents=list(message_contents),
+                config=gtypes.GenerateContentConfig(
                     system_instruction=system,
                     max_output_tokens=4096,
-                    thinking_config=types.ThinkingConfig(thinking_level="low"),
+                    thinking_config=gtypes.ThinkingConfig(
+                        thinking_level=gtypes.ThinkingLevel.LOW
+                    ),
                 ),
             )
-        except Exception as e:
-            print(f"GenAI Error: {e}")
-            return str(e)
+        except errors.APIError as e:
+            api_error = f"[{e.code}]{e.message}"
+            print(f"GenAI Error: {api_error}")
+            return api_error
 
-        # Google GenAI SDK 主要輸出為 `response.text`
-        print(response.usage_metadata.total_token_count)
-        return response.text
+        response_text = str(response.text)
+        if response.usage_metadata:
+            print(response.usage_metadata.total_token_count)
+        return response_text
     
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     async def create_persona(self, interaction: Interaction):
@@ -241,7 +196,7 @@ class askAI(commands.Cog):
             await ctx.send("No personas available.")
             return
 
-        persona_list = sepLines([f"ID: {p.id:03d}, Name: {wcformat(p.persona, strFront=False)}, Visibility: {p.visibility.name}" for p in personas])
+        persona_list = sepLines([f"ID: {p.uid:03d}, Name: {wcformat(p.persona, w=10, strFront=False)}, Visibility: {p.visibility.name}" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
     
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
@@ -257,9 +212,9 @@ class askAI(commands.Cog):
             return
 
         # Clear the memory for the selected persona
-        if _persona.id in self.persona_session_memory:
-            self.persona_session_memory[_persona.id].clear()
-            await interaction.response.send_message(f"Session memory for persona '{_persona.persona}' has been erased.")
+        if _persona.uid in self.persona_session_memory:
+            self.persona_session_memory[_persona.uid].clear()
+            await interaction.response.send_message(f"Session memory for {_persona.persona} has been erased.")
         else:
             await interaction.response.send_message("No session memory to erase for the selected persona.")
             
@@ -277,7 +232,7 @@ class askAI(commands.Cog):
         if self.bot.user.mentioned_in(message):
             # load persona selection from cache or db
             if uid not in self.selection_cache:
-                self.selection_cache[uid] = self.db.get_selected_persona_id(uid)
+                self.selection_cache[uid] = self.db.get_selected_persona_uid(uid)
                 print(f'from db load persona # {self.selection_cache[uid]} for user {uid} selection')
                 if self.selection_cache[uid] != -1:
                     # load persona into cache
@@ -285,7 +240,7 @@ class askAI(commands.Cog):
                     if not db_persona:
                         await message.channel.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
                         return
-                    self.persona_cache[db_persona.id] = db_persona
+                    self.persona_cache[db_persona.uid] = db_persona
                     
             persona_id = self.selection_cache.get(uid, -1)
             _persona = self.persona_cache.get(persona_id, None)
@@ -310,9 +265,9 @@ class askAI(commands.Cog):
             #     prompt = replyDict('user', f'{displayName} said {content}', userName)
             prompt = {'role': 'user', 'content': f'{displayName} said {content}'}
             async with message.channel.typing():
-                if _persona.id not in self.persona_session_memory:
-                    self.persona_session_memory[_persona.id] = deque(maxlen=MEMOLEN)
-                chatMem = self.persona_session_memory[_persona.id]
+                if _persona.uid not in self.persona_session_memory:
+                    self.persona_session_memory[_persona.uid] = deque(maxlen=MEMOLEN)
+                chatMem = self.persona_session_memory[_persona.uid]
                 try:
                     # reply = await self.llm_chat_v3([*chatMem, setupmsg.asdict, prompt.asdict])
                     reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
@@ -327,7 +282,7 @@ class askAI(commands.Cog):
                     # Only increase interaction count on successful reply
                     chatMem.append(prompt)
                     chatMem.append({'role': 'model', 'content': reply_content})
-                    self.db.increment_interaction_count(_persona.id, uid)
+                    self.db.increment_interaction_count(_persona.uid, uid)
                     
             # elif ('-t' in text[:n]) and devChk(uid):
             #     return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
@@ -380,7 +335,7 @@ class askAI(commands.Cog):
     ) -> List[app_commands.Choice[str]]:
         
         # Get your list of models
-        models = modelConfig["modelList"] 
+        models = chat_config["modelList"] 
         
         # Filter models based on what the user is typing
         filtered_models = [model for model in models if current.lower() in model.lower()]
@@ -398,7 +353,7 @@ class askAI(commands.Cog):
         # 'model' is now the string the user selected from the autocomplete list
         
         # A quick check to make sure the model is valid
-        if model not in modelConfig["modelList"]:
+        if model not in chat_config["modelList"]:
             await interaction.response.send_message(
                 f"錯誤：無效的模型 `{model}`", 
                 ephemeral=True
@@ -406,7 +361,7 @@ class askAI(commands.Cog):
             return
 
         # Update your config
-        modelConfig["modelChat"] = model
+        chat_config["modelChat"] = model
         
         # Send the confirmation
         await interaction.response.send_message(

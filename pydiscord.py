@@ -54,9 +54,12 @@ def run_discord():
         for c in LOADED_COG:
             await client.reload_extension(f'cog.{c}')
             suc += 1
-        
-        await ctx.send(f'{suc} reloaded and sync done in {ctx.guild.name}')
-        await sync_tree(ctx.guild)
+        if ctx.guild:
+            await ctx.send(f'{suc} reloaded and sync done in {str(ctx.guild.name)}')
+            await sync_tree(ctx.guild)
+        elif ctx.channel:
+            await ctx.send(f'{suc} reloaded and sync done in {str(ctx.channel)} (DM)')
+            await sync_tree(None)
 
     @client.command()
     @commands.is_owner()

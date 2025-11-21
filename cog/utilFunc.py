@@ -72,15 +72,3 @@ class replyDict:
         # if self.images:
         #     result['images'] = self.images
         return result
-
-class GeminiContentClass:
-    def __init__(self, role: str, parts: str):
-        self.role = role
-        self.parts = parts
-        
-    @property
-    def to_dict(self):
-        return {
-            "role": self.role,
-            "parts": [{"text": self.parts}],
-        }
