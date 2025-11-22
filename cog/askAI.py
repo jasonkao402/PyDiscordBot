@@ -75,6 +75,7 @@ class askAI(commands.Cog):
             return api_error
 
         response_text = str(response.text)
+        print(f'GenAI Response: {response_text}')
         if response.usage_metadata:
             print(response.usage_metadata.total_token_count)
         return response_text

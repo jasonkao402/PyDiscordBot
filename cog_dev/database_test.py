@@ -73,14 +73,16 @@ class PersonaDatabase:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     last_interaction_recv_at TEXT NOT NULL,
-                    interaction_count INTEGER DEFAULT 0
+                    interaction_count INTEGER DEFAULT 0,
+                    FOREIGN KEY (owner_uid) REFERENCES discord_users (user_uid)
                 )
             """)
+            
             # Table to track Discord users and their selected personas
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS discord_users (
                     user_uid INTEGER PRIMARY KEY,
-                    selected_persona_uid INTEGER,
+                    selected_persona_uid INTEGER NOT NULL DEFAULT -1,
                     last_interaction_send_at TEXT DEFAULT NULL,
                     interaction_count INTEGER DEFAULT 0,
                     last_payout_at TEXT DEFAULT NULL,
@@ -88,9 +90,7 @@ class PersonaDatabase:
                     FOREIGN KEY (selected_persona_uid) REFERENCES personas (uid)
                     )
                 """)
-            conn.execute("""
-                DROP TABLE IF EXISTS discord_user;
-            """)
+            
             # Table to track user-persona interactions
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS user_persona_interactions (
