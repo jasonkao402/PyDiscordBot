@@ -63,8 +63,8 @@ class drawing_sd(commands.Cog):
             return
         
         # clip w and h to 512 - 1024, in step of 16
-        width  = clamp((width  + 8) // 16 * 16, 512, 1024)
-        height = clamp((height + 8) // 16 * 16, 512, 1024)
+        width  = int(clamp((width  + 8) // 16 * 16, 512, 1024))
+        height = int(clamp((height + 8) // 16 * 16, 512, 1024))
 
         await interaction.response.defer()
         response = await self.sdimageAPI.imageGen(prompt, width, height)

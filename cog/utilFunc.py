@@ -8,7 +8,7 @@ from config_loader import configToml
 
 TWTZ = timezone(timedelta(hours = 8))
     
-def clamp(n:int, minn=0, maxn=100) -> float:
+def clamp(n: float, minn: float = 0, maxn: float = 100) -> float:
     '''clamp n in set range'''
     return max(min(maxn, n), minn)
 

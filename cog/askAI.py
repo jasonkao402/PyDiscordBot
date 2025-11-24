@@ -7,6 +7,7 @@ from typing import Optional, List
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands, File
 from discord.ext import commands, tasks
+from flask import g
 from cog.utilFunc import sepLines, wcformat
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
@@ -48,7 +49,7 @@ class askAI(commands.Cog):
         for llm_api in self.llm_apis:
             llm_api.close()
 
-    async def llm_chat_v5(self, messages: list[dict], system: str) -> str:
+    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part] = None) -> str:
         """
         messages: list of strings (model / user messages)
         system: system instruction string
@@ -58,6 +59,10 @@ class askAI(commands.Cog):
             message_contents = [
                 gtypes.Content(parts=list([gtypes.Part(text=msg['content'])]), role=msg["role"]) for msg in messages
             ]
+            if image:
+                message_contents.append(
+                    gtypes.Content(parts=[image], role="user")
+                )
             response = await self.llm_apis[self.round_robin_api_index].aio.models.generate_content(
                 model=chat_config["modelChat"],
                 contents=list(message_contents),
@@ -254,16 +259,8 @@ class askAI(commands.Cog):
             content = messageText.replace(self.bot.user.mention, '', 1).strip()
             print(f'{user_persona_pair}: {content}')
             
-            # setupmsg = replyDict('system', f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}', 'system')
             system_instruction = f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}'
-            # if message.attachments:
-            #     # with the "first" image encoded in Base64 (performance optimization)
-            #     image_url = message.attachments[0].url
-            #     print(image_url)
-            #     # print(f'Encoded image size: {len(prompt.images[0])} characters')
-            #     prompt = replyDict('user', f'{displayName} said {content}', userName, image_url=image_url)
-            #  else:
-            #     prompt = replyDict('user', f'{displayName} said {content}', userName)
+            
             prompt = {'role': 'user', 'content': f'{displayName} said {content}'}
             async with message.channel.typing():
                 if _persona.uid not in self.persona_session_memory:
@@ -271,7 +268,20 @@ class askAI(commands.Cog):
                 chatMem = self.persona_session_memory[_persona.uid]
                 try:
                     # reply = await self.llm_chat_v3([*chatMem, setupmsg.asdict, prompt.asdict])
-                    reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
+                    if message.attachments:
+                        # with the "first" image encoded in Base64 (performance optimization)
+                        decoded_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
+                        print(f'Encoded image size: {len(decoded_image)} characters')
+                        image_part = gtypes.Part(
+                                inline_data=gtypes.Blob(
+                                    mime_type="image/jpeg",
+                                    data=base64.b64decode(decoded_image),
+                                ),
+                                media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
+                            )
+                        reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
+                    else:
+                        reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
                     await message.channel.send(reply_content)
                 except TimeoutError:
                     await message.channel.send("The bot is currently unavailable. Please try again later.")
