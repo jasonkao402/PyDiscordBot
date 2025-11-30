@@ -17,14 +17,15 @@ import openai
 from google import genai
 from google.genai import types as gtypes, errors
 
-MEMOLEN = 22
+MEMOLEN = 26
 THRESHOLD = 0.8575
 
-chat_config = configToml.get("llmChat", {})
-link_config = configToml.get("llmLink", {})
+chat_config: dict[str, str] = configToml.get("llmChat", "")
+link_config: dict[str, str] = configToml.get("llmLink", "")
 
 http_options = gtypes.HttpOptions(
     base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
+    # base_url=str(link_config.get("link_gcli2api", "")), timeout=60
 )
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
@@ -63,16 +64,17 @@ class askAI(commands.Cog):
                 message_contents.append(
                     gtypes.Content(parts=[image], role="user")
                 )
+            content_config = gtypes.GenerateContentConfig(
+                system_instruction=system,
+                max_output_tokens=4096,
+                thinking_config=gtypes.ThinkingConfig(
+                    thinking_level=gtypes.ThinkingLevel.LOW
+                ),
+            )
             response = await self.llm_apis[self.round_robin_api_index].aio.models.generate_content(
                 model=chat_config["modelChat"],
                 contents=list(message_contents),
-                config=gtypes.GenerateContentConfig(
-                    system_instruction=system,
-                    max_output_tokens=4096,
-                    thinking_config=gtypes.ThinkingConfig(
-                        thinking_level=gtypes.ThinkingLevel.LOW
-                    ),
-                ),
+                config=content_config,
             )
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
@@ -80,7 +82,9 @@ class askAI(commands.Cog):
             return api_error
 
         response_text = str(response.text)
-        print(f'GenAI Response: {response_text}')
+        if len(response_text) > 2000:
+            print(f'GenAI Response: {response_text}')
+            return response_text[:1980] + "\n...[truncated]"
         if response.usage_metadata:
             print(response.usage_metadata.total_token_count)
         return response_text
@@ -224,6 +228,26 @@ class askAI(commands.Cog):
         else:
             await interaction.response.send_message("No session memory to erase for the selected persona.")
             
+    @app_commands.command(name="currentpersona", description="Show the currently selected persona")
+    async def current_persona(self, interaction: Interaction):
+        """Show the currently selected persona."""
+        user_id = interaction.user.id
+        
+        # Get the selected persona
+        persona_id = self.selection_cache.get(user_id, -1)
+        _persona = self.persona_cache.get(persona_id, None)
+
+        if not _persona:
+            await interaction.response.send_message("No persona selected. Use /selectpersona to select one.", ephemeral=True)
+            return
+
+        # Create an embed to display persona details
+        embed = Embed(title=f"Current Persona: {_persona.persona} (#{_persona.uid})", color=Color.blue())
+        embed.add_field(name="Visibility", value="Public" if _persona.visibility == PersonaVisibility.PUBLIC else "Private", inline=False)
+        embed.add_field(name="Content", value=_persona.content[:1024], inline=False)  # Limit content to 1024 characters for embed
+
+        await interaction.response.send_message(embed=embed)
+    
     @commands.Cog.listener()
     async def on_message(self, message: Message):
         user, messageText = message.author, message.content
@@ -231,9 +255,12 @@ class askAI(commands.Cog):
         displayName = user.display_name
         userName = re.sub(r'[.#]', '', userName)
         # ignore self messages
+        ban_list = configToml.get("botConfig", {}).get("banList", [])
         if uid == self.bot.user.id:
             return
-
+        if uid in ban_list:
+            print(f'Ignored message from banned user {userName} ({uid})')
+            return
         # 2025/11/12 Refactor: Use mentions to trigger bot llm chat
         if self.bot.user.mentioned_in(message):
             # load persona selection from cache or db

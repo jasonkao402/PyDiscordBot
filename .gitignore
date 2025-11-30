@@ -130,3 +130,4 @@ subsystem_tests/chat_history/*
 llm_character_cards.db
 llm_character_cards.db-shm
 llm_character_cards.db-wal
+startBot.bat

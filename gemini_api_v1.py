@@ -13,7 +13,9 @@ N = 16
 
 # Typed http_options to satisfy Client's expected HttpOptionsDict
 http_options = gtypes.HttpOptions(
-    base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
+    # base_url=f"{configToml['llmLink']['link_gcli2api']}?key={configToml['apiToken']['gemini_llm'][0]}", timeout=60,
+    base_url=str(configToml["llmLink"]["link_gcli2api"]), timeout=60,
+    headers={"x-goog-api-key" : configToml["apiToken"]["gemini_llm"][0]},
 )
 
 class ChatCog:
@@ -22,26 +24,12 @@ class ChatCog:
             api_key=configToml["apiToken"]["gemini_llm"][0],
             http_options=http_options,
             )
-
-
-    async def llm_chat_v4(self, messages, system):
-        """
-        messages: list of strings (system + user messages)
-        """
-        try:
-            # 將 messages 轉成 Google GenAI 的 contents
-            response = await self.client.aio.models.generate_content(
-                model=configToml["llmChat"]["modelChat"],
-                contents=messages,
-            )
-        except Exception as e:
-            print(f"GenAI Error: {e}")
-            return str(e)
-
-        # Google GenAI SDK 主要輸出為 `response.text`
-        print(response)
-        return response.text
-
+        
+    def list_models(self) -> str:
+        models = self.client.models.list()
+        model_names = [str(model.name) for model in models]
+        model_names = "\n".join(model_names)
+        return model_names
 
     async def llm_chat_v5(self, messages: list[dict], system: str) -> str:
         """
@@ -81,7 +69,8 @@ async def main():
     print(http_options)
     db = PersonaDatabase("llm_character_cards.db")
     api = ChatCog()
-    _persona = db.get_persona_no_check(2)
+    # print(api.list_models())
+    _persona = db.get_persona_no_check(3)
     assert isinstance(_persona, Persona)
     print(f"Using persona: {_persona.persona}")
     userName = "USER"
@@ -112,8 +101,8 @@ async def main():
             # print(reply)
             print(f"\n{_persona.persona}: {reply}")
 
-        except TimeoutError:
-            print("Timeout")
+        except Exception as e:
+            print(f"Error during chat: {e}")
         else:
             persona_session_memory.append(userPrompt)
             persona_session_memory.append({"role": "model", "content": reply})
