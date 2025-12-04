@@ -33,6 +33,7 @@ class askAI(commands.Cog):
     def __init__(self, bot: DC_Client):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
+        self.ban_list = configToml.get("auth", {}).get("ban_list", [])
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
         self.api_switch_threshold = 5  # Number of calls before switching to the next API
@@ -45,6 +46,8 @@ class askAI(commands.Cog):
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
         print(f'Loaded askAI cog with {len(self.llm_apis)} LLM API clients.')
+        print("ban list:")
+        print(', '.join(str(uid) for uid in self.ban_list))
         
     async def cog_unload(self):
         for llm_api in self.llm_apis:
@@ -248,87 +251,83 @@ class askAI(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
     
+    async def handle_llm_trigger(self, message: Message, user_id: int, user_name: str, display_name: str):
+        """Handle the logic for detecting and triggering the LLM feature."""
+        # Load persona selection from cache or database
+        if user_id not in self.selection_cache:
+            self.selection_cache[user_id] = self.db.get_selected_persona_uid(user_id)
+            print(f'from db load persona # {self.selection_cache[user_id]} for user {user_id} selection')
+            if self.selection_cache[user_id] != -1:
+                # Load persona into cache
+                db_persona = self.db.get_persona_no_check(self.selection_cache[user_id])
+                if not db_persona:
+                    await message.channel.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
+                    return
+                self.persona_cache[db_persona.uid] = db_persona
+
+        persona_id = self.selection_cache.get(user_id, -1)
+        _persona = self.persona_cache.get(persona_id, None)
+        if not _persona:
+            await message.channel.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
+            return
+
+        user_persona_pair = f'{wcformat(user_name)}[{_persona.persona}]'
+        # Filter out mention bot part
+        content = message.content.replace(self.bot.user.mention, '', 1).strip()
+        print(f'{user_persona_pair}: {content}')
+
+        system_instruction = f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}'
+        prompt = {'role': 'user', 'content': f'{display_name} said {content}'}
+
+        async with message.channel.typing():
+            if _persona.uid not in self.persona_session_memory:
+                self.persona_session_memory[_persona.uid] = deque(maxlen=MEMOLEN)
+            chatMem = self.persona_session_memory[_persona.uid]
+            try:
+                if message.attachments:
+                    # Handle image attachments
+                    decoded_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
+                    print(f'Encoded image size: {len(decoded_image)} characters')
+                    image_part = gtypes.Part(
+                        inline_data=gtypes.Blob(
+                            mime_type="image/jpeg",
+                            data=base64.b64decode(decoded_image),
+                        ),
+                        media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
+                    )
+                    reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
+                else:
+                    reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
+                await message.channel.send(reply_content)
+            except TimeoutError:
+                await message.channel.send("The bot is currently unavailable. Please try again later.")
+            except Exception as e:
+                print(f'Reply error:\n{user_persona_pair}:\n{e}')
+                await message.channel.send(f'{user_persona_pair} 發生錯誤，請聯繫主人\n{e}')
+            else:
+                # Only append to memory if no exception
+                chatMem.append(prompt)
+                chatMem.append({'role': 'model', 'content': reply_content})
+                self.db.increment_interaction_count(_persona.uid, user_id)
+
     @commands.Cog.listener()
     async def on_message(self, message: Message):
-        user, messageText = message.author, message.content
-        uid, userName = user.id, user.name
-        displayName = user.display_name
-        userName = re.sub(r'[.#]', '', userName)
-        # ignore self messages
-        ban_list = configToml.get("botConfig", {}).get("banList", [])
-        if uid == self.bot.user.id:
+        user, message_text = message.author, message.content
+        user_id, user_name = user.id, user.name
+        display_name = user.display_name
+        user_name = re.sub(r'[.#]', '', user_name)
+
+        # Ignore self messages
+        if user_id == self.bot.user.id:
             return
-        if uid in ban_list:
-            print(f'Ignored message from banned user {userName} ({uid})')
+        if user_id in self.ban_list:
+            print(f'Ignored message from banned user {user_name} ({user_id})')
             return
-        # 2025/11/12 Refactor: Use mentions to trigger bot llm chat
+
+        # Use mentions to trigger bot LLM chat
         if self.bot.user.mentioned_in(message):
-            # load persona selection from cache or db
-            if uid not in self.selection_cache:
-                self.selection_cache[uid] = self.db.get_selected_persona_uid(uid)
-                print(f'from db load persona # {self.selection_cache[uid]} for user {uid} selection')
-                if self.selection_cache[uid] != -1:
-                    # load persona into cache
-                    db_persona = self.db.get_persona_no_check(self.selection_cache[uid])
-                    if not db_persona:
-                        await message.channel.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
-                        return
-                    self.persona_cache[db_persona.uid] = db_persona
-                    
-            persona_id = self.selection_cache.get(uid, -1)
-            _persona = self.persona_cache.get(persona_id, None)
-            if not _persona:
-                await message.channel.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
-                return
-            
-            user_persona_pair = f'{wcformat(userName)}[{_persona.persona}]'
-            # filter out mention bot part
-            content = messageText.replace(self.bot.user.mention, '', 1).strip()
-            print(f'{user_persona_pair}: {content}')
-            
-            system_instruction = f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}'
-            
-            prompt = {'role': 'user', 'content': f'{displayName} said {content}'}
-            async with message.channel.typing():
-                if _persona.uid not in self.persona_session_memory:
-                    self.persona_session_memory[_persona.uid] = deque(maxlen=MEMOLEN)
-                chatMem = self.persona_session_memory[_persona.uid]
-                try:
-                    # reply = await self.llm_chat_v3([*chatMem, setupmsg.asdict, prompt.asdict])
-                    if message.attachments:
-                        # with the "first" image encoded in Base64 (performance optimization)
-                        decoded_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
-                        print(f'Encoded image size: {len(decoded_image)} characters')
-                        image_part = gtypes.Part(
-                                inline_data=gtypes.Blob(
-                                    mime_type="image/jpeg",
-                                    data=base64.b64decode(decoded_image),
-                                ),
-                                media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
-                            )
-                        reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
-                    else:
-                        reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
-                    await message.channel.send(reply_content)
-                except TimeoutError:
-                    await message.channel.send("The bot is currently unavailable. Please try again later.")
-                except Exception as e:
-                    print(f'Reply error:\n{user_persona_pair}:\n{e}')
-                    await message.channel.send(f'{user_persona_pair} 發生錯誤，請聯繫主人\n{e}')
-                else:
-                    # Only append to memory if no exception
-                    # Only increase interaction count on successful reply
-                    chatMem.append(prompt)
-                    chatMem.append({'role': 'model', 'content': reply_content})
-                    self.db.increment_interaction_count(_persona.uid, uid)
-                    
-            # elif ('-t' in text[:n]) and devChk(uid):
-            #     return await message.channel.send(f'Total tokens: {chatTok[aiNum]}')
-            
-            # elif ('-log' in text[:n]) and devChk(uid):
-            #     tmp = sepLines((m['content'] for m in chatMem[aiNum]))
-            #     return await message.channel.send(f'Loaded memory: {len(chatMem[aiNum])}\n{tmp}')
-            
+            await self.handle_llm_trigger(message, user_id, user_name, display_name)
+
     @commands.hybrid_command(name='scoreboard')
     async def _scoreboard(self, ctx: commands.Context):
         """Display interaction statistics and leaderboard."""

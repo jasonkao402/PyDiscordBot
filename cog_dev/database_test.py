@@ -337,7 +337,7 @@ class PersonaDatabase:
     def get_user_interaction_stats(self, user_uid: int) -> Optional[Dict[str, Any]]:
         """Get interaction statistics for a specific user."""
         with sqlite3.connect(self.db_path) as conn:
-            # Get user's total interaction count by summing up all interactions with personas
+            # Get all users' total interaction count by summing up all interactions with personas
             cursor = conn.execute("""
                 SELECT SUM(interaction_count)
                 FROM user_persona_interactions
@@ -381,9 +381,10 @@ class PersonaDatabase:
         """Get top users by total interaction count."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT user_uid, interaction_count
-                FROM discord_users
-                ORDER BY interaction_count DESC
+                SELECT user_uid, SUM(interaction_count) as total_interactions
+                FROM user_persona_interactions
+                GROUP BY user_uid
+                ORDER BY total_interactions DESC
                 LIMIT ?
             """, (limit,))
             
