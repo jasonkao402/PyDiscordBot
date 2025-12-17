@@ -1,6 +1,7 @@
 from asyncio.exceptions import TimeoutError
 import base64
 from collections import deque
+from math import exp
 from time import strftime
 from typing import Optional, List
 
@@ -104,9 +105,9 @@ class askAI(commands.Cog):
         visibility_enum = PersonaVisibility.PUBLIC if visibility else PersonaVisibility.PRIVATE
 
         # Create the persona
-        _persona = self.db.create_persona(persona_name, content, user_id, visibility_enum)
+        _persona_id = self.db.create_persona(persona_name, content, user_id, visibility_enum)
 
-        if not _persona:
+        if _persona_id == -1:
             # Send a warning message if persona creation fails
             await interaction.response.send_message(
                 content="You have reached the maximum limit of 5 personas. Please delete an existing persona to create a new one.",
@@ -115,14 +116,11 @@ class askAI(commands.Cog):
             return
 
         # Create an embed to confirm the creation
-        embed = Embed(title=f"{_persona.persona} (#{_persona.id}) Created", color=Color.green())
+        embed = Embed(title=f"{persona_name} (#{_persona_id}) Created", color=Color.green())
         embed.add_field(name="Visibility", value="Public" if visibility else "Private", inline=False)
         embed.add_field(name="Content", value=content[:1024], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
-        # Cache the newly created persona
-        self.persona_cache[_persona.id] = _persona
-
     
     @app_commands.command(name="editpersona", description="Edit an existing LLM persona")
     @app_commands.describe(persona_id="ID of the persona to edit")
@@ -276,7 +274,7 @@ class askAI(commands.Cog):
         content = message.content.replace(self.bot.user.mention, '', 1).strip()
         print(f'{user_persona_pair}: {content}')
 
-        system_instruction = f'{_persona.content} 現在是{strftime("%Y-%m-%d %H:%M %a")}'
+        system_instruction = f'{_persona.content}\n最新對話參考時間:{strftime("%Y/%m/%d %H:%M %a")}'
         prompt = {'role': 'user', 'content': f'{display_name} said {content}'}
 
         async with message.channel.typing():
@@ -287,7 +285,7 @@ class askAI(commands.Cog):
                 if message.attachments:
                     # Handle image attachments
                     decoded_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
-                    print(f'Encoded image size: {len(decoded_image)} characters')
+                    # print(f'Encoded image size: {len(decoded_image)} characters')
                     image_part = gtypes.Part(
                         inline_data=gtypes.Blob(
                             mime_type="image/jpeg",
@@ -298,7 +296,31 @@ class askAI(commands.Cog):
                     reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
                 else:
                     reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
-                await message.channel.send(reply_content)
+
+                # Validate and parse the JSON response
+                try:
+                    l_cursor = reply_content.find('```json') + 7
+                    r_cursor = reply_content.rfind('```')
+                    if l_cursor == -1 or r_cursor == -1 or l_cursor >= r_cursor:
+                        response_data = json.loads(reply_content)
+                    else:
+                        response_data = json.loads(reply_content[l_cursor:r_cursor])
+                    what_to_reply = response_data.get("what_to_reply", "無法解析的回覆")
+                    delta_affection = response_data.get("delta_affection", 0)
+
+                    # Send the parsed response
+                    await message.channel.send(f"{what_to_reply}\n\n* 好感度變化: {delta_affection}")
+                    print(f"Delta Affection: {delta_affection}")
+                    reply_content = what_to_reply  # Update reply_content for memory logging
+                
+                except json.JSONDecodeError:
+                    await message.channel.send(reply_content)
+                    print(f"Invalid JSON response, sent as plain text.")
+                    
+                except ValueError:
+                    await message.channel.send(reply_content)
+                    print(f"No JSON code block found, sent as plain text.")
+
             except TimeoutError:
                 await message.channel.send("The bot is currently unavailable. Please try again later.")
             except Exception as e:

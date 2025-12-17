@@ -104,7 +104,7 @@ class PersonaDatabase:
                 )
             """)
 
-    def create_persona(self, persona: str, content: str, owner_uid: int, visibility: PersonaVisibility) -> None:
+    def create_persona(self, persona: str, content: str, owner_uid: int, visibility: PersonaVisibility) -> int:
         """Create a new persona, ensuring the user does not exceed the limit."""
         # Check if the user already has 5 personas
         with sqlite3.connect(self.db_path) as conn:
@@ -116,7 +116,7 @@ class PersonaDatabase:
 
         if persona_count >= 5:
             print(f"User {owner_uid} has reached the persona limit.")
-            return
+            return -1
 
         now = datetime.now().isoformat(timespec='milliseconds')
         with sqlite3.connect(self.db_path) as conn:
@@ -128,6 +128,7 @@ class PersonaDatabase:
             persona_uid = cursor.lastrowid
             if not persona_uid:
                 raise ValueError("Failed to retrieve the persona uid after insertion.")
+        return persona_uid
     
     def get_persona(self, persona_uid: int, user_uid: int) -> Optional[Persona]:
         """Get a persona if user has permission to view it"""
