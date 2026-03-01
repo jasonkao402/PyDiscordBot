@@ -56,7 +56,7 @@ class askAI(commands.Cog):
         for llm_api in self.llm_apis:
             await llm_api.close()
 
-    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part] = None) -> str:
+    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part] = None) -> tuple[str, str]:
         """
         messages: list of strings (model / user messages)
         system: system instruction string
@@ -99,19 +99,21 @@ class askAI(commands.Cog):
                     ]
                 ],
                 max_tokens=4096,
+                extra_body={"thinking": {"type": "enabled"}},
             )
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
-            print(f"GenAI Error: {api_error}\n---")
-            return api_error
+            print(f"API Error: {api_error}\n---")
+            return api_error, ""
 
         response_text = str(response.choices[0].message.content)
+        thinking_content = str(response.choices[0].message.reasoning_content) if hasattr(response.choices[0].message, 'reasoning_content') else ""
         
         # if response.usage_metadata:
             # print(response.usage_metadata.total_token_count)
         if response.usage:
             print(f'Token usage: {response.usage.total_tokens} tokens')
-        return response_text
+        return response_text, thinking_content
     
     @app_commands.command(name="clearcache", description="Clear the persona and selection caches")
     @commands.is_owner()
@@ -322,9 +324,9 @@ class askAI(commands.Cog):
                         ),
                         media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
                     )
-                    reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
+                    reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
                 else:
-                    reply_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
+                    reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
 
                 # Validate and parse the JSON response
                 try:
@@ -340,8 +342,13 @@ class askAI(commands.Cog):
                     # Send the parsed response
                     if len(what_to_reply) > 2000:
                         print(f'GenAI Response: {what_to_reply}')
-                        return what_to_reply[:1980] + "\n...[truncated]"
+                        what_to_reply = what_to_reply[:1980] + "\n...[truncated]"
                     
+                    if reasoning_content:
+                        if len(reasoning_content) > 2000:
+                            print(f'GenAI Reasoning Content: {reasoning_content}')
+                            reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
+                        await message.channel.send(f"**Reasoning:**\n{reasoning_content}")
                     await message.channel.send(f"{what_to_reply}\n\n* 好感度變化: {delta_affection}")
                     print(f"Delta Affection: {delta_affection}")
                     reply_content = what_to_reply  # Update reply_content for memory logging
@@ -349,7 +356,7 @@ class askAI(commands.Cog):
                 except json.JSONDecodeError:
                     if len(reply_content) > 2000:
                         print(f'GenAI Response: {reply_content}')
-                        return reply_content[:1980] + "\n...[truncated]"
+                        reply_content = reply_content[:1980] + "\n...[truncated]"
                     await message.channel.send(reply_content)
                     print(f"Invalid JSON response, sent as plain text.")
                     
@@ -472,7 +479,7 @@ class askAI(commands.Cog):
     
     async def llm_create_memory(self, messages: list[dict]) -> list[dict]:
         """Convert messages to the format required by the LLM API."""
-        
+    
         return []
     # @commands.hybrid_command(name = 'status')
     # @commands.is_owner()

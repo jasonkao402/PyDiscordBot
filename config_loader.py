@@ -6,8 +6,8 @@ def loadToml():
     if not os.path.exists(tomlpath):
         print('config.toml not found, please check the file')
         return {}
-    
-    with open(tomlpath, 'r+') as tomlFile:
+    # Load toml with chinese character support
+    with open(tomlpath, 'r+', encoding='utf-8') as tomlFile:
         _configToml = toml.load(tomlFile)
         print(f'loaded from {tomlpath}, content:\n{_configToml.keys()}')
         return _configToml
