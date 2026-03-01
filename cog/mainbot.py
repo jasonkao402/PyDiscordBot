@@ -1,9 +1,11 @@
 import random
+
+from discord import DMChannel, GroupChannel, PartialMessageable
 from discord.ext import commands
 from cog.utilFunc import devChk
 
-POSINT = '正整數啦!  (´_ゝ`)\n'
-BADARGUMENT = '參數 Bad!  (#`Д´)ノ\n'
+POSINT = '正整數啦!'
+BADARGUMENT = '參數 Bad!'
 
 class mainbot(commands.Cog):
     """Main functions."""
@@ -44,9 +46,16 @@ class mainbot(commands.Cog):
             print('clear cmd error')
             return
 
-        if rpt <= 0 or rpt > 10 : await ctx.send(BADARGUMENT, delete_after=20)
-        else : await ctx.channel.purge(limit = rpt+1)
-        print(f'{ctx.author.name[:16]} tried removed {rpt} messages')
+        if rpt <= 0 or rpt > 32 : 
+            await ctx.send(BADARGUMENT, delete_after=20)
+        if isinstance(ctx.channel, (DMChannel, PartialMessageable, GroupChannel)):
+            await ctx.send('這裡不能用清除訊息指令喔!\n', delete_after=20)
+        else : 
+            if rpt == 1:
+                await ctx.message.delete()
+            else:
+                await ctx.channel.purge(limit = rpt+1)
+        print(f'{ctx.author} tried removed {rpt} messages')
     
     @commands.command(name = 'sel', aliases = ['rnd', '幫我選一個'])
     async def _sel(self, ctx:commands.Context, *args):

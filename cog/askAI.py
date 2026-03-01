@@ -1,5 +1,3 @@
-from asyncio.exceptions import TimeoutError
-import base64
 from collections import deque
 from math import exp
 from time import strftime
@@ -8,14 +6,15 @@ from typing import Optional, List
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands, File
 from discord.ext import commands, tasks
-from flask import g
 from cog.utilFunc import sepLines, wcformat
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
 import json, re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
-import openai
-from google import genai
+
+import base64
+from openai import AsyncOpenAI
+# from google import genai
 from google.genai import types as gtypes, errors
 
 MEMOLEN = 26
@@ -23,10 +22,12 @@ THRESHOLD = 0.8575
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
+llm_base_url = link_config.get("link_deepseek", "")
 
 http_options = gtypes.HttpOptions(
-    base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
+    # base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
     # base_url=str(link_config.get("link_gcli2api", "")), timeout=60
+    base_url=str(llm_base_url), timeout=60
 )
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
@@ -38,21 +39,22 @@ class askAI(commands.Cog):
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
         self.api_switch_threshold = 5  # Number of calls before switching to the next API
-        self.round_robin_api_collection = configToml['apiToken'].get('gemini_llm', [])
-        self.llm_apis = [genai.Client(
-            api_key=api_key,
-            http_options=http_options,
-        ) for api_key in self.round_robin_api_collection]
+        self.round_robin_api_collection = configToml['apiToken'].get('deepseek_llm', [])
+        # self.llm_apis = [genai.Client(
+        #     api_key=api_key,
+        #     http_options=http_options,
+        # ) for api_key in self.round_robin_api_collection]
+        self.llm_apis = [AsyncOpenAI(api_key=api_key, base_url=llm_base_url) for api_key in self.round_robin_api_collection]
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
-        print(f'Loaded askAI cog with {len(self.llm_apis)} LLM API clients.')
-        print("ban list:")
-        print(', '.join(str(uid) for uid in self.ban_list))
+        print(f'Loaded askAI cog with {len(self.llm_apis)} LLM API clients @ {llm_base_url}.')
+        # print("ban list:")
+        # print(', '.join(str(uid) for uid in self.ban_list))
         
     async def cog_unload(self):
         for llm_api in self.llm_apis:
-            llm_api.close()
+            await llm_api.close()
 
     async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part] = None) -> str:
         """
@@ -60,10 +62,13 @@ class askAI(commands.Cog):
         system: system instruction string
         """
         try:
+            # Google API
+            """
             # 將 messages 轉成 Google GenAI 的 contents
             message_contents = [
                 gtypes.Content(parts=list([gtypes.Part(text=msg['content'])]), role=msg["role"]) for msg in messages
             ]
+            
             if image:
                 message_contents.append(
                     gtypes.Content(parts=[image], role="user")
@@ -80,19 +85,43 @@ class askAI(commands.Cog):
                 contents=list(message_contents),
                 config=content_config,
             )
+            """
+            # Deepseek API / OpenAI API
+            response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
+                model=chat_config["modelChat"],
+                messages=[
+                    {"role": "system", "content": system},
+                    *[
+                        {
+                            "role": msg["role"],
+                            "content": msg["content"]
+                        } for msg in messages
+                    ]
+                ],
+                max_tokens=4096,
+            )
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
-            print(f"GenAI Error: {api_error}")
+            print(f"GenAI Error: {api_error}\n---")
             return api_error
 
-        response_text = str(response.text)
-        if len(response_text) > 2000:
-            print(f'GenAI Response: {response_text}')
-            return response_text[:1980] + "\n...[truncated]"
-        if response.usage_metadata:
-            print(response.usage_metadata.total_token_count)
+        response_text = str(response.choices[0].message.content)
+        
+        # if response.usage_metadata:
+            # print(response.usage_metadata.total_token_count)
+        if response.usage:
+            print(f'Token usage: {response.usage.total_tokens} tokens')
         return response_text
     
+    @app_commands.command(name="clearcache", description="Clear the persona and selection caches")
+    @commands.is_owner()
+    async def clear_cache(self, interaction: Interaction):
+        """Clear the persona and selection caches."""
+        pc, sc = len(self.persona_cache), len(self.selection_cache)
+        self.persona_cache.clear()
+        self.selection_cache.clear()
+        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas and {sc} selections)", ephemeral=True)
+        
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     async def create_persona(self, interaction: Interaction):
         """Create a new LLM persona using a modal."""
@@ -274,7 +303,7 @@ class askAI(commands.Cog):
         content = message.content.replace(self.bot.user.mention, '', 1).strip()
         print(f'{user_persona_pair}: {content}')
 
-        system_instruction = f'{_persona.content}\n最新對話參考時間:{strftime("%Y/%m/%d %H:%M %a")}'
+        system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
         prompt = {'role': 'user', 'content': f'{display_name} said {content}'}
 
         async with message.channel.typing():
@@ -309,11 +338,18 @@ class askAI(commands.Cog):
                     delta_affection = response_data.get("delta_affection", 0)
 
                     # Send the parsed response
+                    if len(what_to_reply) > 2000:
+                        print(f'GenAI Response: {what_to_reply}')
+                        return what_to_reply[:1980] + "\n...[truncated]"
+                    
                     await message.channel.send(f"{what_to_reply}\n\n* 好感度變化: {delta_affection}")
                     print(f"Delta Affection: {delta_affection}")
                     reply_content = what_to_reply  # Update reply_content for memory logging
                 
                 except json.JSONDecodeError:
+                    if len(reply_content) > 2000:
+                        print(f'GenAI Response: {reply_content}')
+                        return reply_content[:1980] + "\n...[truncated]"
                     await message.channel.send(reply_content)
                     print(f"Invalid JSON response, sent as plain text.")
                     
@@ -329,7 +365,7 @@ class askAI(commands.Cog):
             else:
                 # Only append to memory if no exception
                 chatMem.append(prompt)
-                chatMem.append({'role': 'model', 'content': reply_content})
+                chatMem.append({'role': 'assistant', 'content': reply_content})
                 self.db.increment_interaction_count(_persona.uid, user_id)
 
     @commands.Cog.listener()
@@ -347,7 +383,13 @@ class askAI(commands.Cog):
             return
 
         # Use mentions to trigger bot LLM chat
-        if self.bot.user.mentioned_in(message):
+        if self.bot.user.mentioned_in(message) and not message.mention_everyone:
+            roles = getattr(user, 'roles', [])  # Ensure user.roles exists
+            if not any(role.id in configToml.get("auth", {}).get("roleList", []) for role in roles):
+                extra_msg = 'does not have the required role to interact with the bot.'
+                print(f'User {user_name} ({user_id}) {extra_msg}')
+                await message.channel.send(f'User {user_name} {extra_msg}')
+                return
             await self.handle_llm_trigger(message, user_id, user_name, display_name)
 
     @commands.hybrid_command(name='scoreboard')
@@ -428,6 +470,10 @@ class askAI(commands.Cog):
             ephemeral=True  # Confirmation messages are better as ephemeral
         )
     
+    async def llm_create_memory(self, messages: list[dict]) -> list[dict]:
+        """Convert messages to the format required by the LLM API."""
+        
+        return []
     # @commands.hybrid_command(name = 'status')
     # @commands.is_owner()
     # async def _status(self, ctx:commands.Context):

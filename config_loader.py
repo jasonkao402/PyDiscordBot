@@ -9,7 +9,7 @@ def loadToml():
     
     with open(tomlpath, 'r+') as tomlFile:
         _configToml = toml.load(tomlFile)
-        print(f'loaded from {tomlpath}')
+        print(f'loaded from {tomlpath}, content:\n{_configToml.keys()}')
         return _configToml
 
 # Load the configuration once and make it accessible
