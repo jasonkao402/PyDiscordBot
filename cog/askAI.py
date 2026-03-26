@@ -11,6 +11,7 @@ from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
 import json, re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
+from cog_dev.responseParsing import parse_response
 
 import base64
 from openai import AsyncOpenAI
@@ -22,7 +23,9 @@ THRESHOLD = 0.8575
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
-llm_base_url = link_config.get("link_deepseek", "")
+# llm_base_url = link_config.get("link_deepseek", "")
+# llm_base_url = link_config.get("link_gcli2api", "")
+llm_base_url = link_config.get("link_siliconFlow", "")
 
 http_options = gtypes.HttpOptions(
     # base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
@@ -39,7 +42,7 @@ class askAI(commands.Cog):
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
         self.api_switch_threshold = 5  # Number of calls before switching to the next API
-        self.round_robin_api_collection = configToml['apiToken'].get('deepseek_llm', [])
+        self.round_robin_api_collection = configToml['apiToken'].get('siliconFlow_llm', [])
         # self.llm_apis = [genai.Client(
         #     api_key=api_key,
         #     http_options=http_options,
@@ -55,6 +58,7 @@ class askAI(commands.Cog):
     async def cog_unload(self):
         for llm_api in self.llm_apis:
             await llm_api.close()
+            # llm_api.close()  # Close the underlying HTTP session for genai.Client
 
     async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part] = None) -> tuple[str, str]:
         """
@@ -62,9 +66,8 @@ class askAI(commands.Cog):
         system: system instruction string
         """
         try:
-            # Google API
             """
-            # 將 messages 轉成 Google GenAI 的 contents
+            # Google API 將 messages 轉成 Google GenAI 的 contents
             message_contents = [
                 gtypes.Content(parts=list([gtypes.Part(text=msg['content'])]), role=msg["role"]) for msg in messages
             ]
@@ -85,8 +88,9 @@ class askAI(commands.Cog):
                 contents=list(message_contents),
                 config=content_config,
             )
-            """
+            # """
             # Deepseek API / OpenAI API
+            # """
             response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
                 model=chat_config["modelChat"],
                 messages=[
@@ -101,16 +105,19 @@ class askAI(commands.Cog):
                 max_tokens=4096,
                 extra_body={"thinking": {"type": "enabled"}},
             )
+            # """
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
             print(f"API Error: {api_error}\n---")
             return api_error, ""
 
+        # response_text, thinking_content = str(response.text), ""
+        # """
         response_text = str(response.choices[0].message.content)
-        thinking_content = str(response.choices[0].message.reasoning_content) if hasattr(response.choices[0].message, 'reasoning_content') else ""
-        
+        thinking_content = str(response.choices[0].message.reasoning_content) if hasattr(response.choices[0].message, 'reasoning_content') else "" # pyright: ignore[reportAttributeAccessIssue]
+        # """
         # if response.usage_metadata:
-            # print(response.usage_metadata.total_token_count)
+        #     print(response.usage_metadata.total_token_count)
         if response.usage:
             print(f'Token usage: {response.usage.total_tokens} tokens')
         return response_text, thinking_content
@@ -348,7 +355,7 @@ class askAI(commands.Cog):
                         if len(reasoning_content) > 2000:
                             print(f'GenAI Reasoning Content: {reasoning_content}')
                             reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
-                        await message.channel.send(f"**Reasoning:**\n{reasoning_content}")
+                        await message.channel.send(f"Reasoning:\n{reasoning_content}")
                     await message.channel.send(f"{what_to_reply}\n\n* 好感度變化: {delta_affection}")
                     print(f"Delta Affection: {delta_affection}")
                     reply_content = what_to_reply  # Update reply_content for memory logging

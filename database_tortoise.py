@@ -82,8 +82,8 @@ class PersonaDatabase:
 
     async def get_selected_persona(self, user_uid: int) -> Optional[Persona]:
         user = await DiscordUser.filter(user_uid=user_uid).first()
-        if user and user.selected_persona_uid_id:  # Use `_id` to get the raw integer value
-            _persona = await Persona.filter(uid=user.selected_persona_uid_id).first()
+        if user and user.selected_persona_uid:
+            _persona = await Persona.filter(uid=user.selected_persona_uid).first()
             return _persona
         return None
 

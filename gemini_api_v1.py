@@ -70,7 +70,7 @@ async def main():
     db = PersonaDatabase("llm_character_cards.db")
     api = ChatCog()
     # print(api.list_models())
-    _persona = db.get_persona_no_check(3)
+    _persona = db.get_persona_no_check(9)
     assert isinstance(_persona, Persona)
     print(f"Using persona: {_persona.persona}")
     userName = "USER"
