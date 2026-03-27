@@ -60,7 +60,7 @@ class askAI(commands.Cog):
             await llm_api.close()
             # llm_api.close()  # Close the underlying HTTP session for genai.Client
 
-    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part] = None) -> tuple[str, str]:
+    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part | dict] = None) -> tuple[str, str]:
         """
         messages: list of strings (model / user messages)
         system: system instruction string
@@ -91,9 +91,7 @@ class askAI(commands.Cog):
             # """
             # Deepseek API / OpenAI API
             # """
-            response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
-                model=chat_config["modelChat"],
-                messages=[
+            message_list=[
                     {"role": "system", "content": system},
                     *[
                         {
@@ -101,7 +99,12 @@ class askAI(commands.Cog):
                             "content": msg["content"]
                         } for msg in messages
                     ]
-                ],
+                ]
+            if image:
+                message_list[-1]["content"] = [image, {"type": "text", "text": message_list[-1]["content"]}]
+            response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
+                model=chat_config["modelChat"],
+                messages=message_list,
                 max_tokens=4096,
                 extra_body={"thinking": {"type": "enabled"}},
             )
@@ -322,15 +325,24 @@ class askAI(commands.Cog):
             try:
                 if message.attachments:
                     # Handle image attachments
-                    decoded_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
-                    # print(f'Encoded image size: {len(decoded_image)} characters')
-                    image_part = gtypes.Part(
-                        inline_data=gtypes.Blob(
-                            mime_type="image/jpeg",
-                            data=base64.b64decode(decoded_image),
-                        ),
-                        media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
-                    )
+                    base64_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
+                    # google AI code
+                    # print(f'Encoded image size: {len(base64_image)} characters')
+                    # image_part = gtypes.Part(
+                    #     inline_data=gtypes.Blob(
+                    #         mime_type="image/jpeg",
+                    #         data=base64.b64decode(base64_image),
+                    #     ),
+                    #     media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
+                    # )
+                    # OpenAI code
+                    image_part = {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}",
+                            "detail": "low",
+                        }
+                    }
                     reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
                 else:
                     reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
