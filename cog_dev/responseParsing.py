@@ -33,11 +33,12 @@ def parse_response(raw_text: str) -> Dict[str, str]:
 
 if __name__ == "__main__":
     # Example usage, assume model returns a response in the following format:
-    raw_text = """<thinking> I am thinking... </thinking>
-<content> Here is the content you requested.
-has many lines 
-more lines
-<summary> This is a summary of the content. </summary>"""
+#     raw_text = """<thinking> I am thinking... </thinking>
+# <content> Here is the content you requested.
+# has many lines 
+# more lines
+# <summary> This is a summary of the content. </summary>"""
+    raw_text = """哈基米喔南北綠豆1\n</content>哈基米喔南北綠豆2哈基米喔南北綠豆3\n哈基米喔南北綠豆4\n哈基米喔南北綠豆5\n哈基米喔南北綠豆6\n"""
     result = parse_response(raw_text)
     for key, value in result.items():
         print(f"{key}: {value}")

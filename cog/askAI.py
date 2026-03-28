@@ -346,42 +346,50 @@ class askAI(commands.Cog):
                     reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
                 else:
                     reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
-
+                    
+                if reasoning_content:
+                    if len(reasoning_content) > 2000:
+                        print(f'GenAI Reasoning Content: {reasoning_content}')
+                        reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
+                    await message.channel.send(f"# Reasoning:\n{reasoning_content}")
+                await message.channel.send(f"{reply_content}")
+                # print(f"Delta Affection: {delta_affection}")
+                # reply_content = what_to_reply  # Update reply_content for memory logging
                 # Validate and parse the JSON response
-                try:
-                    l_cursor = reply_content.find('```json') + 7
-                    r_cursor = reply_content.rfind('```')
-                    if l_cursor == -1 or r_cursor == -1 or l_cursor >= r_cursor:
-                        response_data = json.loads(reply_content)
-                    else:
-                        response_data = json.loads(reply_content[l_cursor:r_cursor])
-                    what_to_reply = response_data.get("what_to_reply", "無法解析的回覆")
-                    delta_affection = response_data.get("delta_affection", 0)
+                # try:
+                #     l_cursor = reply_content.find('```json') + 7
+                #     r_cursor = reply_content.rfind('```')
+                #     if l_cursor == -1 or r_cursor == -1 or l_cursor >= r_cursor:
+                #         response_data = json.loads(reply_content)
+                #     else:
+                #         response_data = json.loads(reply_content[l_cursor:r_cursor])
+                #     what_to_reply = response_data.get("what_to_reply", "無法解析的回覆")
+                #     delta_affection = response_data.get("delta_affection", 0)
 
-                    # Send the parsed response
-                    if len(what_to_reply) > 2000:
-                        print(f'GenAI Response: {what_to_reply}')
-                        what_to_reply = what_to_reply[:1980] + "\n...[truncated]"
+                #     # Send the parsed response
+                #     if len(what_to_reply) > 2000:
+                #         print(f'GenAI Response: {what_to_reply}')
+                #         what_to_reply = what_to_reply[:1980] + "\n...[truncated]"
                     
-                    if reasoning_content:
-                        if len(reasoning_content) > 2000:
-                            print(f'GenAI Reasoning Content: {reasoning_content}')
-                            reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
-                        await message.channel.send(f"Reasoning:\n{reasoning_content}")
-                    await message.channel.send(f"{what_to_reply}\n\n* 好感度變化: {delta_affection}")
-                    print(f"Delta Affection: {delta_affection}")
-                    reply_content = what_to_reply  # Update reply_content for memory logging
+                #     if reasoning_content:
+                #         if len(reasoning_content) > 2000:
+                #             print(f'GenAI Reasoning Content: {reasoning_content}')
+                #             reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
+                #         await message.channel.send(f"Reasoning:\n{reasoning_content}")
+                #     await message.channel.send(f"{what_to_reply}\n\n* 好感度變化: {delta_affection}")
+                #     print(f"Delta Affection: {delta_affection}")
+                #     reply_content = what_to_reply  # Update reply_content for memory logging
                 
-                except json.JSONDecodeError:
-                    if len(reply_content) > 2000:
-                        print(f'GenAI Response: {reply_content}')
-                        reply_content = reply_content[:1980] + "\n...[truncated]"
-                    await message.channel.send(reply_content)
-                    print(f"Invalid JSON response, sent as plain text.")
+                # except json.JSONDecodeError:
+                #     if len(what_to_reply) > 2000:
+                #         print(f'GenAI Response: {what_to_reply}')
+                #         what_to_reply = what_to_reply[:1980] + "\n...[truncated]"
+                #     await message.channel.send(what_to_reply)
+                #     print(f"Invalid JSON response, sent as plain text.")
                     
-                except ValueError:
-                    await message.channel.send(reply_content)
-                    print(f"No JSON code block found, sent as plain text.")
+                # except ValueError:
+                #     await message.channel.send(what_to_reply)
+                #     print(f"No JSON code block found, sent as plain text.")
 
             except TimeoutError:
                 await message.channel.send("The bot is currently unavailable. Please try again later.")
