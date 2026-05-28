@@ -1,4 +1,5 @@
 from collections import deque
+from dataclasses import dataclass
 from math import exp
 from time import strftime, time, monotonic
 from turtle import pendown
@@ -35,6 +36,12 @@ http_options = gtypes.HttpOptions(
     # base_url=str(link_config.get("link_gcli2api", "")), timeout=60
     base_url=str(llm_base_url), timeout=60
 )
+@dataclass
+class TrimedResponse:
+    response_text: str
+    thinking_content: str
+    token_usage: dict[str, int]
+
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
@@ -51,7 +58,7 @@ class askAI(commands.Cog):
         #     api_key=api_key,
         #     http_options=http_options,
         # ) for api_key in self.round_robin_api_collection]
-        self.llm_apis = [AsyncOpenAI(api_key=api_key, base_url=llm_base_url) for api_key in self.round_robin_api_collection]
+        self.llm_apis = [AsyncOpenAI(api_key = api_key, base_url = llm_base_url) for api_key in self.round_robin_api_collection]
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
@@ -64,12 +71,11 @@ class askAI(commands.Cog):
             await llm_api.close()
             # llm_api.close()  # Close the underlying HTTP session for genai.Client
 
-    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part | dict] = None) -> dict:
+    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part | dict] = None) -> TrimedResponse:
         """
         messages: list of strings (model / user messages)
         system: system instruction string
         """
-        return_dict = dict(response_text="", thinking_content="", token_usage={})
         try:
             """
             # Google API 將 messages 轉成 Google GenAI 的 contents
@@ -117,25 +123,24 @@ class askAI(commands.Cog):
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
             print(f"API Error: {api_error}\n---")
-            return_dict["response_text"] = f"API Error: {api_error}"
-            return return_dict
+            return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", token_usage={})
         
         response_text = str(response.choices[0].message.content)
         thinking_content = str(response.choices[0].message.reasoning_content) if hasattr(response.choices[0].message, 'reasoning_content') else "" # pyright: ignore[reportAttributeAccessIssue]
-
+        token_usage = {
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens
+        } if response.usage else {}
+        
         if response.usage:
             print(f'Token usage: {response.usage.total_tokens} tokens')
             
-        return_dict = {
-            "response_text": response_text,
-            "thinking_content": thinking_content,
-            "token_usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            } if response.usage else {}
-        }
-        return return_dict
+        return TrimedResponse(
+            response_text=response_text,
+            thinking_content=thinking_content,
+            token_usage=token_usage
+        )   
     
     @app_commands.command(name="clearcache", description="Clear the persona and selection caches")
     @commands.is_owner()
@@ -367,9 +372,9 @@ class askAI(commands.Cog):
                 else:
                     reply_dict = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
 
-                reply_content = reply_dict["response_text"]
-                reasoning_content = reply_dict["thinking_content"]
-                token_usage = reply_dict["token_usage"]
+                reply_content = reply_dict.response_text
+                reasoning_content = reply_dict.thinking_content
+                token_usage = reply_dict.token_usage
 
                 if reasoning_content:
                     if len(reasoning_content) > 2000:
