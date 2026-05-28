@@ -2,11 +2,12 @@ import json
 import os
 import discord
 from discord.ext import commands
-import toml
-from typing import Optional
 from config_loader import configToml, loadToml
+import asyncio
+import uvicorn
+from fastapi import FastAPI
 
-def run_discord():
+async def run_discord():
     absFilePath = os.path.abspath(__file__)
     currWorkDir = os.path.dirname(absFilePath)
     os.chdir(currWorkDir)
@@ -15,6 +16,7 @@ def run_discord():
     
     # PreLoad
     COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'msglog', 'personality'}
+    # Scan cog folder and add to COG_LIST
     cog_folder = os.path.join(currWorkDir, 'cog')
     for file in os.listdir(cog_folder):
         if file.endswith('.py'):
@@ -138,7 +140,16 @@ def run_discord():
     TOKEN = configToml['apiToken']['discord']
     configToml['apiToken'].pop('discord', None)
     # Start!
-    client.run(TOKEN)
+    bot_task = asyncio.create_task(client.start(TOKEN))
+    
+    # Run web API in background
+    uvicorn_config = uvicorn.Config("cog_dev.web_api:app", host="localhost", port=8070, log_level="info")
+    server = uvicorn.Server(uvicorn_config)
+    api_task = asyncio.create_task(server.serve())
+    
+    await asyncio.gather(bot_task, api_task)
+    
+    # client.run(TOKEN)
 
 if __name__ == "__main__":
-    run_discord()
+    asyncio.run(run_discord())

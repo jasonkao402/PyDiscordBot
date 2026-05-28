@@ -1,7 +1,9 @@
 from collections import deque
 from math import exp
-from time import strftime
+from time import strftime, time, monotonic
+from turtle import pendown
 from typing import Optional, List
+from uuid import uuid4
 
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands, File
@@ -12,7 +14,8 @@ from config_loader import configToml
 import json, re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 from cog_dev.responseParsing import parse_response
-
+from cog_dev.moderation import PendingMessage, PendingMessageManager
+import cog_dev.web_api as web_api
 import base64
 from openai import AsyncOpenAI
 # from google import genai
@@ -35,9 +38,10 @@ http_options = gtypes.HttpOptions(
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
-    def __init__(self, bot: DC_Client):
+    def __init__(self, bot: DC_Client, pending_manager: PendingMessageManager):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
+        self.pending_manager = pending_manager
         self.ban_list = configToml.get("auth", {}).get("ban_list", [])
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
@@ -60,11 +64,12 @@ class askAI(commands.Cog):
             await llm_api.close()
             # llm_api.close()  # Close the underlying HTTP session for genai.Client
 
-    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part | dict] = None) -> tuple[str, str]:
+    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part | dict] = None) -> dict:
         """
         messages: list of strings (model / user messages)
         system: system instruction string
         """
+        return_dict = dict(response_text="", thinking_content="", token_usage={})
         try:
             """
             # Google API 將 messages 轉成 Google GenAI 的 contents
@@ -112,18 +117,25 @@ class askAI(commands.Cog):
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
             print(f"API Error: {api_error}\n---")
-            return api_error, ""
-
-        # response_text, thinking_content = str(response.text), ""
-        # """
+            return_dict["response_text"] = f"API Error: {api_error}"
+            return return_dict
+        
         response_text = str(response.choices[0].message.content)
         thinking_content = str(response.choices[0].message.reasoning_content) if hasattr(response.choices[0].message, 'reasoning_content') else "" # pyright: ignore[reportAttributeAccessIssue]
-        # """
-        # if response.usage_metadata:
-        #     print(response.usage_metadata.total_token_count)
+
         if response.usage:
             print(f'Token usage: {response.usage.total_tokens} tokens')
-        return response_text, thinking_content
+            
+        return_dict = {
+            "response_text": response_text,
+            "thinking_content": thinking_content,
+            "token_usage": {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            } if response.usage else {}
+        }
+        return return_dict
     
     @app_commands.command(name="clearcache", description="Clear the persona and selection caches")
     @commands.is_owner()
@@ -289,7 +301,15 @@ class askAI(commands.Cog):
         embed.add_field(name="Content", value=_persona.content[:1024], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
-    
+        
+    async def send_to_discord(self, pending: PendingMessage):
+        channel = pending.channel_ctx.channel
+        if channel:
+            await channel.send(f"**{pending.display_name}** (as {pending.persona_name}):\n{pending.content}")
+        else:
+            # Fallback
+            pass
+        
     async def handle_llm_trigger(self, message: Message, user_id: int, user_name: str, display_name: str):
         """Handle the logic for detecting and triggering the LLM feature."""
         # Load persona selection from cache or database
@@ -343,16 +363,32 @@ class askAI(commands.Cog):
                             "detail": "low",
                         }
                     }
-                    reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
+                    reply_dict = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
                 else:
-                    reply_content, reasoning_content = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
-                    
+                    reply_dict = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
+
+                reply_content = reply_dict["response_text"]
+                reasoning_content = reply_dict["thinking_content"]
+                token_usage = reply_dict["token_usage"]
+
                 if reasoning_content:
                     if len(reasoning_content) > 2000:
                         print(f'GenAI Reasoning Content: {reasoning_content}')
                         reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
                     await message.channel.send(f"# Reasoning:\n{reasoning_content}")
-                await message.channel.send(f"{reply_content}")
+                # await message.channel.send(f"{reply_content}")
+                print(f'GenAI Response: {reply_content}')
+                await self.pending_manager.add(PendingMessage(
+                    uid=str(uuid4()),
+                    content=reply_content,
+                    received_at=monotonic(),
+                    user_id=user_id,
+                    display_name=display_name,
+                    channel_ctx=message,
+                    token_usage=token_usage,
+                    persona_name=_persona.persona
+                ))
+                
                 # print(f"Delta Affection: {delta_affection}")
                 # reply_content = what_to_reply  # Update reply_content for memory logging
                 # Validate and parse the JSON response
@@ -503,120 +539,18 @@ class askAI(commands.Cog):
             f"已切換至 `{model}`",
             ephemeral=True  # Confirmation messages are better as ephemeral
         )
-    
-    async def llm_create_memory(self, messages: list[dict]) -> list[dict]:
-        """Convert messages to the format required by the LLM API."""
-    
-        return []
-    # @commands.hybrid_command(name = 'status')
-    # @commands.is_owner()
-    # async def _status(self, ctx:commands.Context):
-    #     # status = await self.llm_api.ps()
-    #     connector = TCPConnector(ttl_dns_cache=600, keepalive_timeout=600)
-    #     clientSession = ClientSession(connector=connector)
         
-    #     async with clientSession.get(modelConfig['linkStatus']) as request:
-    #         request.raise_for_status()
-    #         status = await request.json()
-    #     await ctx.send(f'```json\n{json.dumps(status, indent=2, ensure_ascii=False)}```')
-    
-    # TODO: gotowork command: I want to create a gameplay chatbot mechanic similar to earning hourly wages with some added randomnesswhile staying true to the character's backstory
-    # @app_commands.command(name = 'schedule')
-    # async def _schedule(self, interaction: Interaction, delay_time:int, text:Optional[str] = ''):
-    #     dt = datetime.now(timezone.utc) + timedelta(seconds=int(delay_time))
-        
-    #     self.channel = interaction.channel
-    #     self.sch_FullUser = interaction.user
-    #     self.sch_User = str(interaction.user).replace('.', '')
-    #     self.sch_Text = text if text != '' else '好無聊，想找伊莉亞聊天，要聊甚麼呢?'
-        
-    #     tsk = self._loneMeter
-    #     if not tsk.is_running():
-    #         print(f'start task {tsk.__name__}')
-    #         tsk.start()
-    #     tsk.change_interval(seconds=4)
-    #     tsk.restart()
-        
-    #     tsk = self.my_task
-    #     if not tsk.is_running():
-    #         print('start task')
-    #         tsk.start()
-    #     tsk.change_interval(time=dt.time())
-    #     tsk.restart()
-        
-    #     tsk = self._mindLoop
-    #     if not tsk.is_running():
-    #         print('start task')
-    #         tsk.start()
-            
-    #     time_points = np.random.exponential(60/5, (5))
-    #     time_points = np.round(time_points, 3)
-    #     cumulative_times = np.cumsum(time_points)
-    #     cur_time = datetime.now(timezone.utc)
-        
-    #     seq_t = [(cur_time + timedelta(seconds = i)).time() for i in cumulative_times]
-    #     for i in seq_t:
-    #         print(f'{i}')
-    #     tsk.change_interval(time=seq_t)
-    #     tsk.restart()
-        
-    #     embed = Embed(title = "AI貓娘伊莉亞", description = f"伊莉亞來找主人 {self.sch_User} 了！", color = Color.random())
-    #     embed.add_field(name = "時間", value = utctimeFormat(tsk.next_iteration))
-    #     embed.add_field(name = "狀態", value = self.my_task.is_running())
-    #     await interaction.response.send_message(embed = embed)
-        
-    # @tasks.loop(time=tempTime)
-    # async def my_task(self):
-    #     channel = self.channel
-    #     aiNam = id2name[0]
-    #     if channel:
-    #         print("debugging")
-    #         # setupmsg  = replyDict('system', f'{setsys_extra[0]} 現在是{strftime("%Y-%m-%d %H:%M")}', 'system')
-    #         # try:
-    #         #     async with channel.typing():
-    #         #         prompt = replyDict('user', f'{self.sch_User} said {self.sch_Text}', self.sch_User)
-    #         #         reply = await aiaiv2([setupmsg.asdict, *chatMem[0], prompt.asdict], 0, TOKENPRESET[0])
-    #         #     assert reply.role != 'error'
-                
-    #         #     reply2 = reply.content
-    #         # except TimeoutError:
-    #         #     print(f'[!] {aiNam} TimeoutError')
-    #         #     await channel.send(f'阿呀 {aiNam} 腦袋融化了~ 🫠')
-    #         # except AssertionError:
-    #         #     if reply.role == 'error':
-    #         #         reply2 = sepLines((f'{k}: {v}' for k, v in reply.content.items()))
-    #         #         print(f'Reply error:\n{aiNam}:\n{reply2}')
-                
-    #         #     await channel.send(f'{aiNam} 發生錯誤，請聯繫主人\n{reply2}')
-    #         # else:
-    #         #     chatMem[0].append(reply.asdict)
-    
-    # @tasks.loop(time=tempTime)
-    # async def _mindLoop(self):
-    #     channel = self.channel
-    #     user = self.sch_FullUser
-    #     # await channel.send(f'{user.mention} {talkList[self._mindLoop.current_loop]}')
-    #     # print(f'{user} {talkList[self._mindLoop.current_loop]}')
-    
-    # @tasks.loop(time=tempTime)
-    # async def _loneMeter(self):
-    #     SCALE = 10
-        
-    #     channel = self.channel
-    #     user = self.sch_FullUser
-    #     limit = self.loneLimit
-    #     self.loneMeter += np.random.poisson(SCALE)
-    #     print(f'loneMeter: {self.loneMeter}/{limit}')
-    #     if self.loneMeter > limit:
-    #         self.loneLimit = LONELYMETER/2 + np.random.exponential(LONELYMETER/2)
-    #         consume = np.random.poisson(10*SCALE)
-    #         self.loneMeter -= consume
-            
-    #         # await channel.send(f'{talkList[self.loneMsg % len(talkList)]}\n({-consume} energy) (meter: {self.loneMeter}/{limit}))')
-    #         self.loneMsg += 1
-
 async def setup(bot:commands.Bot):
-    await bot.add_cog(askAI(bot))
+    cog_instance = None
+    
+    async def send_callback(pending: PendingMessage):
+        if cog_instance:
+            await cog_instance.send_to_discord(pending)
+            
+    pending_manager = PendingMessageManager(send_callback)
+    web_api.pending_manager = pending_manager # Export to web_api so that UI can get it
+    cog_instance = askAI(bot, pending_manager)
+    await bot.add_cog(cog_instance)
 
 async def teardown(bot:commands.Bot):
     print('ai saved')
