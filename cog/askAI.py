@@ -1,151 +1,38 @@
-from collections import deque
-from time import strftime
 from typing import Optional, List
-from uuid import uuid4
-
 from discord import Client as DC_Client
-from discord import Color, Embed, Interaction, Message, app_commands, File
+from discord import Color, Embed, Interaction, Message, TextChannel, app_commands, File
 from discord.ext import commands
+from cog.llmAPI import LLMAPI
 from cog.utilFunc import sepLines, wcformat
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
 import re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
-from cog_dev.responseParsing import parse_response
-from cog_dev.moderation import PendingMessage, TrimedResponse
-import cog_dev.web_api as web_api
 import base64
-from openai import AsyncOpenAI
-# from google import genai
-from google.genai import types as gtypes, errors
-
-MEMOLEN = 26
-THRESHOLD = 0.8575
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
-link_config: dict[str, str] = configToml.get("llmLink", "")
-llm_base_url = link_config.get("link_openrouter", "")
-mainModel = chat_config["modelChat"]
-
-# http_options = gtypes.HttpOptions(
-#     base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
-#     base_url=str(link_config.get("link_gcli2api", "")), timeout=60
-#     base_url=str(llm_base_url), timeout=60
-# )
-
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
     def __init__(self, bot: DC_Client):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
+        self.llm_api = LLMAPI()  # Initialize the LLM API handler
         self.ban_list = configToml.get("auth", {}).get("ban_list", [])
-        self.round_robin_api_index = 0
-        self.api_call_count = 0  # Counter to track the number of API calls
-        self.api_switch_threshold = 5  # Number of calls before switching to the next API
-        self.round_robin_api_collection = configToml['apiToken'].get('openrouter_llm', [])
-        # self.llm_apis = [genai.Client(
-        #     api_key=api_key,
-        #     http_options=http_options,
-        # ) for api_key in self.round_robin_api_collection]
-        self.llm_apis = [AsyncOpenAI(api_key = api_key, base_url = llm_base_url) for api_key in self.round_robin_api_collection]
-        self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
         
-        self.debug_channel = bot.get_channel(configToml.get("debugChannelId", -1))
+        debug_channel = bot.get_channel(configToml.get("debugChannelId", -1))
+        self.debug_channel: Optional[TextChannel] = debug_channel if isinstance(debug_channel, TextChannel) else None
         if self.debug_channel:
             ch_name = getattr(self.debug_channel, 'name', 'Unknown')
             print(f"Debug channel found: {ch_name} (ID: {self.debug_channel.id})")
+        else:
+            print("Debug channel not found or invalid. Debug messages will be printed to console.")
         
     async def cog_unload(self):
-        for llm_api in self.llm_apis:
-            await llm_api.close()
-            # llm_api.close()  # Close the underlying HTTP session for genai.Client
+        await self.llm_api.cleanup()
 
-    async def llm_chat_v6(self, messages: list[dict], system: str, user_dict: dict, image: Optional[gtypes.Part | dict] = None) -> TrimedResponse:
-        """
-        messages: list of strings (model / user messages)
-        system: system instruction string
-        user_dict: dictionary containing user information
-        """
-        try:
-            """
-            # Google API 將 messages 轉成 Google GenAI 的 contents
-            message_contents = [
-                gtypes.Content(parts=list([gtypes.Part(text=msg['content'])]), role=msg["role"]) for msg in messages
-            ]
-            
-            if image:
-                message_contents.append(
-                    gtypes.Content(parts=[image], role="user")
-                )
-            content_config = gtypes.GenerateContentConfig(
-                system_instruction=system,
-                max_output_tokens=4096,
-                thinking_config=gtypes.ThinkingConfig(
-                    thinking_level=gtypes.ThinkingLevel.LOW
-                ),
-            )
-            response = await self.llm_apis[self.round_robin_api_index].aio.models.generate_content(
-                model=chat_config["modelChat"],
-                contents=list(message_contents),
-                config=content_config,
-            )
-            # """
-            # Deepseek API / OpenAI API
-            # """
-            message_list=[
-                    {"role": "system", "content": system},
-                    *[
-                        {
-                            "role": msg["role"],
-                            "content": msg["content"]
-                        } for msg in messages
-                    ]
-                ]
-            
-            if image:
-                message_list[-1]["content"] = [image, {"type": "text", "text": message_list[-1]["content"]}]
-            
-            response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
-                model=chat_config["modelChat"],
-                messages=message_list,
-                max_tokens=4096,
-                extra_body={"reasoning": {"enabled": True}},
-            )
-            # """
-        except errors.APIError as e:
-            api_error = f"[{e.code}]{e.message}"
-            print(f"API Error: {api_error}\n---")
-            return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", token_usage={})
-        
-        response_text = str(response.choices[0].message.content)
-        thinking_content = str(response.choices[0].message.reasoning) if hasattr(response.choices[0].message, 'reasoning') else "" # pyright: ignore[reportAttributeAccessIssue]
-        token_usage = {
-            "prompt_tokens": response.usage.prompt_tokens,
-            "completion_tokens": response.usage.completion_tokens,
-            "total_tokens": response.usage.total_tokens
-        } if response.usage else {}
-        
-        final_msg = await web_api.pending_manager.moderate(
-            PendingMessage(
-                uid=str(uuid4()),
-                user_id=user_dict["id"],
-                user_display_name=user_dict["display_name"] or user_dict["name"],
-                input_msg=messages[-1]["content"] if messages else "",
-                content=response_text,
-            )
-        )
-        # if response.usage:
-        #     print(f'Token usage: {response.usage.total_tokens} tokens')
-            
-        return TrimedResponse(
-            response_text=final_msg.content,
-            thinking_content=thinking_content,
-            token_usage=token_usage
-        )   
-    
     @app_commands.command(name="clearcache", description="Clear the persona and selection caches")
     @commands.is_owner()
     async def clear_cache(self, interaction: Interaction):
@@ -256,10 +143,9 @@ class askAI(commands.Cog):
             await ctx.send(f"{self.persona_cache[persona_id].persona}(#{persona_id}) selected successfully.")
         else:
             await ctx.send(f"Failed to select {self.persona_cache[persona_id].persona}(#{persona_id}).")
-        # Update session memory
-        if persona_id not in self.persona_session_memory:
-            self.persona_session_memory[persona_id] = deque(maxlen=MEMOLEN)
-            
+        # Initialize session memory
+        self.llm_api.init_memory(persona_id)
+
     @commands.hybrid_command(name="listpersonas")
     async def list_personas(self, ctx: commands.Context):
         """List all personas visible to the user."""
@@ -285,8 +171,8 @@ class askAI(commands.Cog):
             return
 
         # Clear the memory for the selected persona
-        if _persona.uid in self.persona_session_memory:
-            self.persona_session_memory[_persona.uid].clear()
+        if _persona.uid in self.llm_api.persona_session_memory:
+            self.llm_api.persona_session_memory[_persona.uid].clear()
             await interaction.response.send_message(f"Session memory for {_persona.persona} has been erased.")
         else:
             await interaction.response.send_message("No session memory to erase for the selected persona.")
@@ -331,109 +217,41 @@ class askAI(commands.Cog):
             await message.channel.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
             return
 
-        user_persona_pair = f'{wcformat(user_name)}[{_persona.persona}]'
-        # Filter out mention bot part
-        content = message.content.replace(self.bot.user.mention, '', 1).strip()
-        print(f'{user_persona_pair}: {content}')
-
-        system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
-        prompt = {'role': 'user', 'content': f'{display_name} said {content}'}
-
         async with message.channel.typing():
-            if _persona.uid not in self.persona_session_memory:
-                self.persona_session_memory[_persona.uid] = deque(maxlen=MEMOLEN)
-            chatMem = self.persona_session_memory[_persona.uid]
-            try:
-                user_dict = {
-                    "id": user_id,
-                    "name": user_name,
-                    "display_name": display_name,
-                }
-                if message.attachments:
-                    # Handle image attachments
-                    base64_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
-                    # google AI code
-                    # print(f'Encoded image size: {len(base64_image)} characters')
-                    # image_part = gtypes.Part(
-                    #     inline_data=gtypes.Blob(
-                    #         mime_type="image/jpeg",
-                    #         data=base64.b64decode(base64_image),
-                    #     ),
-                    #     media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
-                    # )
-                    # OpenAI code
-                    image_part = {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}",
-                            "detail": "low",
-                        }
-                    }
-                    reply_dict = await self.llm_chat_v6([*chatMem, prompt], system_instruction, user_dict=user_dict, image=image_part)
+            encoded_image = None
+            if message.attachments:
+                attachment = message.attachments[0]
+                if attachment.content_type and attachment.content_type.startswith('image/'):
+                    image_bytes = await attachment.read()
+                    encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+
+            tResponse = await self.llm_api.handle_llm_trigger(
+                content=message.content,
+                _persona=_persona,
+                user_id=user_id,
+                user_name=user_name,
+                display_name=display_name,
+                encoded_image=encoded_image
+            )
+            msg_response_text = await message.channel.send(tResponse.response_text)
+            if tResponse.thinking_content and self.debug_channel:
+                # split thinking content into multiple messages if too long for one message
+                if len(tResponse.thinking_content) > 1900:
+                    thinking_parts = [tResponse.thinking_content[i:i+1900] for i in range(0, len(tResponse.thinking_content), 1900)]
+                    total_parts = len(thinking_parts)
+                    msg_thinking_text = None
+                    for i, part in enumerate(thinking_parts):
+                        msg_thinking_text = await self.debug_channel.send(f"# Thinking ({i+1}/{total_parts})\n{part}")
                 else:
-                    reply_dict = await self.llm_chat_v6([*chatMem, prompt], system_instruction, user_dict=user_dict)
-
-                reply_content = reply_dict.response_text
-                reasoning_content = reply_dict.thinking_content
-                token_usage = reply_dict.token_usage
-
-                if reasoning_content:
-                    if len(reasoning_content) > 2000:
-                        print(f'GenAI Reasoning Content: {reasoning_content}')
-                        reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
-                    await message.channel.send(f"# Reasoning:\n{reasoning_content}")
-                    
-                await message.channel.send(f"{reply_content}")
-                print(f'GenAI Response: {reply_content}')
-                
-                # print(f"Delta Affection: {delta_affection}")
-                # reply_content = what_to_reply  # Update reply_content for memory logging
-                # Validate and parse the JSON response
-                # try:
-                #     l_cursor = reply_content.find('```json') + 7
-                #     r_cursor = reply_content.rfind('```')
-                #     if l_cursor == -1 or r_cursor == -1 or l_cursor >= r_cursor:
-                #         response_data = json.loads(reply_content)
-                #     else:
-                #         response_data = json.loads(reply_content[l_cursor:r_cursor])
-                #     what_to_reply = response_data.get("what_to_reply", "無法解析的回覆")
-                #     delta_affection = response_data.get("delta_affection", 0)
-
-                #     # Send the parsed response
-                #     if len(what_to_reply) > 2000:
-                #         print(f'GenAI Response: {what_to_reply}')
-                #         what_to_reply = what_to_reply[:1980] + "\n...[truncated]"
-                    
-                #     if reasoning_content:
-                #         if len(reasoning_content) > 2000:
-                #             print(f'GenAI Reasoning Content: {reasoning_content}')
-                #             reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
-                #         await message.channel.send(f"Reasoning:\n{reasoning_content}")
-                #     await message.channel.send(f"{what_to_reply}\n\n* 好感度變化: {delta_affection}")
-                #     print(f"Delta Affection: {delta_affection}")
-                #     reply_content = what_to_reply  # Update reply_content for memory logging
-                
-                # except json.JSONDecodeError:
-                #     if len(what_to_reply) > 2000:
-                #         print(f'GenAI Response: {what_to_reply}')
-                #         what_to_reply = what_to_reply[:1980] + "\n...[truncated]"
-                #     await message.channel.send(what_to_reply)
-                #     print(f"Invalid JSON response, sent as plain text.")
-                    
-                # except ValueError:
-                #     await message.channel.send(what_to_reply)
-                #     print(f"No JSON code block found, sent as plain text.")
-
-            except TimeoutError:
-                await message.channel.send("The bot is currently unavailable. Please try again later.")
-            except Exception as e:
-                print(f'Reply error:\n{user_persona_pair}:\n{e}')
-                await message.channel.send(f'{user_persona_pair} 發生錯誤，請聯繫主人\n{e}')
+                    msg_thinking_text = await self.debug_channel.send(f"# Thinking\n{tResponse.thinking_content}")
+                usage_info = '\n'.join(f'{k}:\t{v}' for k, v in tResponse.token_usage.items())
+                await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:```{usage_info}```")
+                # cross reference thinking content in the original channel
+                await msg_response_text.edit(content=f"{tResponse.response_text}\n-# Thinking {msg_thinking_text.jump_url}")
+                 
             else:
-                # Only append to memory if no exception
-                chatMem.append(prompt)
-                chatMem.append({'role': 'assistant', 'content': reply_content})
-                self.db.increment_interaction_count(_persona.uid, user_id)
+                print(f"Response: {tResponse.response_text}\nNo thinking content or debug channel available.")
+            self.db.increment_interaction_count(_persona.uid, user_id)
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):

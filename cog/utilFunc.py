@@ -72,3 +72,8 @@ class replyDict:
         # if self.images:
         #     result['images'] = self.images
         return result
+
+# testing
+if __name__ == "__main__":
+    d = {"a": 1, "b": 2, "c": 3}
+    print(sepLines([f"{k}: {v}" for k, v in d.items()]))

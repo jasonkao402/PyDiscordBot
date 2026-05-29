@@ -31,8 +31,15 @@ class LLMAPI:
         self.llm_apis = [AsyncOpenAI(api_key = api_key, base_url = llm_base_url) for api_key in self.round_robin_api_collection]
         self.persona_session_memory: dict[int, deque] = {}
         print(f'Loaded LLM API with model = {mainModel}, created {len(self.llm_apis)} clients @ {llm_base_url}.')
-        
-        
+    
+    async def cleanup(self):
+        for llm_api in self.llm_apis:
+            await llm_api.close()
+            
+    def init_memory(self, persona_id: int):
+        if persona_id not in self.persona_session_memory:
+            self.persona_session_memory[persona_id] = deque(maxlen=MEMOLEN) 
+            
     async def llm_chat_v6(self, messages: list[dict], system: str, user_dict: dict, image: Optional[gtypes.Part | dict] = None) -> TrimedResponse:
         """
         messages: list of strings (model / user messages)
@@ -128,16 +135,16 @@ class LLMAPI:
         system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
         prompt = {'role': 'user', 'content': f'{display_name} said {content}'}
 
-        if _persona.uid not in self.persona_session_memory:
-            self.persona_session_memory[_persona.uid] = deque(maxlen=MEMOLEN)
+        # if _persona.uid not in self.persona_session_memory:
+        #     self.persona_session_memory[_persona.uid] = deque(maxlen=MEMOLEN)
+        self.init_memory(_persona.uid)
         chatMem = self.persona_session_memory[_persona.uid]
-        
+        user_dict = {
+            "id": user_id,
+            "name": user_name,
+            "display_name": display_name,
+        }
         try:
-            user_dict = {
-                "id": user_id,
-                "name": user_name,
-                "display_name": display_name,
-            }
             image_part = dict()
             if encoded_image:
                 # Handle image attachments
@@ -186,4 +193,3 @@ class LLMAPI:
             chatMem.append({'role': 'assistant', 'content': reply_content})
             
             return reply_dict
-            # self.db.increment_interaction_count(_persona.uid, user_id)
