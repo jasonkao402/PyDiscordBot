@@ -5,12 +5,13 @@ from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable
 # from discord import Message
 from enum import IntEnum
+from uuid import uuid4
 
 class ActionState(IntEnum):
     DEFAULT = 0     # default state, will auto-send after window
     COMPLETED = 1   # already sent (either auto or manually)
     HOLD = 2        # held by admin, waiting for edited content
-    DISCARDED = 3   # discarded by admin, will not send
+    REJECTED = 3   # discarded by admin, will not send
 @dataclass
 class TrimedResponse:
     response_text: str
@@ -18,16 +19,18 @@ class TrimedResponse:
     token_usage: dict[str, int]
 
 class PendingMessage:
-    def __init__(self, uid: str, user_id: int, user_display_name: str, content: str):
+    def __init__(self, uid: str, user_id: int, user_display_name: str, input_msg: str, content: str):
         self.uid = uid
         self.user_id = user_id
         self.user_display_name = user_display_name
+        self.input_msg = input_msg
         self.content = content
         # internal state
         self._received_at: float = field(default_factory=time.monotonic)
         self._ttl: float = field(default=10.0)  # seconds until auto-send
         self._actionState: ActionState = field(default=ActionState.DEFAULT)
         self._timer_task: Optional[asyncio.Task] = None
+        self.future: asyncio.Future = asyncio.get_event_loop().create_future()
     
     # @property
     def to_dict(self):
@@ -35,6 +38,7 @@ class PendingMessage:
             "uid": self.uid,
             "user_id": self.user_id,
             "user_display_name": self.user_display_name,
+            "input_msg": self.input_msg,
             "content": self.content,
             "received_at": self._received_at,
             "ttl": self._ttl,
@@ -42,14 +46,13 @@ class PendingMessage:
         }
 
 class PendingMessageManager:
-    def __init__(self, send_callback: Callable[[PendingMessage], Awaitable[None]], update_callback: Optional[Callable[[], Awaitable[None]]] = None):
+    def __init__(self, update_callback: Optional[Callable[[], Awaitable[None]]] = None):
         self.queue: list[PendingMessage] = []   # simple FIFO; could be asyncio.Queue
-        self.send_callback = send_callback       # async function to actually send to Discord
         self.update_callback = update_callback
         self.window = 10                        # default seconds, adjustable
         self._lock = asyncio.Lock()
         
-    async def add(self, msg: PendingMessage):
+    async def moderate(self, msg: PendingMessage) -> PendingMessage:
         async with self._lock:
             self.queue.append(msg)
         # start auto‑send timer
@@ -60,6 +63,9 @@ class PendingMessageManager:
         msg._timer_task = asyncio.create_task(self._auto_send_after(msg, self.window))
         if self.update_callback:
             await self.update_callback()
+            
+        await msg.future
+        return msg
 
     async def _auto_send_after(self, msg: PendingMessage, delay: float):
         try:
@@ -67,9 +73,11 @@ class PendingMessageManager:
             # If not held, send automatically
             if msg._actionState == ActionState.DEFAULT and msg in self.queue:
                 async with self._lock:
-                    await self.send_callback(msg)
                     if msg in self.queue:
                         self.queue.remove(msg)
+                msg._actionState = ActionState.COMPLETED
+                if not msg.future.done():
+                    msg.future.set_result(msg)
                 if self.update_callback:
                     await self.update_callback()
         except asyncio.CancelledError:
@@ -78,15 +86,23 @@ class PendingMessageManager:
     async def send_immediately(self, msg_id: str):
         msg = await self._pop(msg_id)
         if msg:
-            await self.send_callback(msg)
+            msg._actionState = ActionState.COMPLETED
+            if not msg.future.done():
+                msg.future.set_result(msg)
+            if self.update_callback:
+                await self.update_callback()
 
-    async def discard(self, msg_id: str):
+    async def reject(self, msg_id: str):
         msg = await self._pop(msg_id)
-        if msg and msg._timer_task:
-            msg._actionState = ActionState.DISCARDED
-            msg._timer_task.cancel()
-        if self.update_callback:
-            await self.update_callback()
+        if msg:
+            if msg._timer_task:
+                msg._timer_task.cancel()
+            msg._actionState = ActionState.REJECTED
+            msg.content = "[REJECTED] " + msg.content  # Optionally modify content to indicate rejection
+            if not msg.future.done():
+                msg.future.set_result(msg)
+            if self.update_callback:
+                await self.update_callback()
 
     async def hold(self, msg_id: str):
         msg = await self._get(msg_id)
@@ -102,11 +118,13 @@ class PendingMessageManager:
         """Called when admin finishes editing and wants to re‑submit."""
         msg = await self._pop(msg_id)
         if msg:
-            # re-add to end of queue with new content and reset timer
             msg.content = new_content
-            msg.uid = f"{msg.uid}_edited_{int(time.time())}"  # new UID for edited version
-            # Treat as fresh incoming – start a new 10‑s window
-            await self.add(msg)
+            msg._received_at = time.monotonic()
+            msg._ttl = self.window
+            msg._actionState = ActionState.DEFAULT
+            msg._timer_task = asyncio.create_task(self._auto_send_after(msg, self.window))
+            async with self._lock:
+                self.queue.append(msg)
             if self.update_callback:
                 await self.update_callback()
 

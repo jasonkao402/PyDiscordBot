@@ -33,6 +33,7 @@
             transition: transform 0.2s;
         }
         .msg-header { font-weight: bold; color: var(--accent); }
+        .msg-input { font-style: italic; color: var(--yellow); }
         .msg-content { white-space: pre-wrap; word-break: break-word; background: #181825; padding: 10px; border-radius: 6px;}
         .msg-content-edit {
             width: 100%; min-height: 80px; background: #181825; color: var(--text);
@@ -47,7 +48,7 @@
         }
         button:hover { opacity: 0.8; }
         .btn-send { background-color: var(--green); }
-        .btn-discard { background-color: var(--red); }
+        .btn-reject { background-color: var(--red); }
         .btn-hold { background-color: var(--yellow); }
         .btn-submit { background-color: var(--accent); }
 
@@ -58,7 +59,7 @@
 <body>
 
     <div id="header">
-        <h2>Hachiya Pending Replies</h2>
+        <h2>Pending Replies</h2>
         <div id="ws-status" class=""><span class="status-dot"></span><span id="ws-text">Disconnected</span></div>
     </div>
 
@@ -67,7 +68,7 @@
 
     <script>
         // ActionState enum matching backend
-        const ActionState = { DEFAULT: 0, COMPLETED: 1, HOLD: 2, DISCARDED: 3 };
+        const ActionState = { DEFAULT: 0, COMPLETED: 1, HOLD: 2, REJECTED: 3 };
         const queueDiv = document.getElementById('queue');
         
         // Track local expiry times for the visual countdown
@@ -118,15 +119,22 @@
                     card.innerHTML = buildCardHTML(msg);
                     queueDiv.appendChild(card);
                     
-                    // Set visual timer (TTL converted to MS)
+                    // Set visual timer (TTL and remaining converted to MS)
+                    const elapsedMs = msg.remaining !== undefined ? (msg.ttl - msg.remaining) * 1000 : 0;
                     localExpiryTimes[msg.uid] = {
-                        start: Date.now(),
+                        start: Date.now() - elapsedMs,
                         duration: msg.ttl * 1000,
                         state: msg.actionState
                     };
                 } else {
                     // Existing message - handle state changes (like switching to HOLD)
                     localExpiryTimes[msg.uid].state = msg.actionState;
+                    
+                    // Resync timer if it's counting
+                    if (msg.actionState === ActionState.DEFAULT && msg.remaining !== undefined) {
+                        const elapsedMs = (msg.ttl - msg.remaining) * 1000;
+                        localExpiryTimes[msg.uid].start = Date.now() - elapsedMs;
+                    }
                     
                     if (msg.actionState === ActionState.HOLD) {
                         const contentDiv = card.querySelector('.msg-content');
@@ -142,6 +150,30 @@
                             const controls = card.querySelector('.controls');
                             controls.innerHTML = `<button class="btn-submit" onclick="submitEdit('${msg.uid}')">Submit Edit & Resume</button>`;
                         }
+                    } else if (msg.actionState === ActionState.DEFAULT) {
+                        const textarea = card.querySelector('.msg-content-edit');
+                        if (textarea) {
+                            // Swap textarea back to static text
+                            const currentText = textarea.value;
+                            const div = document.createElement('div');
+                            div.className = 'msg-content';
+                            div.innerHTML = escapeHTML(currentText);
+                            textarea.replaceWith(div);
+                            
+                            // Restore original controls
+                            const controls = card.querySelector('.controls');
+                            controls.innerHTML = `
+                                <button class="btn-send" onclick="performAction('${msg.uid}', 'send')">Send Now</button>
+                                <button class="btn-hold" onclick="performAction('${msg.uid}', 'hold')">Hold & Edit</button>
+                                <button class="btn-reject" onclick="performAction('${msg.uid}', 'reject')">Reject</button>
+                            `;
+                        }
+                        
+                        // Update content if backend changed it (e.g. via reset)
+                        const contentDiv = card.querySelector('.msg-content');
+                        if (contentDiv && contentDiv.innerText !== msg.content) {
+                            contentDiv.innerHTML = escapeHTML(msg.content);
+                        }
                     }
                 }
             });
@@ -150,11 +182,12 @@
         function buildCardHTML(msg) {
             return `
                 <div class="msg-header">Reply to: ${msg.user_display_name}</div>
+                <div class="msg-input"><em>Input: ${escapeHTML(msg.input_msg)}</em></div>
                 <div class="msg-content">${escapeHTML(msg.content)}</div>
                 <div class="controls">
                     <button class="btn-send" onclick="performAction('${msg.uid}', 'send')">Send Now</button>
                     <button class="btn-hold" onclick="performAction('${msg.uid}', 'hold')">Hold & Edit</button>
-                    <button class="btn-discard" onclick="performAction('${msg.uid}', 'discard')">Discard</button>
+                    <button class="btn-reject" onclick="performAction('${msg.uid}', 'reject')">Reject</button>
                 </div>
                 <div class="progress-container">
                     <div class="progress-bar" id="bar-${msg.uid}"></div>

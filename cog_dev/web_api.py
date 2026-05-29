@@ -39,14 +39,19 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
 
+import time
+
 async def push_update():
-    # now_mono = time.monotonic()
+    now_mono = time.monotonic()
     messages = pending_manager.get_all()
-    # data = []
-    # for m in messages:
-    #     d = m.to_dict()
-    #     data.append(d)
-    data = [m.to_dict() for m in messages]
+    data = []
+    for m in messages:
+        d = m.to_dict()
+        if d["actionState"] == 0:  # ActionState.DEFAULT
+            d["remaining"] = max(0, d["ttl"] - (now_mono - d["received_at"]))
+        else:
+            d["remaining"] = 0
+        data.append(d)
     await ws_manager.broadcast(json.dumps(data))
 
 # REST actions
@@ -62,9 +67,9 @@ async def action_send(msg_id: str):
     await push_update()
     return {"ok": True}
 
-@app.post("/action/discard")
-async def action_discard(msg_id: str):
-    await pending_manager.discard(msg_id)
+@app.post("/action/reject")
+async def action_reject(msg_id: str):
+    await pending_manager.reject(msg_id)
     await push_update()
     return {"ok": True}
 
