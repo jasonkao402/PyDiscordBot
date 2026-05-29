@@ -1,38 +1,51 @@
 # moderation.py
 import asyncio
 import time
-import uuid
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable
-import discord
-from discord import Message
-from enum import Enum
+# from discord import Message
+from enum import IntEnum
 
-class ModerationAction(Enum):
-    DEFAULT = "default"  # auto‑send after window if no action taken
-    HOLD = "hold"
-    DISCARD = "discard"
-    SEND_IMMEDIATELY = "send_immediately"
-    
+class ActionState(IntEnum):
+    DEFAULT = 0     # default state, will auto-send after window
+    COMPLETED = 1   # already sent (either auto or manually)
+    HOLD = 2        # held by admin, waiting for edited content
+    DISCARDED = 3   # discarded by admin, will not send
 @dataclass
+class TrimedResponse:
+    response_text: str
+    thinking_content: str
+    token_usage: dict[str, int]
+
 class PendingMessage:
-    uid: str               # unique id
-    content: str           # LLM reply text
-    received_at: float     # timestamp (monotonic or Unix)
-    user_id: int           # Discord user id
-    display_name: str      # for display
-    channel_ctx: Message   # where to send
-    token_usage: dict      # {prompt_tokens, completion_tokens, total}
-    persona_name: str      # for display
-    # internal state
-    stateAction: ModerationAction = field(default=ModerationAction.DEFAULT)  # default to auto‑send after window
-    edited_content: Optional[str] = None
-    timer_task: Optional[asyncio.Task] = None
+    def __init__(self, uid: str, user_id: int, user_display_name: str, content: str):
+        self.uid = uid
+        self.user_id = user_id
+        self.user_display_name = user_display_name
+        self.content = content
+        # internal state
+        self._received_at: float = field(default_factory=time.monotonic)
+        self._ttl: float = field(default=10.0)  # seconds until auto-send
+        self._actionState: ActionState = field(default=ActionState.DEFAULT)
+        self._timer_task: Optional[asyncio.Task] = None
+    
+    # @property
+    def to_dict(self):
+        return {
+            "uid": self.uid,
+            "user_id": self.user_id,
+            "user_display_name": self.user_display_name,
+            "content": self.content,
+            "received_at": self._received_at,
+            "ttl": self._ttl,
+            "actionState": self._actionState.value,
+        }
 
 class PendingMessageManager:
-    def __init__(self, send_callback: Callable[[PendingMessage], Awaitable[None]]):
+    def __init__(self, send_callback: Callable[[PendingMessage], Awaitable[None]], update_callback: Optional[Callable[[], Awaitable[None]]] = None):
         self.queue: list[PendingMessage] = []   # simple FIFO; could be asyncio.Queue
         self.send_callback = send_callback       # async function to actually send to Discord
+        self.update_callback = update_callback
         self.window = 10                        # default seconds, adjustable
         self._lock = asyncio.Lock()
         
@@ -40,53 +53,62 @@ class PendingMessageManager:
         async with self._lock:
             self.queue.append(msg)
         # start auto‑send timer
-        msg.timer_task = asyncio.create_task(self._auto_send_after(msg, self.window))
+        print(f"Added message {msg.uid} to moderation queue. Starting auto-send timer.")
+        msg._received_at = time.monotonic()
+        msg._ttl = self.window
+        msg._actionState = ActionState.DEFAULT
+        msg._timer_task = asyncio.create_task(self._auto_send_after(msg, self.window))
+        if self.update_callback:
+            await self.update_callback()
 
     async def _auto_send_after(self, msg: PendingMessage, delay: float):
         try:
             await asyncio.sleep(delay)
             # If not held, send automatically
-            if msg.stateAction == ModerationAction.DEFAULT and msg in self.queue:
+            if msg._actionState == ActionState.DEFAULT and msg in self.queue:
                 async with self._lock:
                     await self.send_callback(msg)
                     if msg in self.queue:
                         self.queue.remove(msg)
+                if self.update_callback:
+                    await self.update_callback()
         except asyncio.CancelledError:
             pass   # timer was cancelled by an explicit action
 
     async def send_immediately(self, msg_id: str):
         msg = await self._pop(msg_id)
-        if msg and msg.stateAction == ModerationAction.SEND_IMMEDIATELY:
-            # If held, allow sending of the (possibly edited) content
-            if msg.edited_content:
-                msg.content = msg.edited_content
         if msg:
             await self.send_callback(msg)
 
     async def discard(self, msg_id: str):
         msg = await self._pop(msg_id)
-        if msg and msg.timer_task:
-            msg.stateAction = ModerationAction.DISCARD
-            msg.timer_task.cancel()
+        if msg and msg._timer_task:
+            msg._actionState = ActionState.DISCARDED
+            msg._timer_task.cancel()
+        if self.update_callback:
+            await self.update_callback()
 
     async def hold(self, msg_id: str):
         msg = await self._get(msg_id)
         if msg:
-            msg.stateAction = ModerationAction.HOLD
-            if msg.timer_task:
-                msg.timer_task.cancel()   # disable auto‑send
+            msg._actionState = ActionState.HOLD
+            if msg._timer_task:
+                msg._timer_task.cancel()   # disable auto‑send
             # The message remains in queue until admin sends the edited version
+            if self.update_callback:
+                await self.update_callback()
 
     async def submit_edited(self, msg_id: str, new_content: str):
         """Called when admin finishes editing and wants to re‑submit."""
-        msg = await self._get(msg_id)
-        if msg and msg.stateAction == ModerationAction.HOLD:
-            msg.edited_content = new_content
+        msg = await self._pop(msg_id)
+        if msg:
+            # re-add to end of queue with new content and reset timer
+            msg.content = new_content
+            msg.uid = f"{msg.uid}_edited_{int(time.time())}"  # new UID for edited version
             # Treat as fresh incoming – start a new 10‑s window
-            msg.stateAction = ModerationAction.DEFAULT   # auto‑send after new window
-            msg.timer_task = asyncio.create_task(self._auto_send_after(msg, self.window))
-            # Optionally update received_at to now? The spec doesn't require, but fine.
-            msg.received_at = time.monotonic()
+            await self.add(msg)
+            if self.update_callback:
+                await self.update_callback()
 
     async def _pop(self, msg_id: str) -> Optional[PendingMessage]:
         async with self._lock:

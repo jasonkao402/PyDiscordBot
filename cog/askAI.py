@@ -15,7 +15,7 @@ from config_loader import configToml
 import json, re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 from cog_dev.responseParsing import parse_response
-from cog_dev.moderation import PendingMessage, PendingMessageManager
+from cog_dev.moderation import PendingMessage, PendingMessageManager, TrimedResponse
 import cog_dev.web_api as web_api
 import base64
 from openai import AsyncOpenAI
@@ -36,11 +36,6 @@ http_options = gtypes.HttpOptions(
     # base_url=str(link_config.get("link_gcli2api", "")), timeout=60
     base_url=str(llm_base_url), timeout=60
 )
-@dataclass
-class TrimedResponse:
-    response_text: str
-    thinking_content: str
-    token_usage: dict[str, int]
 
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')

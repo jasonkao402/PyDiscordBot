@@ -1,14 +1,225 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Chat Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hachiya Mod Queue</title>
+    <style>
+        :root {
+            --bg: #1e1e2e; --surface: #313244; --text: #cdd6f4;
+            --accent: #cba6f7; --red: #f38ba8; --green: #a6e3a1; --yellow: #f9e2af;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg); color: var(--text);
+            margin: 0; padding: 20px;
+        }
+        #header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; border-bottom: 2px solid var(--surface); padding-bottom: 10px;
+        }
+        .status-dot {
+            display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+            background-color: var(--red); margin-right: 8px;
+        }
+        .connected .status-dot { background-color: var(--green); }
+        
+        #queue { display: flex; flex-direction: column; gap: 15px; }
+        
+        .msg-card {
+            background-color: var(--surface); border-radius: 8px;
+            padding: 15px; display: flex; flex-direction: column; gap: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .msg-header { font-weight: bold; color: var(--accent); }
+        .msg-content { white-space: pre-wrap; word-break: break-word; background: #181825; padding: 10px; border-radius: 6px;}
+        .msg-content-edit {
+            width: 100%; min-height: 80px; background: #181825; color: var(--text);
+            border: 1px solid var(--accent); border-radius: 6px; padding: 10px;
+            font-family: inherit; resize: vertical; box-sizing: border-box;
+        }
+        
+        .controls { display: flex; gap: 10px; margin-top: 5px; }
+        button {
+            padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;
+            font-weight: bold; color: #11111b; transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.8; }
+        .btn-send { background-color: var(--green); }
+        .btn-discard { background-color: var(--red); }
+        .btn-hold { background-color: var(--yellow); }
+        .btn-submit { background-color: var(--accent); }
+
+        .progress-container { width: 100%; height: 6px; background-color: #181825; border-radius: 3px; overflow: hidden; }
+        .progress-bar { height: 100%; background-color: var(--accent); width: 100%; transform-origin: left; }
+    </style>
 </head>
 <body>
-    <h1>Chat Dashboard</h1>
-    <!-- This div is required for the JavaScript to work -->
-    <div id="sessions"></div>
-    
-    <script src="/static/script.js"></script>
+
+    <div id="header">
+        <h2>Hachiya Pending Replies</h2>
+        <div id="ws-status" class=""><span class="status-dot"></span><span id="ws-text">Disconnected</span></div>
+    </div>
+
+    <div id="queue">
+        </div>
+
+    <script>
+        // ActionState enum matching backend
+        const ActionState = { DEFAULT: 0, COMPLETED: 1, HOLD: 2, DISCARDED: 3 };
+        const queueDiv = document.getElementById('queue');
+        
+        // Track local expiry times for the visual countdown
+        const localExpiryTimes = {}; 
+
+        // 1. WebSocket Setup
+        function connect() {
+            const wsUrl = `ws://${window.location.host}/ws`;
+            const ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                document.getElementById('ws-status').className = 'connected';
+                document.getElementById('ws-text').innerText = 'Live';
+            };
+
+            ws.onmessage = (event) => {
+                const messages = JSON.parse(event.data);
+                renderQueue(messages);
+            };
+
+            ws.onclose = () => {
+                document.getElementById('ws-status').className = '';
+                document.getElementById('ws-text').innerText = 'Disconnected - Reconnecting...';
+                setTimeout(connect, 2000); // Auto-reconnect
+            };
+        }
+
+        // 2. Render Logic
+        function renderQueue(messages) {
+            // Remove cards that are no longer in the backend queue
+            const currentUids = new Set(messages.map(m => m.uid));
+            Array.from(queueDiv.children).forEach(child => {
+                if (!currentUids.has(child.id)) {
+                    child.remove();
+                    delete localExpiryTimes[child.id];
+                }
+            });
+
+            // Add or update messages
+            messages.forEach(msg => {
+                let card = document.getElementById(msg.uid);
+                
+                if (!card) {
+                    // New message arrived
+                    card = document.createElement('div');
+                    card.id = msg.uid;
+                    card.className = 'msg-card';
+                    card.innerHTML = buildCardHTML(msg);
+                    queueDiv.appendChild(card);
+                    
+                    // Set visual timer (TTL converted to MS)
+                    localExpiryTimes[msg.uid] = {
+                        start: Date.now(),
+                        duration: msg.ttl * 1000,
+                        state: msg.actionState
+                    };
+                } else {
+                    // Existing message - handle state changes (like switching to HOLD)
+                    localExpiryTimes[msg.uid].state = msg.actionState;
+                    
+                    if (msg.actionState === ActionState.HOLD) {
+                        const contentDiv = card.querySelector('.msg-content');
+                        if (contentDiv) {
+                            // Swap static text for textarea
+                            const currentText = contentDiv.innerText;
+                            const textarea = document.createElement('textarea');
+                            textarea.className = 'msg-content-edit';
+                            textarea.value = currentText;
+                            contentDiv.replaceWith(textarea);
+                            
+                            // Update controls
+                            const controls = card.querySelector('.controls');
+                            controls.innerHTML = `<button class="btn-submit" onclick="submitEdit('${msg.uid}')">Submit Edit & Resume</button>`;
+                        }
+                    }
+                }
+            });
+        }
+
+        function buildCardHTML(msg) {
+            return `
+                <div class="msg-header">Reply to: ${msg.user_display_name}</div>
+                <div class="msg-content">${escapeHTML(msg.content)}</div>
+                <div class="controls">
+                    <button class="btn-send" onclick="performAction('${msg.uid}', 'send')">Send Now</button>
+                    <button class="btn-hold" onclick="performAction('${msg.uid}', 'hold')">Hold & Edit</button>
+                    <button class="btn-discard" onclick="performAction('${msg.uid}', 'discard')">Discard</button>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="bar-${msg.uid}"></div>
+                </div>
+            `;
+        }
+
+        // 3. Visual Timer Loop (RequestAnimationFrame for smooth 60fps)
+        function updateTimers() {
+            const now = Date.now();
+            for (const [uid, timerData] of Object.entries(localExpiryTimes)) {
+                const bar = document.getElementById(`bar-${uid}`);
+                if (!bar) continue;
+
+                if (timerData.state === ActionState.HOLD) {
+                    bar.style.backgroundColor = 'var(--yellow)';
+                    continue; // Freeze timer visual
+                }
+
+                const elapsed = now - timerData.start;
+                let remainingPct = Math.max(0, 100 - ((elapsed / timerData.duration) * 100));
+                
+                bar.style.width = `${remainingPct}%`;
+                
+                if (remainingPct <= 20) bar.style.backgroundColor = 'var(--red)';
+                else bar.style.backgroundColor = 'var(--accent)';
+            }
+            requestAnimationFrame(updateTimers);
+        }
+
+        // 4. API Actions
+        async function performAction(uid, action) {
+            try {
+                await fetch(`/action/${action}?msg_id=${uid}`, { method: 'POST' });
+            } catch (err) {
+                console.error("Action failed:", err);
+            }
+        }
+
+        async function submitEdit(uid) {
+            const card = document.getElementById(uid);
+            const textarea = card.querySelector('.msg-content-edit');
+            const newContent = textarea.value;
+
+            try {
+                await fetch('/action/submit_edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ msg_id: uid, new_content: newContent })
+                });
+            } catch (err) {
+                console.error("Edit failed:", err);
+            }
+        }
+
+        // Utility: Prevent XSS injection in chat messages
+        function escapeHTML(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Boot up
+        connect();
+        requestAnimationFrame(updateTimers);
+    </script>
 </body>
 </html>

@@ -1,8 +1,9 @@
 # web_api.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import json
+import time
 from cog_dev.moderation import PendingMessageManager
 
 app = FastAPI()
@@ -39,18 +40,13 @@ async def websocket_endpoint(websocket: WebSocket):
         ws_manager.disconnect(websocket)
 
 async def push_update():
+    # now_mono = time.monotonic()
     messages = pending_manager.get_all()
-    data = []
-    for m in messages:
-        data.append({
-            "uid": m.uid,
-            "content": m.content,
-            "held": m.stateAction,
-            "user_name": m.display_name,
-            "received_at": m.received_at,
-            "persona": m.persona_name,
-            "token_usage": m.token_usage
-        })
+    # data = []
+    # for m in messages:
+    #     d = m.to_dict()
+    #     data.append(d)
+    data = [m.to_dict() for m in messages]
     await ws_manager.broadcast(json.dumps(data))
 
 # REST actions
@@ -85,59 +81,6 @@ async def action_submit_edit(edit: EditSubmit):
     return {"ok": True}
 
 # Serve the admin page (minimal HTML)
-@app.get("/", response_class=HTMLResponse)
-async def admin_page():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Hachiya Moderation</title>
-        <script>
-            let ws = new WebSocket("ws://" + location.host + "/ws");
-            ws.onmessage = function(event) {
-                let messages = JSON.parse(event.data);
-                let container = document.getElementById("pending-list");
-                container.innerHTML = "";
-                messages.forEach(function(msg) {
-                    let div = document.createElement("div");
-                    div.style.border = "1px solid #ccc";
-                    div.style.padding = "5px";
-                    div.style.margin = "5px";
-                    div.innerHTML = `
-                        <b>${msg.user_name}</b> (${msg.persona})<br>
-                        <p>${msg.content.substring(0, 200)}...</p>
-                        <small>Tokens: ${JSON.stringify(msg.token_usage)}</small><br>
-                        <button onclick="sendMsg('${msg.uid}')">Send Now</button>
-                        <button onclick="discardMsg('${msg.uid}')">Discard</button>
-                        <button onclick="holdMsg('${msg.uid}')">Hold</button>
-                        <span id="edit-${msg.uid}" style="display:none">
-                            <textarea id="edit-text-${msg.uid}" rows="3" cols="50">${msg.content}</textarea>
-                            <button onclick="submitEdit('${msg.uid}')">Submit Edited (new 10s window)</button>
-                        </span>
-                    `;
-                    if(msg.held) {
-                        div.querySelector(`#edit-${msg.uid}`).style.display = "block";
-                    }
-                    container.appendChild(div);
-                });
-            };
-
-            function sendMsg(uid) { fetch('/action/send?msg_id='+uid, {method:'POST'}); }
-            function discardMsg(uid) { fetch('/action/discard?msg_id='+uid, {method:'POST'}); }
-            function holdMsg(uid) { fetch('/action/hold?msg_id='+uid, {method:'POST'}); }
-            function submitEdit(uid) {
-                let newText = document.getElementById('edit-text-'+uid).value;
-                fetch('/action/submit_edit', {
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({msg_id: uid, new_content: newText})
-                });
-            }
-        </script>
-    </head>
-    <body>
-        <h1>Pending Messages</h1>
-        <div id="pending-list"></div>
-    </body>
-    </html>
-    """
+@app.get("/", response_class=FileResponse)
+async def get_index():
+    return FileResponse("cog_dev/templates/index.html")
