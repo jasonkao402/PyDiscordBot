@@ -1,8 +1,5 @@
 from collections import deque
-from dataclasses import dataclass
-from math import exp
-from time import strftime, time, monotonic
-from turtle import pendown
+from time import strftime
 from typing import Optional, List
 from uuid import uuid4
 
@@ -55,9 +52,11 @@ class askAI(commands.Cog):
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
-        print(f'Loaded askAI cog with model = {mainModel}, created {len(self.llm_apis)} LLM API clients @ {llm_base_url}.')
-        # print("ban list:")
-        # print(', '.join(str(uid) for uid in self.ban_list))
+        
+        self.debug_channel = bot.get_channel(configToml.get("debugChannelId", -1))
+        if self.debug_channel:
+            ch_name = getattr(self.debug_channel, 'name', 'Unknown')
+            print(f"Debug channel found: {ch_name} (ID: {self.debug_channel.id})")
         
     async def cog_unload(self):
         for llm_api in self.llm_apis:

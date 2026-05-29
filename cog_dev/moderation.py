@@ -17,6 +17,9 @@ class TrimedResponse:
     response_text: str
     thinking_content: str
     token_usage: dict[str, int]
+    
+    def __str__(self):
+        return f"Response: {self.response_text}\nThinking: {self.thinking_content}\nTokens: {' '.join(f'{k}: {v}' for k, v in self.token_usage.items())}"
 
 class PendingMessage:
     def __init__(self, uid: str, user_id: int, user_display_name: str, input_msg: str, content: str):
