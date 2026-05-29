@@ -55,6 +55,7 @@ class ChatCog:
                     } for msg in messages
                 ]
             ]
+            
             response = await self.llm_api.chat.completions.create(
                 model=mainModel,
                 messages=message_list,

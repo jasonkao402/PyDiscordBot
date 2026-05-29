@@ -8,14 +8,14 @@ from uuid import uuid4
 
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, app_commands, File
-from discord.ext import commands, tasks
+from discord.ext import commands
 from cog.utilFunc import sepLines, wcformat
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
-import json, re
+import re
 from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 from cog_dev.responseParsing import parse_response
-from cog_dev.moderation import PendingMessage, PendingMessageManager, TrimedResponse
+from cog_dev.moderation import PendingMessage, TrimedResponse
 import cog_dev.web_api as web_api
 import base64
 from openai import AsyncOpenAI
@@ -27,28 +27,26 @@ THRESHOLD = 0.8575
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
-# llm_base_url = link_config.get("link_deepseek", "")
-# llm_base_url = link_config.get("link_gcli2api", "")
-llm_base_url = link_config.get("link_siliconFlow", "")
+llm_base_url = link_config.get("link_openrouter", "")
+mainModel = chat_config["modelChat"]
 
-http_options = gtypes.HttpOptions(
-    # base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
-    # base_url=str(link_config.get("link_gcli2api", "")), timeout=60
-    base_url=str(llm_base_url), timeout=60
-)
+# http_options = gtypes.HttpOptions(
+#     base_url=str(configToml["llmLink"]["link_build_server"]), timeout=60
+#     base_url=str(link_config.get("link_gcli2api", "")), timeout=60
+#     base_url=str(llm_base_url), timeout=60
+# )
 
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
-    def __init__(self, bot: DC_Client, pending_manager: PendingMessageManager):
+    def __init__(self, bot: DC_Client):
         self.bot = bot
         self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
-        self.pending_manager = pending_manager
         self.ban_list = configToml.get("auth", {}).get("ban_list", [])
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
         self.api_switch_threshold = 5  # Number of calls before switching to the next API
-        self.round_robin_api_collection = configToml['apiToken'].get('siliconFlow_llm', [])
+        self.round_robin_api_collection = configToml['apiToken'].get('openrouter_llm', [])
         # self.llm_apis = [genai.Client(
         #     api_key=api_key,
         #     http_options=http_options,
@@ -57,7 +55,7 @@ class askAI(commands.Cog):
         self.persona_session_memory: dict[int, deque] = {} # deque of session messages
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
-        print(f'Loaded askAI cog with {len(self.llm_apis)} LLM API clients @ {llm_base_url}.')
+        print(f'Loaded askAI cog with model = {mainModel}, created {len(self.llm_apis)} LLM API clients @ {llm_base_url}.')
         # print("ban list:")
         # print(', '.join(str(uid) for uid in self.ban_list))
         
@@ -66,10 +64,11 @@ class askAI(commands.Cog):
             await llm_api.close()
             # llm_api.close()  # Close the underlying HTTP session for genai.Client
 
-    async def llm_chat_v5(self, messages: list[dict], system: str, image: Optional[gtypes.Part | dict] = None) -> TrimedResponse:
+    async def llm_chat_v6(self, messages: list[dict], system: str, user_dict: dict, image: Optional[gtypes.Part | dict] = None) -> TrimedResponse:
         """
         messages: list of strings (model / user messages)
         system: system instruction string
+        user_dict: dictionary containing user information
         """
         try:
             """
@@ -106,13 +105,15 @@ class askAI(commands.Cog):
                         } for msg in messages
                     ]
                 ]
+            
             if image:
                 message_list[-1]["content"] = [image, {"type": "text", "text": message_list[-1]["content"]}]
+            
             response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
                 model=chat_config["modelChat"],
                 messages=message_list,
                 max_tokens=4096,
-                extra_body={"thinking": {"type": "enabled"}},
+                extra_body={"reasoning": {"enabled": True}},
             )
             # """
         except errors.APIError as e:
@@ -121,18 +122,27 @@ class askAI(commands.Cog):
             return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", token_usage={})
         
         response_text = str(response.choices[0].message.content)
-        thinking_content = str(response.choices[0].message.reasoning_content) if hasattr(response.choices[0].message, 'reasoning_content') else "" # pyright: ignore[reportAttributeAccessIssue]
+        thinking_content = str(response.choices[0].message.reasoning) if hasattr(response.choices[0].message, 'reasoning') else "" # pyright: ignore[reportAttributeAccessIssue]
         token_usage = {
             "prompt_tokens": response.usage.prompt_tokens,
             "completion_tokens": response.usage.completion_tokens,
             "total_tokens": response.usage.total_tokens
         } if response.usage else {}
         
-        if response.usage:
-            print(f'Token usage: {response.usage.total_tokens} tokens')
+        final_msg = await web_api.pending_manager.moderate(
+            PendingMessage(
+                uid=str(uuid4()),
+                user_id=user_dict["id"],
+                user_display_name=user_dict["display_name"] or user_dict["name"],
+                input_msg=messages[-1]["content"] if messages else "",
+                content=response_text,
+            )
+        )
+        # if response.usage:
+        #     print(f'Token usage: {response.usage.total_tokens} tokens')
             
         return TrimedResponse(
-            response_text=response_text,
+            response_text=final_msg.content,
             thinking_content=thinking_content,
             token_usage=token_usage
         )   
@@ -302,14 +312,6 @@ class askAI(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
         
-    async def send_to_discord(self, pending: PendingMessage):
-        channel = pending.channel_ctx.channel
-        if channel:
-            await channel.send(f"**{pending.display_name}** (as {pending.persona_name}):\n{pending.content}")
-        else:
-            # Fallback
-            pass
-        
     async def handle_llm_trigger(self, message: Message, user_id: int, user_name: str, display_name: str):
         """Handle the logic for detecting and triggering the LLM feature."""
         # Load persona selection from cache or database
@@ -343,6 +345,11 @@ class askAI(commands.Cog):
                 self.persona_session_memory[_persona.uid] = deque(maxlen=MEMOLEN)
             chatMem = self.persona_session_memory[_persona.uid]
             try:
+                user_dict = {
+                    "id": user_id,
+                    "name": user_name,
+                    "display_name": display_name,
+                }
                 if message.attachments:
                     # Handle image attachments
                     base64_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
@@ -363,9 +370,9 @@ class askAI(commands.Cog):
                             "detail": "low",
                         }
                     }
-                    reply_dict = await self.llm_chat_v5([*chatMem, prompt], system_instruction, image=image_part)
+                    reply_dict = await self.llm_chat_v6([*chatMem, prompt], system_instruction, user_dict=user_dict, image=image_part)
                 else:
-                    reply_dict = await self.llm_chat_v5([*chatMem, prompt], system_instruction)
+                    reply_dict = await self.llm_chat_v6([*chatMem, prompt], system_instruction, user_dict=user_dict)
 
                 reply_content = reply_dict.response_text
                 reasoning_content = reply_dict.thinking_content
@@ -376,18 +383,9 @@ class askAI(commands.Cog):
                         print(f'GenAI Reasoning Content: {reasoning_content}')
                         reasoning_content = reasoning_content[:1980] + "\n...[truncated]"
                     await message.channel.send(f"# Reasoning:\n{reasoning_content}")
-                # await message.channel.send(f"{reply_content}")
+                    
+                await message.channel.send(f"{reply_content}")
                 print(f'GenAI Response: {reply_content}')
-                await self.pending_manager.add(PendingMessage(
-                    uid=str(uuid4()),
-                    content=reply_content,
-                    received_at=monotonic(),
-                    user_id=user_id,
-                    display_name=display_name,
-                    channel_ctx=message,
-                    token_usage=token_usage,
-                    persona_name=_persona.persona
-                ))
                 
                 # print(f"Delta Affection: {delta_affection}")
                 # reply_content = what_to_reply  # Update reply_content for memory logging
@@ -541,15 +539,7 @@ class askAI(commands.Cog):
         )
         
 async def setup(bot:commands.Bot):
-    cog_instance = None
-    
-    async def send_callback(pending: PendingMessage):
-        if cog_instance:
-            await cog_instance.send_to_discord(pending)
-            
-    pending_manager = PendingMessageManager(send_callback)
-    web_api.pending_manager = pending_manager # Export to web_api so that UI can get it
-    cog_instance = askAI(bot, pending_manager)
+    cog_instance = askAI(bot)
     await bot.add_cog(cog_instance)
 
 async def teardown(bot:commands.Bot):

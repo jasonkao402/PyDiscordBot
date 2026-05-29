@@ -6,6 +6,8 @@ from config_loader import configToml, loadToml
 import asyncio
 import uvicorn
 from fastapi import FastAPI
+from cog_dev.moderation import PendingMessageManager
+import cog_dev.web_api as web_api
 
 async def run_discord():
     absFilePath = os.path.abspath(__file__)
@@ -140,6 +142,9 @@ async def run_discord():
     TOKEN = configToml['apiToken']['discord']
     configToml['apiToken'].pop('discord', None)
     # Start!
+    pending_manager = PendingMessageManager(update_callback=web_api.push_update)
+    web_api.pending_manager = pending_manager # Export to web_api so that UI can get it
+    
     bot_task = asyncio.create_task(client.start(TOKEN))
     
     # Run web API in background
@@ -147,9 +152,21 @@ async def run_discord():
     server = uvicorn.Server(uvicorn_config)
     api_task = asyncio.create_task(server.serve())
     
-    await asyncio.gather(bot_task, api_task)
-    
-    # client.run(TOKEN)
+    try:
+        # Wait until the user quits the chatbot
+        await bot_task
+    except asyncio.CancelledError:
+        pass
+    finally:
+        # Gracefully shut down the web server
+        print("\nShutting down web server...")
+        server.should_exit = True
+        await api_task
 
 if __name__ == "__main__":
-    asyncio.run(run_discord())
+    try:
+        asyncio.run(run_discord())
+    except KeyboardInterrupt:
+        print("\nKeyboardInterrupt received. Shutting down...")
+    finally:
+        print("Application shutdown complete.")
