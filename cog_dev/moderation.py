@@ -3,15 +3,15 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable
-# from discord import Message
 from enum import IntEnum
-from uuid import uuid4
 
+TIME_WINDOW = 6.0  # seconds for auto-send after message is added to moderation queueq
 class ActionState(IntEnum):
     DEFAULT = 0     # default state, will auto-send after window
     COMPLETED = 1   # already sent (either auto or manually)
     HOLD = 2        # held by admin, waiting for edited content
-    REJECTED = 3   # discarded by admin, will not send
+    REJECTED = 3    # rejected by admin, will not send
+    
 @dataclass
 class TrimedResponse:
     response_text: str
@@ -21,21 +21,22 @@ class TrimedResponse:
     def __str__(self):
         return f"Response: {self.response_text}\nThinking: {self.thinking_content}\nTokens: {' '.join(f'{k}: {v}' for k, v in self.token_usage.items())}"
 
+@dataclass
 class PendingMessage:
-    def __init__(self, uid: str, user_id: int, user_display_name: str, input_msg: str, content: str):
-        self.uid = uid
-        self.user_id = user_id
-        self.user_display_name = user_display_name
-        self.input_msg = input_msg
-        self.content = content
-        # internal state
-        self._received_at: float = field(default_factory=time.monotonic)
-        self._ttl: float = field(default=10.0)  # seconds until auto-send
-        self._actionState: ActionState = field(default=ActionState.DEFAULT)
-        self._timer_task: Optional[asyncio.Task] = None
-        self.future: asyncio.Future = asyncio.get_event_loop().create_future()
+    uid: str
+    user_id: int
+    user_display_name: str
+    input_msg: str
+    content: str
+    _received_at: float = field(default_factory=time.monotonic, init=False)
+    _ttl: float = field(default=10.0, init=False)
+    _actionState: ActionState = field(default=ActionState.DEFAULT, init=False)
+    _timer_task: Optional[asyncio.Task] = field(default=None, init=False)
+    future: asyncio.Future = field(init=False)
+
+    def __post_init__(self):
+        self.future = asyncio.get_running_loop().create_future()
     
-    # @property
     def to_dict(self):
         return {
             "uid": self.uid,
@@ -52,14 +53,14 @@ class PendingMessageManager:
     def __init__(self, update_callback: Optional[Callable[[], Awaitable[None]]] = None):
         self.queue: list[PendingMessage] = []   # simple FIFO; could be asyncio.Queue
         self.update_callback = update_callback
-        self.window = 10                        # default seconds, adjustable
+        self.window = TIME_WINDOW                        # default seconds, adjustable
         self._lock = asyncio.Lock()
         
     async def moderate(self, msg: PendingMessage) -> PendingMessage:
         async with self._lock:
             self.queue.append(msg)
         # start auto‑send timer
-        print(f"Added message {msg.uid} to moderation queue. Starting auto-send timer.")
+        print(f"Added message {msg.uid[:8]} to moderation queue. Starting auto-send timer.")
         msg._received_at = time.monotonic()
         msg._ttl = self.window
         msg._actionState = ActionState.DEFAULT

@@ -1,9 +1,11 @@
 from typing import Optional, List
 from discord import Client as DC_Client
-from discord import Color, Embed, Interaction, Message, TextChannel, app_commands, File
+from discord import Color, Embed, Interaction, Message, TextChannel, app_commands
 from discord.ext import commands
-from cog.llmAPI import LLMAPI
-from cog.utilFunc import sepLines, wcformat
+from discord.abc import Messageable
+from typing import Optional
+from cog.llmAgentAPI import LLMAPI
+from cog.utilFunc import sepLines, wcformat, UserDict
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
 import re
@@ -11,6 +13,7 @@ from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
 import base64
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
+
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
@@ -23,10 +26,13 @@ class askAI(commands.Cog):
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
         
         debug_channel = bot.get_channel(configToml.get("debugChannelId", -1))
+        # get_channel may return various channel types (TextChannel, DMChannel, Thread, etc.).
+        # Use the more general TextChannel type for the attribute to avoid
+        # type errors when assigning different channel kinds.
         self.debug_channel: Optional[TextChannel] = debug_channel if isinstance(debug_channel, TextChannel) else None
         if self.debug_channel:
             ch_name = getattr(self.debug_channel, 'name', 'Unknown')
-            print(f"Debug channel found: {ch_name} (ID: {self.debug_channel.id})")
+            print(f"Debug channel found: {ch_name} (ID: {getattr(self.debug_channel, 'id', 'N/A')})")
         else:
             print("Debug channel not found or invalid. Debug messages will be printed to console.")
         
@@ -143,8 +149,6 @@ class askAI(commands.Cog):
             await ctx.send(f"{self.persona_cache[persona_id].persona}(#{persona_id}) selected successfully.")
         else:
             await ctx.send(f"Failed to select {self.persona_cache[persona_id].persona}(#{persona_id}).")
-        # Initialize session memory
-        self.llm_api.init_memory(persona_id)
 
     @commands.hybrid_command(name="listpersonas")
     async def list_personas(self, ctx: commands.Context):
@@ -171,11 +175,8 @@ class askAI(commands.Cog):
             return
 
         # Clear the memory for the selected persona
-        if _persona.uid in self.llm_api.persona_session_memory:
-            self.llm_api.persona_session_memory[_persona.uid].clear()
-            await interaction.response.send_message(f"Session memory for {_persona.persona} has been erased.")
-        else:
-            await interaction.response.send_message("No session memory to erase for the selected persona.")
+        self.llm_api.reset_memory(_persona.uid)
+        await interaction.response.send_message(f"Session memory for {_persona.persona} has been erased.")
             
     @app_commands.command(name="currentpersona", description="Show the currently selected persona")
     async def current_persona(self, interaction: Interaction):
@@ -197,21 +198,38 @@ class askAI(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
         
-    async def handle_llm_trigger(self, message: Message, user_id: int, user_name: str, display_name: str):
+    async def _long_message_splitter(self, ctx: Messageable, text: str, title: str = "", chunk_size: int = 1900) -> Message:
+        """Split a long message into chunks that fit within Discord's message limits and send them sequentially."""
+        last_message: Message | None = None
+
+        if len(text) > chunk_size:
+            parts = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+            len_parts = len(parts)
+            for i, part in enumerate(parts):
+                last_message = await ctx.send(f"# {title} part {i+1}/{len_parts}\n{part}")
+        else:
+            last_message = await ctx.send(f"# {title}\n{text}")
+        
+        if last_message is None:
+            raise RuntimeError("Failed to send message chunk")
+
+        return last_message
+    
+    async def handle_llm_trigger(self, message: Message, user: UserDict):
         """Handle the logic for detecting and triggering the LLM feature."""
         # Load persona selection from cache or database
-        if user_id not in self.selection_cache:
-            self.selection_cache[user_id] = self.db.get_selected_persona_uid(user_id)
-            print(f'from db load persona # {self.selection_cache[user_id]} for user {user_id} selection')
-            if self.selection_cache[user_id] != -1:
+        if user.uid not in self.selection_cache:
+            self.selection_cache[user.uid] = self.db.get_selected_persona_uid(user.uid)
+            print(f'from db load persona # {self.selection_cache[user.uid]} for user {user.uid} selection')
+            if self.selection_cache[user.uid] != -1:
                 # Load persona into cache
-                db_persona = self.db.get_persona_no_check(self.selection_cache[user_id])
+                db_persona = self.db.get_persona_no_check(self.selection_cache[user.uid])
                 if not db_persona:
                     await message.channel.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
                     return
                 self.persona_cache[db_persona.uid] = db_persona
 
-        persona_id = self.selection_cache.get(user_id, -1)
+        persona_id = self.selection_cache.get(user.uid, -1)
         _persona = self.persona_cache.get(persona_id, None)
         if not _persona:
             await message.channel.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
@@ -224,58 +242,59 @@ class askAI(commands.Cog):
                 if attachment.content_type and attachment.content_type.startswith('image/'):
                     image_bytes = await attachment.read()
                     encoded_image = base64.b64encode(image_bytes).decode('utf-8')
-
-            tResponse = await self.llm_api.handle_llm_trigger(
-                content=message.content,
+                    
+            # strip out the bot mention part from the message content
+            if self.bot.user.mentioned_in(message):
+                _content = message.content.replace(self.bot.user.mention, '', 1).strip()
+            else:
+                _content = message.content
+            tResponse = await self.llm_api.handle_llm_agent(
+                content=_content,
                 _persona=_persona,
-                user_id=user_id,
-                user_name=user_name,
-                display_name=display_name,
+                _user_dict=user,
                 encoded_image=encoded_image
             )
-            msg_response_text = await message.channel.send(tResponse.response_text)
+            
+            # split both main and thinking content into multiple messages if too long for one message.
+            # send thinking content reference link in the original channel to reduce clutter.
+            msg_response_text = await self._long_message_splitter(message.channel, tResponse.response_text, title=_persona.persona)
+                
             if tResponse.thinking_content and self.debug_channel:
-                # split thinking content into multiple messages if too long for one message
-                if len(tResponse.thinking_content) > 1900:
-                    thinking_parts = [tResponse.thinking_content[i:i+1900] for i in range(0, len(tResponse.thinking_content), 1900)]
-                    total_parts = len(thinking_parts)
-                    msg_thinking_text = None
-                    for i, part in enumerate(thinking_parts):
-                        msg_thinking_text = await self.debug_channel.send(f"# Thinking ({i+1}/{total_parts})\n{part}")
-                else:
-                    msg_thinking_text = await self.debug_channel.send(f"# Thinking\n{tResponse.thinking_content}")
-                usage_info = '\n'.join(f'{k}:\t{v}' for k, v in tResponse.token_usage.items())
-                await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:```{usage_info}```")
-                # cross reference thinking content in the original channel
+                msg_thinking_text = await self._long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona} Thinking")
+                usage_info = '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items())
+                await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:\n{usage_info}")
+                # Edit the original response message to include a reference to the thinking content in the debug channel
                 await msg_response_text.edit(content=f"{tResponse.response_text}\n-# Thinking {msg_thinking_text.jump_url}")
                  
             else:
-                print(f"Response: {tResponse.response_text}\nNo thinking content or debug channel available.")
-            self.db.increment_interaction_count(_persona.uid, user_id)
+                # No thinking content or debug channel available, just print response and token usage in debug channel or console
+                print(str(tResponse))
+            self.db.increment_interaction_count(_persona.uid, user.uid)
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
         user, message_text = message.author, message.content
-        user_id, user_name = user.id, user.name
-        display_name = user.display_name
-        user_name = re.sub(r'[.#]', '', user_name)
-
+        _user = UserDict(
+            uid = user.id,
+            name = user.name,
+            display_name = user.display_name
+        )
         # Ignore self messages
-        if user_id == self.bot.user.id:
+        if _user.uid == self.bot.user.id:
             return
-        if user_id in self.ban_list:
-            print(f'Ignored message from banned user {user_name} ({user_id})')
+        if _user.uid in self.ban_list:
+            print(f'Ignored message from banned user {_user.name} ({_user.uid})')
             return
-
+        
         # Use mentions to trigger bot LLM chat
         if self.bot.user.mentioned_in(message) and not message.mention_everyone:
             roles = getattr(user, 'roles', [])  # Ensure user.roles exists
             if not any(role.id in configToml.get("auth", {}).get("roleList", []) for role in roles):
-                extra_msg = 'does not have the required role to interact with the bot.'
-                print(f'User {user_name} ({user_id}) {extra_msg}')
-                await message.channel.send(f'User {user_name} {extra_msg}')
+                extra_msg = 'You do not have the required role to interact with the bot.'
+                print(f'Rejected message from {_user.name} ({_user.uid}): {extra_msg}')
+                await message.channel.send(f'# To {_user.name}...\n{extra_msg}')
                 return
-            await self.handle_llm_trigger(message, user_id, user_name, display_name)
+            await self.handle_llm_trigger(message, _user)
 
     @commands.hybrid_command(name='scoreboard')
     async def _scoreboard(self, ctx: commands.Context):

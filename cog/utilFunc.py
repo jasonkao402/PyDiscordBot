@@ -1,13 +1,13 @@
-import os
 from datetime import datetime, timedelta, timezone
 from numpy import argsort, array, dot, ndarray
 from numpy.linalg import norm
-from typing import List
+from typing import List, Optional
 from wcwidth import wcswidth
 from config_loader import configToml
+from dataclasses import dataclass
 
 TWTZ = timezone(timedelta(hours = 8))
-    
+
 def clamp(n: float, minn: float = 0, maxn: float = 100) -> float:
     '''clamp n in set range'''
     return max(min(maxn, n), minn)
@@ -41,6 +41,17 @@ def simRank(a, b, K=3) -> tuple:
     idx = argsort(sim)[:-K-1:-1]
     return idx, sim[idx]
 
+@dataclass
+class UserDict:
+    uid: int
+    name: str
+    display_name: str
+    preferred_name: Optional[str] = None
+    
+    @property
+    def effective_name(self):
+        # Priority: preferred_name > display_name > name
+        return self.preferred_name or self.display_name or self.name
 class embedVector:
     def __init__(self, text:str, vector:ndarray):
         # self.id = id
