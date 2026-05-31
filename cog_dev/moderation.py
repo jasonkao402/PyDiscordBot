@@ -19,7 +19,7 @@ class TrimedResponse:
     token_usage: dict[str, int]
     
     def __str__(self):
-        return f"Response: {self.response_text}\nThinking: {self.thinking_content}\nTokens: {' '.join(f'{k}: {v}' for k, v in self.token_usage.items())}"
+        return f"Response:\n{self.response_text}\nThinking:\n{self.thinking_content}\nTokens:\n{' '.join(f'{k}: {v}' for k, v in self.token_usage.items())}"
 
 @dataclass
 class PendingMessage:

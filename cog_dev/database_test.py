@@ -87,6 +87,7 @@ class PersonaDatabase:
                     interaction_count INTEGER DEFAULT 0,
                     last_payout_at TEXT DEFAULT NULL,
                     balance INTEGER DEFAULT 0,
+                    preferred_name TEXT DEFAULT NULL,
                     FOREIGN KEY (selected_persona_uid) REFERENCES personas (uid)
                     )
                 """)
