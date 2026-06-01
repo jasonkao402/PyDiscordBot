@@ -9,7 +9,7 @@ from cog.utilFunc import sepLines, wcformat, UserDict
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal
 from config_loader import configToml
 import re
-from cog_dev.database_test import PersonaDatabase, PersonaVisibility, Persona
+from persona_db.PersonaDatabase import PersonaDatabase, PersonaVisibility, Persona
 import base64
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")

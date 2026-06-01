@@ -3,12 +3,10 @@ import uvicorn
 from cog.llmAgentAPI import LLMAPI
 from cog.utilFunc import UserDict
 from cog_dev.moderation import PendingMessage, PendingMessageManager, TrimedResponse
-from cog_dev.database_test import PersonaDatabase, Persona
+from persona_db.PersonaDatabase import PersonaDatabase, Persona
 import cog_dev.web_api as web_api
 import asyncio
 from config_loader import configToml
-
-N = 16
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")

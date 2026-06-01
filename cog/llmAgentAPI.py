@@ -2,7 +2,7 @@ from collections import deque, defaultdict
 from cog.utilFunc import UserDict
 from cog_dev.responseParsing import parse_response
 from cog_dev.moderation import PendingMessage, TrimedResponse
-from cog_dev.database_test import Persona
+from persona_db.PersonaDatabase import Persona
 import cog_dev.web_api as web_api
 from config_loader import configToml
 
@@ -18,8 +18,11 @@ chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
 llm_base_url = link_config.get("link_openrouter", "")
 mainModel = chat_config["modelChat"]
-MEMORY_MAX = 26
-    
+
+FULL_MEMORY_RANGE = 10
+SUM_MEMORY_RANGE = 10
+VECTOR_MEMORY_RANGE = 3
+
 class LLMAPI:
     def __init__(self):
         self.round_robin_api_index = 0
@@ -30,7 +33,7 @@ class LLMAPI:
         #     api_key=api_key, http_options=http_options,
         # ) for api_key in self.round_robin_api_collection]
         self.llm_apis = [AsyncOpenAI(api_key = api_key, base_url = llm_base_url) for api_key in self.round_robin_api_collection]
-        self.persona_session_memory: defaultdict[int, deque] = defaultdict(lambda: deque(maxlen=MEMORY_MAX))
+        self.persona_session_memory: defaultdict[int, deque] = defaultdict(lambda: deque(maxlen=FULL_MEMORY_RANGE))
         print(f'Loaded LLM API with model = {mainModel}, created {len(self.llm_apis)} clients @ {llm_base_url}.')
     
     async def cleanup(self):
