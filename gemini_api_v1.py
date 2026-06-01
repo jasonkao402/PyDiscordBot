@@ -30,7 +30,7 @@ async def cog_chatbot():
     debug_persona_id = 21
     _persona = db.get_persona_no_check(debug_persona_id)
     assert isinstance(_persona, Persona)
-    print(f"Using persona: {_persona.persona}")
+    print(f"Using persona: {_persona.persona_name}")
     
     user_dict = UserDict(
         uid=0,

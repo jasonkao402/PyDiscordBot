@@ -92,7 +92,7 @@ class askAI(commands.Cog):
         # Create and send the modal
         modal = EditPersonaModal(
             persona_id=persona_id,
-            persona_name=_persona.persona,
+            persona_name=_persona.persona_name,
             content=_persona.content,
             visibility=_persona.visibility == PersonaVisibility.PUBLIC,
             callback=self.handle_edit_persona_submission
@@ -103,7 +103,7 @@ class askAI(commands.Cog):
         """Handle the submission of the edit persona modal."""
         user_id = interaction.user.id
         updates = {
-            'persona': persona_name,
+            'persona_name': persona_name,
             'content': content,
             'visibility': PersonaVisibility.PUBLIC.value if visibility else PersonaVisibility.PRIVATE.value
         }
@@ -114,7 +114,7 @@ class askAI(commands.Cog):
             # Update cache
             if persona_id in self.persona_cache:
                 _persona = self.persona_cache[persona_id]
-                _persona.persona = persona_name
+                _persona.persona_name = persona_name
                 _persona.content = content
                 _persona.visibility = PersonaVisibility(updates['visibility'])
         else:
@@ -146,9 +146,9 @@ class askAI(commands.Cog):
         # Set selected persona in database
         success = self.db.set_selected_persona(user_id, persona_id)
         if success:
-            await ctx.send(f"{self.persona_cache[persona_id].persona}(#{persona_id}) selected successfully.")
+            await ctx.send(f"{self.persona_cache[persona_id].persona_name}(#{persona_id}) selected successfully.")
         else:
-            await ctx.send(f"Failed to select {self.persona_cache[persona_id].persona}(#{persona_id}).")
+            await ctx.send(f"Failed to select {self.persona_cache[persona_id].persona_name}(#{persona_id}).")
 
     @commands.hybrid_command(name="listpersonas")
     async def list_personas(self, ctx: commands.Context):
@@ -159,7 +159,7 @@ class askAI(commands.Cog):
             await ctx.send("No personas available.")
             return
 
-        persona_list = sepLines([f"ID: {p.uid:03d}, Name: {wcformat(p.persona, w=10, strFront=False)}, Visibility: {p.visibility.name}" for p in personas])
+        persona_list = sepLines([f"ID: {p.uid:03d}, Name: {wcformat(p.persona_name, w=10, strFront=False)}, Visibility: {p.visibility.name}" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
     
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
@@ -176,7 +176,7 @@ class askAI(commands.Cog):
 
         # Clear the memory for the selected persona
         self.llm_api.reset_memory(_persona.uid)
-        await interaction.response.send_message(f"Session memory for {_persona.persona} has been erased.")
+        await interaction.response.send_message(f"Session memory for {_persona.persona_name} has been erased.")
             
     @app_commands.command(name="currentpersona", description="Show the currently selected persona")
     async def current_persona(self, interaction: Interaction):
@@ -192,7 +192,7 @@ class askAI(commands.Cog):
             return
 
         # Create an embed to display persona details
-        embed = Embed(title=f"Current Persona: {_persona.persona} (#{_persona.uid})", color=Color.blue())
+        embed = Embed(title=f"Current Persona: {_persona.persona_name} (#{_persona.uid})", color=Color.blue())
         embed.add_field(name="Visibility", value="Public" if _persona.visibility == PersonaVisibility.PUBLIC else "Private", inline=False)
         embed.add_field(name="Content", value=_persona.content[:1024], inline=False)  # Limit content to 1024 characters for embed
 
@@ -257,14 +257,15 @@ class askAI(commands.Cog):
             
             # split both main and thinking content into multiple messages if too long for one message.
             # send thinking content reference link in the original channel to reduce clutter.
-            msg_response_text = await self._long_message_splitter(message.channel, tResponse.response_text, title=_persona.persona)
+            msg_response_text = await self._long_message_splitter(message.channel, tResponse.response_text, title=_persona.persona_name)
                 
             if tResponse.thinking_content and self.debug_channel:
-                msg_thinking_text = await self._long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona} Thinking")
+                msg_thinking_text = await self._long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking")
                 usage_info = '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items())
                 await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:\n{usage_info}")
-                # Edit the original response message to include a reference to the thinking content in the debug channel
-                await msg_response_text.edit(content=f"{tResponse.response_text}\n-# Thinking {msg_thinking_text.jump_url}")
+                # Edit the last one of original response messages to include a reference to the thinking content in the debug channel
+                edit_content = f"{msg_response_text.content}\n\n-# Thinking {msg_thinking_text.jump_url}"
+                await msg_response_text.edit(content=edit_content)
                  
             else:
                 # No thinking content or debug channel available, just print response and token usage in debug channel or console

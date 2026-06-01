@@ -128,7 +128,7 @@ class LLMAPI:
     
     async def handle_llm_agent(self, content: str, _persona: Persona, _user_dict: UserDict, encoded_image: Optional[str]) -> TrimedResponse:
         """Handle the logic for interacting with the LLM agent."""
-        persona_name = _persona.persona if _persona.persona else "UnknownPersona"
+        persona_name = _persona.persona_name if _persona.persona_name else "UnknownPersona"
         user_persona_pair = f'{wcformat(_user_dict.name)}@{persona_name}'
         # Filter out mention bot part
         print(f'{user_persona_pair}: {content}')
