@@ -18,6 +18,8 @@ class PersonaVisibility(Enum):
     PRIVATE = 0
     PUBLIC = 1
 
+    def __str__(self):
+        return self.name
 
 @dataclass
 class Persona:
@@ -162,14 +164,12 @@ def _discord_user_from_row(row: tuple) -> DiscordUser:
 
 
 class SQLiteRepository:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
 
     @contextmanager
     def connection(self):
-        with sqlite3.connect(self.db_path) as conn:
-            yield conn
-
+        yield self._conn
 
 class PersonaRepository(SQLiteRepository):
     allowed_update_fields = {"persona_name", "content", "visibility", "last_interaction_recv_at", "interaction_count"}
@@ -975,25 +975,28 @@ class PersonaGroupAccessRepository(SQLiteRepository):
 class PersonaDatabase:
     def __init__(self, db_path: str = DB_DEFAULT_PATH):
         self.db_path = db_path
-        self.personas = PersonaRepository(db_path)
-        self.users = DiscordUserRepository(db_path)
-        self.interactions = InteractionRepository(db_path)
-        self.chat_interactions = ChatInteractionRepository(db_path)
-        self.persona_memories = PersonaMemoriesRepository(db_path)
-        self.user_groups = UserGroupsRepository(db_path)
-        self.persona_group_access = PersonaGroupAccessRepository(db_path)
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # self._conn.execute("PRAGMA foreign_keys = ON;")
+
+        self.personas = PersonaRepository(self._conn)
+        self.users = DiscordUserRepository(self._conn)
+        self.interactions = InteractionRepository(self._conn)
+        self.chat_interactions = ChatInteractionRepository(self._conn)
+        self.persona_memories = PersonaMemoriesRepository(self._conn)
+        self.user_groups = UserGroupsRepository(self._conn)
+        self.persona_group_access = PersonaGroupAccessRepository(self._conn)
+
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            self.personas.create_tables(conn)
-            self.personas.rename_legacy_persona_column(conn)
-            self.users.create_tables(conn)
-            self.interactions.create_tables(conn)
-            self.chat_interactions.create_tables(conn)
-            self.persona_memories.create_tables(conn)
-            self.user_groups.create_tables(conn)
-            self.persona_group_access.create_tables(conn)
+        self.personas.create_tables(self._conn)
+        self.personas.rename_legacy_persona_column(self._conn)
+        self.users.create_tables(self._conn)
+        self.interactions.create_tables(self._conn)
+        self.chat_interactions.create_tables(self._conn)
+        self.persona_memories.create_tables(self._conn)
+        self.user_groups.create_tables(self._conn)
+        self.persona_group_access.create_tables(self._conn)
 
     def create_persona(self, persona: str, content: str, owner_uid: int, visibility: PersonaVisibility) -> int:
         """Create a new persona, ensuring the user does not exceed the limit."""
@@ -1231,14 +1234,21 @@ class PersonaDatabase:
 
 
 if __name__ == "__main__":
-    manager = PersonaDatabase("file:testdb?mode=memory&cache=shared")
-
-    user1_uid = 225833749156331520
-    result = manager.set_selected_persona(user1_uid, 3)
+    manager = PersonaDatabase(":memory:")
+    user1_uid = 1000
+    user2_uid = 2000
+    user3_uid = 3000
+    manager.create_discord_user(user1_uid)
+    manager.create_discord_user(user2_uid)
+    manager.create_discord_user(user3_uid)
+    manager.create_persona("Test1", "Content for Test1", user1_uid, PersonaVisibility.PUBLIC)
+    manager.create_persona("Test2", "Content for Test2", user1_uid, PersonaVisibility.PRIVATE)
+    manager.create_persona("Test3", "Content for Test3", user2_uid, PersonaVisibility.PUBLIC)
+    result = manager.set_selected_persona(user1_uid, 1)
     print(f"Select persona result: {result}")
     selected = manager.get_selected_persona(user1_uid)
     if selected:
-        print(f"Selected persona: {selected.persona_name}\n---\n{selected.content[:50]}...")
+        print(f"Selected persona: {selected.persona_name}\n---\n{selected.content[:20]}...")
     else:
         print("No persona selected.")
 
@@ -1247,20 +1257,16 @@ if __name__ == "__main__":
     for persona in personas:
         print(persona)
 
-    user2_uid = 511412168386674691
     user2_personas = manager.list_personas(user2_uid)
     print("User2 can see: ")
     for persona in user2_personas:
         print(persona)
 
-    user_uid = 123456789
-    manager.create_discord_user(user_uid)
-
-    user = manager.get_discord_user(user_uid)
+    user = manager.get_discord_user(user1_uid)
     if user:
         print(f"Retrieved user: {user}")
 
-    manager.update_discord_user(user_uid, balance=100)
-    updated_user = manager.get_discord_user(user_uid)
+    manager.update_discord_user(user1_uid, balance=100)
+    updated_user = manager.get_discord_user(user1_uid)
     if updated_user:
         print(f"Updated user balance: {updated_user.balance}")
