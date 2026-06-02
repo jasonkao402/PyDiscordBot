@@ -44,7 +44,7 @@ class PersonaDatabase:
     def get_persona(self, persona_uid: int, user_uid: int, role_ids: Set[int]) -> Optional[Persona]:
         """Get a persona if user has permission to view it"""
         persona = self.personas.fetch_by_uid(persona_uid)
-        if persona and persona.permission_shallow(user_uid, role_ids):
+        if persona and persona.permission_basic(user_uid, role_ids):
             return persona
         return None
 
@@ -52,9 +52,25 @@ class PersonaDatabase:
         """Get a persona without permission check, only for cache use"""
         return self.personas.fetch_by_uid(persona_uid)
 
-    def update_persona(self, persona_uid: int, user_uid: int, **updates) -> bool:
-        """Update a persona - only owner can update"""
-        return self.personas.update(persona_uid, user_uid, **updates)
+    def update_persona(self, persona_uid: int, user_uid: int, user_roles: Set[int], **updates) -> bool:
+        """Update a persona - branching logic based on whether the user is owner or has role-based permission"""
+        if not updates:
+            return False
+        
+        _persona = self.personas.fetch_by_uid(persona_uid)
+        if not _persona: # check if persona exists
+            return False
+        
+        if _persona.permission_full(user_uid, user_roles):
+            allowed_fields = self.personas.allowed_owner_update_fields
+            return self.personas.update(persona_uid, allowed_fields, **updates)
+        
+        elif _persona.permission_basic(user_uid, user_roles):
+            allowed_fields = self.personas.allowed_teammember_update_fields
+            return self.personas.update(persona_uid, allowed_fields, **updates)
+        
+        else:
+            return False
 
     def delete_persona(self, persona_uid: int, user_uid: int) -> bool:
         """Delete a persona - only owner can delete"""
@@ -81,7 +97,7 @@ class PersonaDatabase:
             return None
 
         persona = self.personas.fetch_by_uid(persona_uid)
-        if persona and persona.permission_shallow(user_uid, role_ids):
+        if persona and persona.permission_basic(user_uid, role_ids):
             return persona
         return None
 

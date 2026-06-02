@@ -151,7 +151,7 @@ class askAI(commands.Cog):
             # Build cache
             self.persona_cache[persona_id] = _persona
         
-        if not _persona.permission_shallow(user_id, user_role_ids):
+        if not _persona.permission_basic(user_id, user_role_ids):
             await ctx.send(f"You do not have permission to select persona ID {persona_id}.")
             return
         self.selection_cache[user_id] = persona_id

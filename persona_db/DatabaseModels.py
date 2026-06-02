@@ -24,15 +24,15 @@ class Persona:
     last_interaction_recv_at: Optional[str] = None
     interaction_count: int = 0 # unused for now
 
-    def permission_deep(self, user_id: int, user_role_ids: Set[int] = set()) -> bool:
+    def permission_full(self, user_id: int, user_role_ids: Set[int] = set()) -> bool:
         if self.owner_uid == user_id:
             return True
         return any(role_id in self.allowed_role_ids for role_id in user_role_ids)
 
-    def permission_shallow(self, user_id: int, user_role_ids: Set[int] = set()) -> bool:
+    def permission_basic(self, user_id: int, user_role_ids: Set[int] = set()) -> bool:
         if self.is_public:
             return True
-        return self.permission_deep(user_id, user_role_ids)
+        return self.permission_full(user_id, user_role_ids)
     
     def __str__(self):
         return f"Persona(uid={self.uid:3d}, persona={self.persona_name}, owner_uid={self.owner_uid}, is_public={self.is_public})"

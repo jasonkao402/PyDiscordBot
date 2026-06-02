@@ -21,8 +21,11 @@ def _persona_from_row(row: tuple) -> Persona:
     )
 
 class PersonaRepository(SQLiteRepository):
-    allowed_update_fields = {"persona_name", "content", "visibility", "is_public", "allowed_role_ids", "last_interaction_recv_at", "interaction_count"}
-
+    allowed_everyone_update_fields = {"last_interaction_recv_at"}
+    allowed_owner_update_fields = {"persona_name", "content", "visibility", "is_public", "allowed_role_ids"} | allowed_everyone_update_fields
+    allowed_teammember_update_fields = {"persona_name", "content"} | allowed_everyone_update_fields
+    
+    
     def create_tables(self, conn) -> None:
         conn.execute(
             # """
@@ -144,12 +147,24 @@ class PersonaRepository(SQLiteRepository):
             elif any(role_id in allowed_roles for role_id in user_role_ids):
                 visible.append(_persona_from_row(row))
         return visible
+    
+    def get_allowed_fields_for_user(self, persona_uid: int, user_uid: int, user_role_ids: Set[int] = set()) -> Set[str]:
+        persona = self.fetch_by_uid(persona_uid)
+        if not persona:
+            raise ValueError(f"Persona with uid {persona_uid} not found.")
 
-    def update(self, persona_uid: int, owner_uid: int, **updates) -> bool:
+        if persona.owner_uid == user_uid:
+            return self.allowed_owner_update_fields
+        elif any(role_id in persona.allowed_role_ids for role_id in user_role_ids):
+            return self.allowed_teammember_update_fields
+        else:
+            return self.allowed_everyone_update_fields
+        
+    def update(self, persona_uid: int, allowed_fields: Set[str], **updates) -> bool:
         if not updates:
             return False
 
-        invalid_fields = set(updates) - self.allowed_update_fields
+        invalid_fields = set(updates) - allowed_fields
         if invalid_fields:
             raise ValueError(f"Unsupported persona update fields: {sorted(invalid_fields)}")
 
@@ -163,11 +178,11 @@ class PersonaRepository(SQLiteRepository):
         query = f"""
             UPDATE personas
             SET {set_clause}
-            WHERE uid = ? AND owner_uid = ?
+            WHERE uid = ?
         """
 
         with self.connection() as conn:
-            cursor = conn.execute(query, list(normalized_updates.values()) + [persona_uid, owner_uid])
+            cursor = conn.execute(query, list(normalized_updates.values()) + [persona_uid])
             return cursor.rowcount > 0
 
     def delete(self, persona_uid: int, owner_uid: int) -> bool:

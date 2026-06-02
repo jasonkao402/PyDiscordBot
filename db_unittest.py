@@ -34,15 +34,16 @@ class TestDataModels(unittest.TestCase):
     def test_persona_permission_check_private_owner(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
                     is_public=False, allowed_role_ids=set(), created_at="", updated_at="")
-        self.assertTrue(p.permission_shallow(100, set()))
-        self.assertFalse(p.permission_shallow(200, set()))
+        self.assertTrue(p.permission_full(100, set()))
+        self.assertFalse(p.permission_full(200, set()))
 
     def test_persona_permission_check_public(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
                     is_public=True, allowed_role_ids=set(), created_at="", updated_at="")
-        self.assertTrue(p.permission_shallow(100, set()))
-        self.assertTrue(p.permission_shallow(200, set()))
-
+        self.assertTrue(p.permission_full(100, set()))
+        self.assertFalse(p.permission_full(200, set()))
+        self.assertTrue(p.permission_basic(200, set()))
+        
     def test_discord_user_balance(self):
         u = DiscordUser(user_uid=1, selected_persona_uid=0)
         u.set_balance(50)
@@ -136,8 +137,9 @@ class TestPersonaRepository(BaseTestWithDB):
         self.assertEqual(visible[0].uid, uid2)
 
     def test_update_success(self):
-        uid = self.repo.create("Old", "", 100, PersonaVisibility.PRIVATE)
-        result = self.repo.update(uid, 100, persona_name="New", is_public=True)
+        uid = self.repo.create("Own", "", 100, PersonaVisibility.PRIVATE)
+        allowed_fields = self.repo.get_allowed_fields_for_user(uid, 100)
+        result = self.repo.update(uid, allowed_fields, persona_name="New", is_public=True)
         self.assertTrue(result)
         p = self.repo.fetch_by_uid(uid)
         self.assertEqual(p.persona_name, "New")
@@ -145,15 +147,17 @@ class TestPersonaRepository(BaseTestWithDB):
 
     def test_update_wrong_owner(self):
         uid = self.repo.create("Test", "", 100, PersonaVisibility.PRIVATE)
-        result = self.repo.update(uid, 200, persona_name="Hack")
+        allowed_fields = self.repo.get_allowed_fields_for_user(uid, 200)
+        result = self.repo.update(uid, allowed_fields, persona_name="Hack")
         self.assertFalse(result)
         p = self.repo.fetch_by_uid(uid)
         self.assertEqual(p.persona_name, "Test")  # unchanged
 
     def test_update_invalid_field(self):
         uid = self.repo.create("Test", "", 100, PersonaVisibility.PRIVATE)
+        allowed_fields = self.repo.get_allowed_fields_for_user(uid, 100)
         with self.assertRaises(ValueError):
-            self.repo.update(uid, 100, invalid_field=123)
+            self.repo.update(uid, allowed_fields, invalid_field=123)
 
     def test_delete_success(self):
         uid = self.repo.create("DeleteMe", "", 100, PersonaVisibility.PRIVATE)
