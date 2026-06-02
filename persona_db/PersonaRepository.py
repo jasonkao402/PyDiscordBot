@@ -2,8 +2,8 @@
 from enum import Enum
 import json
 from persona_db.DatabaseModels import Persona, PersonaVisibility
-from persona_db.helper_func import _now_iso, SQLiteRepository
-from typing import List, Optional
+from persona_db.helper_func import _now_iso, SQLiteRepository, _join_uid_list, _split_uid_list
+from typing import List, Optional, Set
 
 def _persona_from_row(row: tuple) -> Persona:
     return Persona(
@@ -13,7 +13,7 @@ def _persona_from_row(row: tuple) -> Persona:
         owner_uid=row[3],
         # visibility=PersonaVisibility(row[4]),
         is_public=bool(row[4]),
-        allowed_role_ids=set(json.loads(row[5])) if row[5] else set(),
+        allowed_role_ids=set(_split_uid_list(row[5])) if row[5] else set(),
         created_at=row[6],
         updated_at=row[7],
         last_interaction_recv_at=row[8],
@@ -21,17 +21,32 @@ def _persona_from_row(row: tuple) -> Persona:
     )
 
 class PersonaRepository(SQLiteRepository):
-    allowed_update_fields = {"persona_name", "content", "visibility", "last_interaction_recv_at", "interaction_count"}
+    allowed_update_fields = {"persona_name", "content", "visibility", "is_public", "allowed_role_ids", "last_interaction_recv_at", "interaction_count"}
 
     def create_tables(self, conn) -> None:
         conn.execute(
+            # """
+            # CREATE TABLE IF NOT EXISTS personas (
+            #     uid INTEGER PRIMARY KEY AUTOINCREMENT,
+            #     persona_name TEXT NOT NULL,
+            #     content TEXT NOT NULL,
+            #     owner_uid INTEGER NOT NULL,
+            #     visibility INTEGER NOT NULL CHECK(visibility IN (0, 1)),
+            #     created_at TEXT NOT NULL,
+            #     updated_at TEXT NOT NULL,
+            #     last_interaction_recv_at TEXT NOT NULL,
+            #     interaction_count INTEGER DEFAULT 0,
+            #     FOREIGN KEY (owner_uid) REFERENCES discord_users (user_uid)
+            # )
+            # """
             """
             CREATE TABLE IF NOT EXISTS personas (
                 uid INTEGER PRIMARY KEY AUTOINCREMENT,
                 persona_name TEXT NOT NULL,
                 content TEXT NOT NULL,
                 owner_uid INTEGER NOT NULL,
-                visibility INTEGER NOT NULL CHECK(visibility IN (0, 1)),
+                is_public INTEGER NOT NULL CHECK(is_public IN (0, 1)),
+                allowed_role_ids TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 last_interaction_recv_at TEXT NOT NULL,
@@ -48,22 +63,21 @@ class PersonaRepository(SQLiteRepository):
         if "persona" in columns and "persona_name" not in columns:
             conn.execute("ALTER TABLE personas RENAME COLUMN persona TO persona_name")
 
-    def add_visibility_column(self, conn) -> None:
+    def add_is_public_column(self, conn) -> None:
         cursor = conn.execute("PRAGMA table_info(personas)")
         columns = {row[1] for row in cursor.fetchall()}
-
-        if "visibility" not in columns:
-            conn.execute(
-                """
-                -- 1. 新增 is_public 與 allowed_role_ids
-                ALTER TABLE personas ADD COLUMN is_public INTEGER DEFAULT 0;
-                ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT '[]';
-
-                -- 2. 將舊的 visibility = 1 (PUBLIC) 轉為 is_public = 1
-                UPDATE personas SET is_public = 1 WHERE visibility = 1;
-                """
-            )
-
+        
+        # Only migrate if old 'visibility' exists and new 'is_public' doesn't
+        if "visibility" in columns and "is_public" not in columns:
+            print(f"Existing columns in personas table before migration: {columns}")
+            conn.execute("ALTER TABLE personas ADD COLUMN is_public INTEGER NOT NULL CHECK(visibility IN (0, 1)) DEFAULT 0")
+            conn.execute("ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT '[]'")
+            conn.execute("UPDATE personas SET is_public = 1 WHERE visibility = 1")
+            
+            cursor = conn.execute("PRAGMA table_info(personas)")
+            columns = {row[1] for row in cursor.fetchall()}
+            print(f"Existing columns in personas table after migration: {columns}")
+        
     def count_by_owner(self, owner_uid: int) -> int:
         with self.connection() as conn:
             cursor = conn.execute(
@@ -77,15 +91,16 @@ class PersonaRepository(SQLiteRepository):
             row = cursor.fetchone()
             return row[0] if row else 0
 
-    def create(self, persona: str, content: str, owner_uid: int, visibility: PersonaVisibility) -> int:
+    def create(self, persona: str, content: str, owner_uid: int, is_public: bool | PersonaVisibility, allowed_role_ids: Set[int] = set()) -> int:
         now = _now_iso()
+        is_public_value = is_public.value if isinstance(is_public, PersonaVisibility) else int(is_public)
         with self.connection() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO personas (persona_name, content, owner_uid, visibility, created_at, updated_at, last_interaction_recv_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO personas (persona_name, content, owner_uid, is_public, allowed_role_ids, created_at, updated_at, last_interaction_recv_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (persona, content, owner_uid, visibility.value, now, now, now),
+                (persona, content, owner_uid, is_public_value, _join_uid_list(allowed_role_ids), now, now, now),
             )
             persona_uid = cursor.lastrowid
             if not persona_uid:
@@ -96,7 +111,7 @@ class PersonaRepository(SQLiteRepository):
         with self.connection() as conn:
             cursor = conn.execute(
                 """
-                SELECT uid, persona_name, content, owner_uid, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
+                SELECT uid, persona_name, content, owner_uid, is_public, allowed_role_ids, created_at, updated_at, last_interaction_recv_at, interaction_count
                 FROM personas
                 WHERE uid = ?
                 """,

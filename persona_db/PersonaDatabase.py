@@ -5,7 +5,7 @@ from persona_db.DiscordUserRepository import DiscordUserRepository
 from persona_db.InteractionRepository import InteractionRepository
 from persona_db.PersonaMemoriesRepository import PersonaMemoriesRepository
 from persona_db.ChatInteractionRepository import ChatInteractionRepository
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 DB_DEFAULT_PATH = "llm_character_cards.db"
 
@@ -26,25 +26,25 @@ class PersonaDatabase:
     def _init_db(self):
         self.personas.create_tables(self._conn)
         self.personas.rename_legacy_persona_column(self._conn)
-        self.personas.add_visibility_column(self._conn)
+        self.personas.add_is_public_column(self._conn)
         self.users.create_tables(self._conn)
         self.interactions.create_tables(self._conn)
         self.chat_interactions.create_tables(self._conn)
         self.persona_memories.create_tables(self._conn)
 
-    def create_persona(self, persona: str, content: str, owner_uid: int, visibility: PersonaVisibility) -> int:
+    def create_persona(self, persona: str, content: str, owner_uid: int, is_public: bool | PersonaVisibility) -> int:
         """Create a new persona, ensuring the user does not exceed the limit."""
         persona_count = self.personas.count_by_owner(owner_uid)
         if persona_count >= 5:
             print(f"User {owner_uid} has reached the persona limit.")
             return -1
+        is_public_value = bool(is_public.value) if isinstance(is_public, PersonaVisibility) else is_public
+        return self.personas.create(persona, content, owner_uid, is_public_value)
 
-        return self.personas.create(persona, content, owner_uid, visibility)
-
-    def get_persona(self, persona_uid: int, user_uid: int) -> Optional[Persona]:
+    def get_persona(self, persona_uid: int, user_uid: int, role_ids: Set[int]) -> Optional[Persona]:
         """Get a persona if user has permission to view it"""
         persona = self.personas.fetch_by_uid(persona_uid)
-        if persona and persona.permission_shallow(user_uid, []):
+        if persona and persona.permission_shallow(user_uid, role_ids):
             return persona
         return None
 
@@ -65,23 +65,23 @@ class PersonaDatabase:
         """List all personas visible to user (their own + public personas)"""
         return self.personas.list_visible_for_user(user_uid, [])
 
-    def set_selected_persona(self, user_uid: int, persona_uid: int) -> bool:
+    def set_selected_persona(self, user_uid: int, persona_uid: int, role_ids: Set[int] = set()) -> bool:
         """Set user's selected persona"""
-        persona = self.get_persona(persona_uid, user_uid)
+        persona = self.get_persona(persona_uid, user_uid, role_ids)
         if not persona:
             return False
 
         self.users.upsert_selected_persona(user_uid, persona_uid)
         return True
 
-    def get_selected_persona(self, user_uid: int) -> Optional[Persona]:
+    def get_selected_persona(self, user_uid: int, role_ids: Set[int] = set()) -> Optional[Persona]:
         """Get user's currently selected persona"""
         persona_uid = self.users.get_selected_persona_uid(user_uid)
         if persona_uid < 0:
             return None
 
         persona = self.personas.fetch_by_uid(persona_uid)
-        if persona and persona.permission_shallow(user_uid, []):
+        if persona and persona.permission_shallow(user_uid, role_ids):
             return persona
         return None
 
@@ -196,7 +196,7 @@ class PersonaDatabase:
         return self.users.update(user_uid, **updates)
 
 
-if __name__ == "__main__":
+def main_test():
     manager = PersonaDatabase(":memory:")
     user1_uid = 1000
     user2_uid = 2000
@@ -233,3 +233,6 @@ if __name__ == "__main__":
     updated_user = manager.get_discord_user(user1_uid)
     if updated_user:
         print(f"Updated user balance: {updated_user.balance}")
+
+if __name__ == "__main__":
+    main_test()

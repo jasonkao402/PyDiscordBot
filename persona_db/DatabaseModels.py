@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Set
 import json
 
 class PersonaVisibility(Enum):
@@ -18,18 +18,18 @@ class Persona:
     owner_uid: int
     # visibility: PersonaVisibility
     is_public: bool
-    allowed_role_ids: set[int]
+    allowed_role_ids: Set[int]
     created_at: str
     updated_at: str
     last_interaction_recv_at: Optional[str] = None
     interaction_count: int = 0 # unused for now
 
-    def permission_deep(self, user_id: int, user_role_ids: List[int]) -> bool:
+    def permission_deep(self, user_id: int, user_role_ids: Set[int] = set()) -> bool:
         if self.owner_uid == user_id:
             return True
         return any(role_id in self.allowed_role_ids for role_id in user_role_ids)
 
-    def permission_shallow(self, user_id: int, user_role_ids: List[int]) -> bool:
+    def permission_shallow(self, user_id: int, user_role_ids: Set[int] = set()) -> bool:
         if self.is_public:
             return True
         return self.permission_deep(user_id, user_role_ids)

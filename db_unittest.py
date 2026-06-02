@@ -8,6 +8,7 @@ from persona_db.PersonaDatabase import (
     Persona, DiscordUser, ChatInteraction, PersonaMemories,
     PersonaVisibility,
     PersonaDatabase,
+    main_test,
 )
 
 class TestHelperFunctions(unittest.TestCase):
@@ -33,14 +34,14 @@ class TestDataModels(unittest.TestCase):
     def test_persona_permission_check_private_owner(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
                     is_public=False, allowed_role_ids=set(), created_at="", updated_at="")
-        self.assertTrue(p.permission_shallow(100, []))
-        self.assertFalse(p.permission_shallow(200, []))
+        self.assertTrue(p.permission_shallow(100, set()))
+        self.assertFalse(p.permission_shallow(200, set()))
 
     def test_persona_permission_check_public(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
                     is_public=True, allowed_role_ids=set(), created_at="", updated_at="")
-        self.assertTrue(p.permission_shallow(100, []))
-        self.assertTrue(p.permission_shallow(200, []))
+        self.assertTrue(p.permission_shallow(100, set()))
+        self.assertTrue(p.permission_shallow(200, set()))
 
     def test_discord_user_balance(self):
         u = DiscordUser(user_uid=1, selected_persona_uid=0)
@@ -136,7 +137,7 @@ class TestPersonaRepository(BaseTestWithDB):
 
     def test_update_success(self):
         uid = self.repo.create("Old", "", 100, PersonaVisibility.PRIVATE)
-        result = self.repo.update(uid, 100, persona_name="New", visibility=PersonaVisibility.PUBLIC)
+        result = self.repo.update(uid, 100, persona_name="New", is_public=True)
         self.assertTrue(result)
         p = self.repo.fetch_by_uid(uid)
         self.assertEqual(p.persona_name, "New")
@@ -678,3 +679,4 @@ class TestPersonaMemoriesRepository(BaseTestWithDB):
 
 if __name__ == '__main__':
     unittest.main()
+    # main_test()
