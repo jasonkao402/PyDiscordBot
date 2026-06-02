@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
+import json
 
 class PersonaVisibility(Enum):
     PRIVATE = 0
@@ -15,19 +16,36 @@ class Persona:
     persona_name: str
     content: str
     owner_uid: int
-    visibility: PersonaVisibility
+    # visibility: PersonaVisibility
+    is_public: bool
+    allowed_role_ids: set[int]
     created_at: str
     updated_at: str
     last_interaction_recv_at: Optional[str] = None
     interaction_count: int = 0 # unused for now
 
-    def permission_check(self, user_uid: int) -> bool:
-        """Check if the given user_uid has permission to access this persona."""
-        return self.visibility == PersonaVisibility.PUBLIC or self.owner_uid == user_uid
+    def permission_deep(self, user_id: int, user_role_ids: List[int]) -> bool:
+        if self.owner_uid == user_id:
+            return True
+        return any(role_id in self.allowed_role_ids for role_id in user_role_ids)
+
+    def permission_shallow(self, user_id: int, user_role_ids: List[int]) -> bool:
+        if self.is_public:
+            return True
+        return self.permission_deep(user_id, user_role_ids)
+    
+    def __str__(self):
+        return f"Persona(uid={self.uid:3d}, persona={self.persona_name}, owner_uid={self.owner_uid}, is_public={self.is_public})"
+
+@dataclass
+class PersonaPartial:
+    uid: int
+    persona_name: str
+    owner_uid: int
+    is_public: bool
 
     def __str__(self):
-        return f"Persona(uid={self.uid:3d}, persona={self.persona_name}, owner_uid={self.owner_uid}, visibility={self.visibility.name})"
-
+        return f"PersonaPartial(uid={self.uid:3d}, persona={self.persona_name}, owner_uid={self.owner_uid}, is_public={self.is_public})"
 
 @dataclass
 class DiscordUser:

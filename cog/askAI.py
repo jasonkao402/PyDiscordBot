@@ -6,7 +6,7 @@ from discord.abc import Messageable
 from typing import Optional
 from cog.llmAgentAPI import LLMAPI
 from cog.utilFunc import sepLines, wcformat, UserDict
-from cog.ui_modal import CreatePersonaModal, EditPersonaModal
+from cog.ui_modal import CreatePersonaModal, EditPersonaModal_Owner, EditPersonaModal_TeamMember
 from config_loader import configToml
 import re
 from persona_db.PersonaDatabase import PersonaDatabase, PersonaVisibility, Persona
@@ -82,30 +82,42 @@ class askAI(commands.Cog):
     async def edit_persona(self, interaction: Interaction, persona_id: int):
         """Edit an existing LLM persona using a modal."""
         user_id = interaction.user.id
-
+        user_roles = getattr(interaction.user, 'roles', [])
+        user_role_ids = [role.id for role in user_roles]
         # Fetch the persona from the database
         _persona = self.db.get_persona(persona_id, user_id)
         if not _persona:
             await interaction.response.send_message("Persona not found or you do not have permission to edit it.", ephemeral=True)
             return
-
-        # Create and send the modal
-        modal = EditPersonaModal(
+        
+        if _persona.owner_uid == user_id:
+        # Create and send the owner edit modal
+            modal = EditPersonaModal_Owner(
             persona_id=persona_id,
             persona_name=_persona.persona_name,
             content=_persona.content,
-            visibility=_persona.visibility == PersonaVisibility.PUBLIC,
+            is_public=_persona.is_public,
+            allowed_role_ids=_persona.allowed_role_ids,
             callback=self.handle_edit_persona_submission
         )
-        await interaction.response.send_modal(modal)
+            await interaction.response.send_modal(modal)
+        else:
+            # Create and send the non-owner edit modal
+            modal = EditPersonaModal_TeamMember(
+                persona_id=persona_id,
+                persona_name=_persona.persona_name,
+                content=_persona.content,
+                callback=self.handle_edit_persona_submission
+            )
+            await interaction.response.send_modal(modal)
 
-    async def handle_edit_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, visibility: bool):
+    async def handle_edit_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool):
         """Handle the submission of the edit persona modal."""
         user_id = interaction.user.id
         updates = {
             'persona_name': persona_name,
             'content': content,
-            'visibility': PersonaVisibility.PUBLIC.value if visibility else PersonaVisibility.PRIVATE.value
+            'is_public': is_public
         }
 
         success = self.db.update_persona(persona_id, user_id, **updates)
@@ -116,7 +128,7 @@ class askAI(commands.Cog):
                 _persona = self.persona_cache[persona_id]
                 _persona.persona_name = persona_name
                 _persona.content = content
-                _persona.visibility = PersonaVisibility(updates['visibility'])
+                _persona.is_public = is_public
         else:
             await interaction.response.send_message("Failed to update persona. Ensure you own the persona.", ephemeral=True)
 
@@ -124,7 +136,8 @@ class askAI(commands.Cog):
     async def select_persona(self, ctx: commands.Context, persona_id: int):
         """Select an LLM persona for interaction."""
         user_id = ctx.author.id
-
+        user_roles = getattr(ctx.author, 'roles', [])
+        user_role_ids = [role.id for role in user_roles]
         # Check cache first
         if persona_id in self.persona_cache:
             _persona = self.persona_cache[persona_id]
@@ -138,7 +151,7 @@ class askAI(commands.Cog):
             # Build cache
             self.persona_cache[persona_id] = _persona
         
-        if not _persona.permission_check(user_id):
+        if not _persona.permission_shallow(user_id, user_role_ids):
             await ctx.send(f"You do not have permission to select persona ID {persona_id}.")
             return
         self.selection_cache[user_id] = persona_id
@@ -159,7 +172,7 @@ class askAI(commands.Cog):
             await ctx.send("No personas available.")
             return
 
-        persona_list = sepLines([f"ID: {p.uid:03d}, Name: {wcformat(p.persona_name, w=10, strFront=False)}, Visibility: {p.visibility.name}" for p in personas])
+        persona_list = sepLines([f"ID: {p.uid:03d}, Name: {wcformat(p.persona_name, w=10, strFront=False)}, is_public: {p.is_public}" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
     
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
@@ -193,8 +206,9 @@ class askAI(commands.Cog):
 
         # Create an embed to display persona details
         embed = Embed(title=f"Current Persona: {_persona.persona_name} (#{_persona.uid})", color=Color.blue())
-        embed.add_field(name="Visibility", value="Public" if _persona.visibility == PersonaVisibility.PUBLIC else "Private", inline=False)
-        embed.add_field(name="Content", value=_persona.content[:1024], inline=False)  # Limit content to 1024 characters for embed
+        embed.add_field(name="is_public", value="Yes" if _persona.is_public else "No", inline=False)
+        if not _persona.is_public:
+            embed.add_field(name="Content", value=_persona.content[:1024], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
         

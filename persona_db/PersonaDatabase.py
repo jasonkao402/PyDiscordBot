@@ -26,10 +26,12 @@ class PersonaDatabase:
     def _init_db(self):
         self.personas.create_tables(self._conn)
         self.personas.rename_legacy_persona_column(self._conn)
+        self.personas.add_visibility_column(self._conn)
         self.users.create_tables(self._conn)
         self.interactions.create_tables(self._conn)
         self.chat_interactions.create_tables(self._conn)
         self.persona_memories.create_tables(self._conn)
+
     def create_persona(self, persona: str, content: str, owner_uid: int, visibility: PersonaVisibility) -> int:
         """Create a new persona, ensuring the user does not exceed the limit."""
         persona_count = self.personas.count_by_owner(owner_uid)
@@ -42,7 +44,7 @@ class PersonaDatabase:
     def get_persona(self, persona_uid: int, user_uid: int) -> Optional[Persona]:
         """Get a persona if user has permission to view it"""
         persona = self.personas.fetch_by_uid(persona_uid)
-        if persona and persona.permission_check(user_uid):
+        if persona and persona.permission_shallow(user_uid, []):
             return persona
         return None
 
@@ -61,7 +63,7 @@ class PersonaDatabase:
 
     def list_personas(self, user_uid: int) -> List[Persona]:
         """List all personas visible to user (their own + public personas)"""
-        return self.personas.list_visible_for_user(user_uid)
+        return self.personas.list_visible_for_user(user_uid, [])
 
     def set_selected_persona(self, user_uid: int, persona_uid: int) -> bool:
         """Set user's selected persona"""
@@ -79,7 +81,7 @@ class PersonaDatabase:
             return None
 
         persona = self.personas.fetch_by_uid(persona_uid)
-        if persona and persona.permission_check(user_uid):
+        if persona and persona.permission_shallow(user_uid, []):
             return persona
         return None
 

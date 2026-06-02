@@ -1,5 +1,6 @@
 
 from enum import Enum
+import json
 from persona_db.DatabaseModels import Persona, PersonaVisibility
 from persona_db.helper_func import _now_iso, SQLiteRepository
 from typing import List, Optional
@@ -10,11 +11,13 @@ def _persona_from_row(row: tuple) -> Persona:
         persona_name=row[1],
         content=row[2],
         owner_uid=row[3],
-        visibility=PersonaVisibility(row[4]),
-        created_at=row[5],
-        updated_at=row[6],
-        last_interaction_recv_at=row[7],
-        interaction_count=row[8],
+        # visibility=PersonaVisibility(row[4]),
+        is_public=bool(row[4]),
+        allowed_role_ids=set(json.loads(row[5])) if row[5] else set(),
+        created_at=row[6],
+        updated_at=row[7],
+        last_interaction_recv_at=row[8],
+        interaction_count=row[9],
     )
 
 class PersonaRepository(SQLiteRepository):
@@ -44,6 +47,22 @@ class PersonaRepository(SQLiteRepository):
 
         if "persona" in columns and "persona_name" not in columns:
             conn.execute("ALTER TABLE personas RENAME COLUMN persona TO persona_name")
+
+    def add_visibility_column(self, conn) -> None:
+        cursor = conn.execute("PRAGMA table_info(personas)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        if "visibility" not in columns:
+            conn.execute(
+                """
+                -- 1. 新增 is_public 與 allowed_role_ids
+                ALTER TABLE personas ADD COLUMN is_public INTEGER DEFAULT 0;
+                ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT '[]';
+
+                -- 2. 將舊的 visibility = 1 (PUBLIC) 轉為 is_public = 1
+                UPDATE personas SET is_public = 1 WHERE visibility = 1;
+                """
+            )
 
     def count_by_owner(self, owner_uid: int) -> int:
         with self.connection() as conn:
@@ -86,18 +105,30 @@ class PersonaRepository(SQLiteRepository):
             row = cursor.fetchone()
             return _persona_from_row(row) if row else None
 
-    def list_visible_for_user(self, user_uid: int) -> List[Persona]:
+    def list_visible_for_user(self, user_uid: int, user_role_ids: List[int]) -> List[Persona]:
         with self.connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT uid, persona_name, content, owner_uid, visibility, created_at, updated_at, last_interaction_recv_at, interaction_count
+            cursor = conn.execute("""
+                SELECT uid, persona_name, content, owner_uid, is_public, allowed_role_ids,
+                    created_at, updated_at, last_interaction_recv_at, interaction_count
                 FROM personas
-                WHERE visibility = 1 OR owner_uid = ?
                 ORDER BY updated_at DESC
-                """,
-                (user_uid,),
-            )
-            return [_persona_from_row(row) for row in cursor.fetchall()]
+            """)
+            rows = cursor.fetchall()
+
+        visible = []
+        for row in rows:
+            # Unpack row (adapt to your _persona_from_row)
+            is_public = row[4]
+            owner = row[3]
+            allowed_roles = json.loads(row[5]) if row[5] else []
+
+            if is_public:
+                visible.append(_persona_from_row(row))
+            elif owner == user_uid:
+                visible.append(_persona_from_row(row))
+            elif any(role_id in allowed_roles for role_id in user_role_ids):
+                visible.append(_persona_from_row(row))
+        return visible
 
     def update(self, persona_uid: int, owner_uid: int, **updates) -> bool:
         if not updates:

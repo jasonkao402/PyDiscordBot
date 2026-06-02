@@ -32,15 +32,15 @@ class TestHelperFunctions(unittest.TestCase):
 class TestDataModels(unittest.TestCase):
     def test_persona_permission_check_private_owner(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
-                    visibility=PersonaVisibility.PRIVATE, created_at="", updated_at="")
-        self.assertTrue(p.permission_check(100))
-        self.assertFalse(p.permission_check(200))
+                    is_public=False, allowed_role_ids=set(), created_at="", updated_at="")
+        self.assertTrue(p.permission_shallow(100, []))
+        self.assertFalse(p.permission_shallow(200, []))
 
     def test_persona_permission_check_public(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
-                    visibility=PersonaVisibility.PUBLIC, created_at="", updated_at="")
-        self.assertTrue(p.permission_check(100))
-        self.assertTrue(p.permission_check(200))
+                    is_public=True, allowed_role_ids=set(), created_at="", updated_at="")
+        self.assertTrue(p.permission_shallow(100, []))
+        self.assertTrue(p.permission_shallow(200, []))
 
     def test_discord_user_balance(self):
         u = DiscordUser(user_uid=1, selected_persona_uid=0)
@@ -65,7 +65,7 @@ class TestDataModels(unittest.TestCase):
 
     def test_persona_str(self):
         p = Persona(uid=1, persona_name="Alice", content="", owner_uid=1,
-                    visibility=PersonaVisibility.PUBLIC, created_at="", updated_at="")
+                    is_public=True, allowed_role_ids=set(), created_at="", updated_at="")
         s = str(p)
         self.assertIn("uid=  1", s)
         self.assertIn("persona=Alice", s)
@@ -101,7 +101,7 @@ class TestPersonaRepository(BaseTestWithDB):
         self.assertIsNotNone(p)
         self.assertEqual(p.persona_name, "Bot1")
         self.assertEqual(p.owner_uid, 100)
-        self.assertEqual(p.visibility, PersonaVisibility.PUBLIC)
+        self.assertEqual(p.is_public, True)
 
     def test_fetch_nonexistent(self):
         self.assertIsNone(self.repo.fetch_by_uid(999))
@@ -117,17 +117,17 @@ class TestPersonaRepository(BaseTestWithDB):
         uid1 = self.repo.create("Private", "", 100, PersonaVisibility.PRIVATE)
         uid2 = self.repo.create("Public", "", 200, PersonaVisibility.PUBLIC)
         # User 100 sees own private + public
-        visible = self.repo.list_visible_for_user(100)
+        visible = self.repo.list_visible_for_user(100, [])
         # print("\nVisible personas for user 100:")
         # for p in visible:
-        #     print(f"  - {p.persona_name} (visibility={p.visibility})")
+        #     print(f"  - {p.persona_name} (is_public={p.is_public})")
         self.assertEqual(len(visible), 2)
         uids = {p.uid for p in visible}
         self.assertIn(uid1, uids)
         self.assertIn(uid2, uids)
 
         # User 200 sees only public (own persona not created yet)
-        visible = self.repo.list_visible_for_user(200)
+        visible = self.repo.list_visible_for_user(200, [])
         # print("\nVisible personas for user 200:")
         # for p in visible:
         #     print(f"  - {p.persona_name}")
@@ -140,7 +140,7 @@ class TestPersonaRepository(BaseTestWithDB):
         self.assertTrue(result)
         p = self.repo.fetch_by_uid(uid)
         self.assertEqual(p.persona_name, "New")
-        self.assertEqual(p.visibility, PersonaVisibility.PUBLIC)
+        self.assertEqual(p.is_public, True)
 
     def test_update_wrong_owner(self):
         uid = self.repo.create("Test", "", 100, PersonaVisibility.PRIVATE)

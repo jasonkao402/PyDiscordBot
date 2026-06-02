@@ -31,7 +31,7 @@ async def cog_chatbot():
     print(f"Using persona: {_persona.persona_name}")
     
     user_dict = UserDict(
-        uid=0,
+        uid=1001,
         name="USER",
         display_name="USER"
     )
