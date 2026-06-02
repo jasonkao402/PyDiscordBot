@@ -1,4 +1,5 @@
-from time import strftime
+import time
+from uuid import uuid4
 import uvicorn
 from cog.llmAgentAPI import LLMAPI
 from cog.utilFunc import UserDict
@@ -15,7 +16,7 @@ mainModel = chat_config["modelDebug"]
 
 class ChatCog:
     def __init__(self):
-        self.llm_api = LLMAPI()
+        self.llm_api = LLMAPI(_main_model=mainModel)
         
     async def close(self):
         await self.llm_api.cleanup()
@@ -39,17 +40,30 @@ async def cog_chatbot():
     while True:
         # example message: 哈基亞，你今天的日程計劃如何?
         userPrompt = await asyncio.to_thread(input, f"{user_dict.display_name}: ")
-        print("Processing...")
         if userPrompt.lower() in ["exit", "quit"]:
             break
-
+        
         try:
-            tResponse = await api.llm_api.handle_llm_agent(
-                content=userPrompt,
-                _persona=_persona,
-                _user_dict=user_dict,
-                encoded_image=None,
-            )
+            print("Processing...")
+            if userPrompt.lower() in ["memo"]:
+                tResponse = await api.llm_api.persona_memory_summarize(
+                    _persona=_persona)
+                
+            else:
+                tResponse = await api.llm_api.persona_chat_oneshot(
+                    prompt_str=userPrompt,
+                    _persona=_persona,
+                    _user_dict=user_dict,
+                    encoded_image=None,
+                )
+                db.increment_interaction_count(debug_persona_id, user_dict.uid)
+                msg_uid = time.time_ns()  # Using timestamp in nanoseconds as a unique message ID
+                db.create_chat_interaction(
+                    msg_uid=msg_uid,
+                    user_uid=user_dict.uid,
+                    persona_uid=debug_persona_id,
+                    main_content=tResponse.response_text,
+                )
             print(str(tResponse))
 
         except Exception as e:

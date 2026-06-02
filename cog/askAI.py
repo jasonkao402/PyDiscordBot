@@ -262,8 +262,8 @@ class askAI(commands.Cog):
                 _content = message.content.replace(self.bot.user.mention, '', 1).strip()
             else:
                 _content = message.content
-            tResponse = await self.llm_api.handle_llm_agent(
-                content=_content,
+            tResponse = await self.llm_api.persona_chat_oneshot(
+                prompt_str=_content,
                 _persona=_persona,
                 _user_dict=user,
                 encoded_image=encoded_image

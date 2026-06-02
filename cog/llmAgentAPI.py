@@ -17,14 +17,14 @@ from cog.utilFunc import wcformat
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
 llm_base_url = link_config.get("link_openrouter", "")
-mainModel = chat_config["modelChat"]
 
 FULL_MEMORY_RANGE = 10
 SUM_MEMORY_RANGE = 10
 VECTOR_MEMORY_RANGE = 3
 
 class LLMAPI:
-    def __init__(self):
+    def __init__(self, _main_model: Optional[str] = None):
+        self.main_model = _main_model if _main_model is not None else chat_config["modelChat"]
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
         self.api_switch_threshold = 5  # Number of calls before switching to the next API
@@ -33,8 +33,8 @@ class LLMAPI:
         #     api_key=api_key, http_options=http_options,
         # ) for api_key in self.round_robin_api_collection]
         self.llm_apis = [AsyncOpenAI(api_key = api_key, base_url = llm_base_url) for api_key in self.round_robin_api_collection]
-        self.persona_session_memory: defaultdict[int, deque] = defaultdict(lambda: deque(maxlen=FULL_MEMORY_RANGE))
-        print(f'Loaded LLM API with model = {mainModel}, created {len(self.llm_apis)} clients @ {llm_base_url}.')
+        self.persona_session_memory: defaultdict[int, deque[dict]] = defaultdict(lambda: deque(maxlen=FULL_MEMORY_RANGE))
+        print(f'Loaded LLM API with model = {self.main_model}, created {len(self.llm_apis)} clients @ {llm_base_url}.')
     
     async def cleanup(self):
         for llm_api in self.llm_apis:
@@ -72,7 +72,7 @@ class LLMAPI:
                 ),
             )
             response = await self.llm_apis[self.round_robin_api_index].aio.models.generate_content(
-                model=chat_config["modelChat"],
+                model=self.main_model,
                 contents=list(message_contents),
                 config=content_config,
             )
@@ -93,7 +93,7 @@ class LLMAPI:
                 message_list[-1]["content"] = [image, {"type": "text", "text": message_list[-1]["content"]}]
             
             response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
-                model=chat_config["modelChat"],
+                model=self.main_model,
                 messages=message_list,
                 max_tokens=4096,
                 extra_body={"reasoning": {"enabled": True}},
@@ -105,7 +105,7 @@ class LLMAPI:
             return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", token_usage={})
         
         response_text = str(response.choices[0].message.content)
-        thinking_content = str(response.choices[0].message.reasoning) if hasattr(response.choices[0].message, 'reasoning') else "" # pyright: ignore[reportAttributeAccessIssue]
+        thinking_content = str(getattr(response.choices[0].message, 'reasoning', ""))
         token_usage = {
             "prompt_tokens": response.usage.prompt_tokens,
             "completion_tokens": response.usage.completion_tokens,
@@ -129,15 +129,15 @@ class LLMAPI:
             token_usage=token_usage
         )
     
-    async def handle_llm_agent(self, content: str, _persona: Persona, _user_dict: UserDict, encoded_image: Optional[str]) -> TrimedResponse:
+    async def persona_chat_oneshot(self, prompt_str: str, _persona: Persona, _user_dict: UserDict, encoded_image: Optional[str]) -> TrimedResponse:
         """Handle the logic for interacting with the LLM agent."""
         persona_name = _persona.persona_name if _persona.persona_name else "UnknownPersona"
         user_persona_pair = f'{wcformat(_user_dict.name)}@{persona_name}'
         # Filter out mention bot part
-        print(f'{user_persona_pair}: {content}')
+        print(f'{user_persona_pair}: {prompt_str}')
 
         system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
-        prompt = {'role': 'user', 'content': f'{_user_dict.display_name} said {content}'}
+        prompt = {'role': 'user', 'content': f'{_user_dict.display_name} said {prompt_str}'}
 
         chatMem = self.persona_session_memory[_persona.uid]
         try:
@@ -189,3 +189,17 @@ class LLMAPI:
             chatMem.append({'role': 'assistant', 'content': reply_content})
             
             return tResponse
+    
+    async def persona_memory_summarize(self, _persona: Persona) -> TrimedResponse:
+        """Summarize the recent memory for a given persona."""
+        chatMem = self.persona_session_memory[_persona.uid]
+        if not chatMem:
+            return TrimedResponse(
+                response_text="No recent interactions to summarize.",
+                thinking_content="",
+                token_usage={}
+            )
+            
+        system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
+        system_instruction = chat_config["promptMemoryFormat"]
+        return await self.llm_chat_v6(list(chatMem), system_instruction, user_dict=UserDict(uid=0, name="System", display_name="System"))
