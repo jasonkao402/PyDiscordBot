@@ -26,20 +26,6 @@ class PersonaRepository(SQLiteRepository):
     
     def create_tables(self, conn) -> None:
         conn.execute(
-            # """
-            # CREATE TABLE IF NOT EXISTS personas (
-            #     uid INTEGER PRIMARY KEY AUTOINCREMENT,
-            #     persona_name TEXT NOT NULL,
-            #     content TEXT NOT NULL,
-            #     owner_uid INTEGER NOT NULL,
-            #     visibility INTEGER NOT NULL CHECK(visibility IN (0, 1)),
-            #     created_at TEXT NOT NULL,
-            #     updated_at TEXT NOT NULL,
-            #     last_interaction_recv_at TEXT NOT NULL,
-            #     interaction_count INTEGER DEFAULT 0,
-            #     FOREIGN KEY (owner_uid) REFERENCES discord_users (user_uid)
-            # )
-            # """
             """
             CREATE TABLE IF NOT EXISTS personas (
                 uid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,17 +53,22 @@ class PersonaRepository(SQLiteRepository):
     def add_is_public_column(self, conn) -> None:
         cursor = conn.execute("PRAGMA table_info(personas)")
         columns = {row[1] for row in cursor.fetchall()}
-        
+        print(f"Existing columns in personas table before migration: {columns}")
         # Only migrate if old 'visibility' exists and new 'is_public' doesn't
         if "visibility" in columns and "is_public" not in columns:
             print(f"Existing columns in personas table before migration: {columns}")
             conn.execute("ALTER TABLE personas ADD COLUMN is_public INTEGER NOT NULL CHECK(visibility IN (0, 1)) DEFAULT 0")
-            conn.execute("ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT '[]'")
+            conn.execute("ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT ''")
             conn.execute("UPDATE personas SET is_public = 1 WHERE visibility = 1")
             
             cursor = conn.execute("PRAGMA table_info(personas)")
             columns = {row[1] for row in cursor.fetchall()}
             print(f"Existing columns in personas table after migration: {columns}")
+            
+        cursor = conn.execute("PRAGMA table_info(personas)")
+        columns = {row[1] for row in cursor.fetchall()}
+        print(f"Existing columns in personas table after migration: {columns}")
+            
         
     def count_by_owner(self, owner_uid: int) -> int:
         with self.connection() as conn:
@@ -106,7 +97,7 @@ class PersonaRepository(SQLiteRepository):
             persona_uid = cursor.lastrowid
             if not persona_uid:
                 raise ValueError("Failed to retrieve the persona uid after insertion.")
-            return persona_uid
+        return persona_uid
 
     def fetch_by_uid(self, persona_uid: int) -> Optional[Persona]:
         with self.connection() as conn:

@@ -6,6 +6,7 @@ from persona_db.InteractionRepository import InteractionRepository
 from persona_db.PersonaMemoriesRepository import PersonaMemoriesRepository
 from persona_db.ChatInteractionRepository import ChatInteractionRepository
 from typing import Any, Dict, List, Optional, Set
+from contextlib import contextmanager
 
 DB_DEFAULT_PATH = "llm_character_cards.db"
 
@@ -25,24 +26,34 @@ class PersonaDatabase:
         self.persona_memories = PersonaMemoriesRepository(self._conn)
 
         self._init_db()
-
+        
+    @contextmanager
+    def _transaction(self):
+        try:
+            yield
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+        
     def _init_db(self):
-        self.personas.create_tables(self._conn)
-        self.personas.rename_legacy_persona_column(self._conn)
-        self.personas.add_is_public_column(self._conn)
-        self.users.create_tables(self._conn)
-        self.interactions.create_tables(self._conn)
-        self.chat_interactions.create_tables(self._conn)
-        self.persona_memories.create_tables(self._conn)
+        with self._transaction():
+            self.personas.create_tables(self._conn)
+            self.personas.rename_legacy_persona_column(self._conn)
+            self.users.create_tables(self._conn)
+            self.interactions.create_tables(self._conn)
+            self.chat_interactions.create_tables(self._conn)
+            self.persona_memories.create_tables(self._conn)
 
     def create_persona(self, persona: str, content: str, owner_uid: int, is_public: bool | PersonaVisibility, allowed_role_ids: Set[int] = set()) -> int:
         """Create a new persona, ensuring the user does not exceed the limit."""
-        persona_count = self.personas.count_by_owner(owner_uid)
-        if persona_count >= 5:
-            print(f"User {owner_uid} has reached the persona limit.")
-            return -1
-        is_public_value = bool(is_public.value) if isinstance(is_public, PersonaVisibility) else is_public
-        return self.personas.create(persona, content, owner_uid, is_public_value, allowed_role_ids)
+        with self._transaction():
+            persona_count = self.personas.count_by_owner(owner_uid)
+            if persona_count >= 5:
+                print(f"User {owner_uid} has reached the persona limit.")
+                return -1
+            is_public_value = bool(is_public.value) if isinstance(is_public, PersonaVisibility) else is_public
+            return self.personas.create(persona, content, owner_uid, is_public_value, allowed_role_ids)
 
     def get_persona(self, persona_uid: int, user_uid: int, role_ids: Set[int]) -> Optional[Persona]:
         """Get a persona if user has permission to basic_read it"""
@@ -81,12 +92,14 @@ class PersonaDatabase:
             print(f"User {user_uid} attempted to update fields {sorted(invalid_fields)} which are not allowed based on their permissions.")
             return False
         
-        return self.personas.update(persona_uid, **updates)
+        with self._transaction():
+            return self.personas.update(persona_uid, **updates)
 
     def delete_persona(self, persona_uid: int, user_uid: int) -> bool:
         """Delete a persona - only owner can delete"""
-        self.users._unbind_selected_user_for_persona(persona_uid)
-        return self.personas.delete(persona_uid, user_uid)
+        with self._transaction():
+            self.users._unbind_selected_user_for_persona(persona_uid)
+            return self.personas.delete(persona_uid, user_uid)
 
     def list_personas(self, user_uid: int, role_ids: Set[int] = set()) -> List[Persona]:
         """List all personas visible to user (their own + public personas)"""
@@ -97,8 +110,9 @@ class PersonaDatabase:
         persona = self.get_persona(persona_uid, user_uid, role_ids)
         if not persona:
             return False
-
-        self.users.upsert_selected_persona(user_uid, persona_uid)
+        
+        with self._transaction():
+            self.users.upsert_selected_persona(user_uid, persona_uid)
         return True
 
     def get_selected_persona(self, user_uid: int, role_ids: Set[int] = set()) -> Optional[Persona]:
@@ -118,11 +132,13 @@ class PersonaDatabase:
 
     def deselect_persona(self, user_uid: int):
         """Clear user's selected persona"""
-        self.users.deselect_persona(user_uid)
+        with self._transaction():
+            self.users.deselect_persona(user_uid)
 
     def increment_interaction_count(self, persona_uid: int, user_uid: int):
         """Increment the interaction count for a user and persona."""
-        self.interactions.increment_interaction_count(persona_uid, user_uid)
+        with self._transaction():
+            self.interactions.increment_interaction_count(persona_uid, user_uid)
 
     def get_user_interaction_stats(self, user_uid: int) -> Optional[Dict[str, Any]]:
         """Get interaction statistics for a specific user."""
@@ -142,16 +158,17 @@ class PersonaDatabase:
         is_memorized: bool = False,
         summary: Optional[str] = None,
     ) -> bool:
-        """Create a chat interaction record."""
-        return self.chat_interactions.create(
-            msg_uid=msg_uid,
-            user_uid=user_uid,
-            persona_uid=persona_uid,
-            main_content=main_content,
-            created_at=created_at,
-            is_memorized=is_memorized,
-            summary=summary,
-        )
+        """Create a chat interaction record. returns the msg_uid if successful."""
+        with self._transaction():
+            return self.chat_interactions.create(
+                msg_uid=msg_uid,
+                user_uid=user_uid,
+                persona_uid=persona_uid,
+                main_content=main_content,
+                created_at=created_at,
+                is_memorized=is_memorized,
+                summary=summary,
+            )
 
     def get_chat_interaction(self, msg_uid: int) -> Optional[ChatInteraction]:
         """Get a chat interaction by message uid."""
@@ -167,15 +184,18 @@ class PersonaDatabase:
 
     def update_chat_interaction(self, msg_uid: int, **updates) -> bool:
         """Update a chat interaction record."""
-        return self.chat_interactions.update(msg_uid, **updates)
+        with self._transaction():
+            return self.chat_interactions.update(msg_uid, **updates)
 
     def mark_chat_interaction_memorized(self, msg_uid: int, summary: Optional[str] = None) -> bool:
         """Mark a chat interaction as memorized."""
-        return self.chat_interactions.mark_memorized(msg_uid, summary=summary)
+        with self._transaction():
+            return self.chat_interactions.mark_memorized(msg_uid, summary=summary)
 
     def delete_chat_interaction(self, msg_uid: int) -> bool:
         """Delete a chat interaction record."""
-        return self.chat_interactions.delete(msg_uid)
+        with self._transaction():
+            return self.chat_interactions.delete(msg_uid)
 
     def create_persona_memory(
         self,
@@ -186,13 +206,14 @@ class PersonaDatabase:
         updated_at: Optional[str] = None,
     ) -> int:
         """Create a persona memory record."""
-        return self.persona_memories.create(
-            memory_content=memory_content,
-            persona_uid=persona_uid,
-            source_msg_uids=source_msg_uids,
-            created_at=created_at,
-            updated_at=updated_at,
-        )
+        with self._transaction():
+            return self.persona_memories.create(
+                memory_content=memory_content,
+                persona_uid=persona_uid,
+                source_msg_uids=source_msg_uids,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
 
     def get_persona_memory(self, memory_uid: int) -> Optional[PersonaMemories]:
         """Get a persona memory by uid."""
@@ -204,15 +225,18 @@ class PersonaDatabase:
 
     def update_persona_memory(self, memory_uid: int, **updates) -> bool:
         """Update a persona memory record."""
-        return self.persona_memories.update(memory_uid, **updates)
+        with self._transaction():
+            return self.persona_memories.update(memory_uid, **updates)
 
     def delete_persona_memory(self, memory_uid: int) -> bool:
         """Delete a persona memory record."""
-        return self.persona_memories.delete(memory_uid)
+        with self._transaction():
+            return self.persona_memories.delete(memory_uid)
 
     def create_discord_user(self, user_uid: int) -> None:
         """Create a new Discord user if they don't already exist."""
-        self.users.create_if_missing(user_uid)
+        with self._transaction():
+            self.users.create_if_missing(user_uid)
 
     def get_discord_user(self, user_uid: int) -> Optional[DiscordUser]:
         """Retrieve a Discord user by their UID."""
@@ -220,7 +244,8 @@ class PersonaDatabase:
 
     def update_discord_user(self, user_uid: int, **updates) -> bool:
         """Update a Discord user's attributes."""
-        return self.users.update(user_uid, **updates)
+        with self._transaction():
+            return self.users.update(user_uid, **updates)
 
 
 def main_test():
@@ -248,7 +273,7 @@ def main_test():
     for persona in personas:
         print(persona)
 
-    user2_personas = manager.list_personas(user2_uid)
+    user2_personas = manager.list_personas(user2_uid, role_ids={123})
     print("User2 can see: ")
     for persona in user2_personas:
         print(persona)
@@ -262,5 +287,36 @@ def main_test():
     if updated_user:
         print(f"Updated user balance: {updated_user.balance}")
 
+def message_test():
+    db = PersonaDatabase(":memory:")
+    user_uid = 1000
+    persona_uid = db.create_persona("Test Persona", "Test Content", user_uid, PersonaVisibility.PUBLIC)
+    db.create_discord_user(user_uid)
+
+    log_msg = []
+    for i in range(3):
+        msg_uid = 1000 + i
+        content = f"Message content {i}"
+        db.create_chat_interaction(
+            msg_uid=msg_uid,
+            user_uid=user_uid,
+            persona_uid=persona_uid,
+            main_content=content,
+        )
+        log_msg.append(str(msg_uid))
+    mem_id = db.create_persona_memory(
+        memory_content="This is a memory.", 
+        persona_uid=persona_uid,
+        source_msg_uids=",".join(log_msg)
+    )
+    memory = db.get_persona_memory(mem_id)
+    print(f"Created memory: {memory}")
+    # print(f"Created persona memory with uid: {mem_id}")
+    interactions = db.list_chat_interactions_for_persona(persona_uid)
+    print(f"Chat interactions for persona {persona_uid}:")
+    for interaction in interactions:
+        print(interaction)
+
 if __name__ == "__main__":
     main_test()
+    message_test()

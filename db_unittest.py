@@ -8,7 +8,7 @@ from persona_db.PersonaDatabase import (
     Persona, DiscordUser, ChatInteraction, PersonaMemories,
     PersonaVisibility,
     PersonaDatabase,
-    main_test,
+    main_test, message_test
 )
 
 class TestHelperFunctions(unittest.TestCase):
@@ -465,3 +465,4 @@ class TestPersonaMemoriesRepository(BaseTestWithDB):
 if __name__ == '__main__':
     unittest.main()
     # main_test()
+    # message_test()
