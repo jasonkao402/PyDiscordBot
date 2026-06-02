@@ -94,6 +94,7 @@ class BaseTestWithDB(unittest.TestCase):
 class TestPersonaRepository(BaseTestWithDB):
     def setUp(self):
         super().setUp()
+        # self.db.create_discord_user(200)  # another user for testing
         self.repo = self.db.personas
 
     def test_create_and_fetch(self):
@@ -118,46 +119,66 @@ class TestPersonaRepository(BaseTestWithDB):
     def test_list_visible_for_user(self):
         uid1 = self.repo.create("Private", "", 100, PersonaVisibility.PRIVATE)
         uid2 = self.repo.create("Public", "", 200, PersonaVisibility.PUBLIC)
+        uid3 = self.repo.create("OtherPrivate", "", 200, PersonaVisibility.PRIVATE, allowed_role_ids={999})
+        uid4 = self.repo.create("OtherPrivate2", "", 200, PersonaVisibility.PRIVATE, allowed_role_ids={888})
         # User 100 sees own private + public
-        visible = self.repo.list_visible_for_user(100, [])
-        # print("\nVisible personas for user 100:")
-        # for p in visible:
-        #     print(f"  - {p.persona_name} (is_public={p.is_public})")
-        self.assertEqual(len(visible), 2)
+        visible = self.repo.list_visible_for_user(100, {999})
+        self.assertEqual(len(visible), 3)
         uids = {p.uid for p in visible}
         self.assertIn(uid1, uids)
         self.assertIn(uid2, uids)
+        self.assertIn(uid3, uids)
 
         # User 200 sees only public (own persona not created yet)
-        visible = self.repo.list_visible_for_user(200, [])
-        # print("\nVisible personas for user 200:")
-        # for p in visible:
-        #     print(f"  - {p.persona_name}")
-        self.assertEqual(len(visible), 1)
+        visible = self.repo.list_visible_for_user(200, set())
+        self.assertEqual(len(visible), 3)
         self.assertEqual(visible[0].uid, uid2)
 
+        visible = self.repo.list_visible_for_user(200, {888})
+        self.assertEqual(len(visible), 3)
+        self.assertEqual(visible[0].uid, uid2)
+        
     def test_update_success(self):
-        uid = self.repo.create("Own", "", 100, PersonaVisibility.PRIVATE)
-        allowed_fields = self.repo.get_allowed_fields_for_user(uid, 100)
-        result = self.repo.update(uid, allowed_fields, persona_name="New", is_public=True)
+        uid = self.repo.create("MyABC", "", 100, PersonaVisibility.PRIVATE)
+        # allowed_fields = self.db.get_allowed_fields_for_user(uid, 100)
+        result = self.repo.update(uid, persona_name="MyXYZ", is_public=True)
         self.assertTrue(result)
         p = self.repo.fetch_by_uid(uid)
-        self.assertEqual(p.persona_name, "New")
+        self.assertEqual(p.persona_name, "MyXYZ")
         self.assertEqual(p.is_public, True)
-
+        
+    def test_update_teammember(self):
+        # Create a persona that allows role 999
+        uid = self.repo.create("TeamBot", "", 100, PersonaVisibility.PRIVATE, allowed_role_ids={999})
+        # User 200 with role 999 should be able to update allowed fields
+        result = self.db.update_persona(uid, 200, {999}, persona_name="TeamBotUpdated")  # directly update to bypass permission check for this test
+        self.assertTrue(result)
+        result = self.db.update_persona(uid, 200, {999}, allowed_role_ids={999, 888})  # update allowed_role_ids as well
+        self.assertFalse(result)
+        p = self.repo.fetch_by_uid(uid)
+        self.assertEqual(p.persona_name, "TeamBotUpdated")
+        
     def test_update_wrong_owner(self):
         uid = self.repo.create("Test", "", 100, PersonaVisibility.PRIVATE)
-        allowed_fields = self.repo.get_allowed_fields_for_user(uid, 200)
-        result = self.repo.update(uid, allowed_fields, persona_name="Hack")
+        perm = self.db._get_allowed_fields_for_user(uid, 300, set())  # user 300 with no roles should have only last_interaction_recv_at
+        # print(f"Allowed fields for user 300: {perm}")
+        self.assertEqual(perm, {"last_interaction_recv_at"})
+        result = self.db.update_persona(uid, 300, set(), persona_name="NotOwner")
         self.assertFalse(result)
         p = self.repo.fetch_by_uid(uid)
         self.assertEqual(p.persona_name, "Test")  # unchanged
 
     def test_update_invalid_field(self):
         uid = self.repo.create("Test", "", 100, PersonaVisibility.PRIVATE)
-        allowed_fields = self.repo.get_allowed_fields_for_user(uid, 100)
+        # with self.assertRaises(ValueError):
+        result = self.db.update_persona(uid, 100, set(), fake_field="value")
+        self.assertFalse(result)
+        p = self.repo.fetch_by_uid(uid)
+        self.assertEqual(p.persona_name, "Test")  # unchanged
+        
         with self.assertRaises(ValueError):
-            self.repo.update(uid, allowed_fields, invalid_field=123)
+            self.repo.update(uid, invalid_field="value")  # should raise ValueError
+        
 
     def test_delete_success(self):
         uid = self.repo.create("DeleteMe", "", 100, PersonaVisibility.PRIVATE)
@@ -228,14 +249,14 @@ class TestDiscordUserRepository(BaseTestWithDB):
 
     def test_clear_selected_persona(self):
         self.repo.upsert_selected_persona(100, 7)
-        self.repo.clear_selected_persona(100)
+        self.repo.deselect_persona(100)
         self.assertEqual(self.repo.get_selected_persona_uid(100), -1)
 
     def test_clear_persona_selection(self):
         # Set same persona for multiple users
         self.repo.upsert_selected_persona(100, 42)
         self.repo.upsert_selected_persona(200, 42)
-        self.repo.clear_persona_selection(42)
+        self.repo._unbind_selected_user_for_persona(42)
         self.assertEqual(self.repo.get_selected_persona_uid(100), -1)
         self.assertEqual(self.repo.get_selected_persona_uid(200), -1)
 
@@ -264,10 +285,14 @@ class TestInteractionRepository(BaseTestWithDB):
     def test_increment_multiple_times(self):
         for _ in range(3):
             self.repo.increment_interaction_count(self.p1, self.user_id)
-        p = self.db.personas.fetch_by_uid(self.p1)
+        for _ in range(7):
+            self.repo.increment_interaction_count(self.p2, self.user_id)
+        p1 = self.db.personas.fetch_by_uid(self.p1)
+        p2 = self.db.personas.fetch_by_uid(self.p2)
         u = self.db.users.fetch_by_uid(self.user_id)
-        self.assertEqual(p.interaction_count, 3)
-        self.assertEqual(u.interaction_count, 3)
+        self.assertEqual(p1.interaction_count, 3)
+        self.assertEqual(p2.interaction_count, 7)
+        self.assertEqual(u.interaction_count, 10)
 
     def test_get_user_interaction_stats_empty(self):
         stats = self.repo.get_user_interaction_stats(999)
@@ -336,7 +361,9 @@ class TestChatInteractionRepository(BaseTestWithDB):
 
     def test_list_by_persona_uid_with_limit(self):
         self.repo.create(1, 100, self.persona_uid, "Msg1")
+        time.sleep(0.01)  # ensure different timestamps
         self.repo.create(2, 100, self.persona_uid, "Msg2")
+        time.sleep(0.01)  # ensure different timestamps 
         results = self.repo.list_by_persona_uid(self.persona_uid, limit=1)
         self.assertEqual(len(results), 1)
 
@@ -346,6 +373,7 @@ class TestChatInteractionRepository(BaseTestWithDB):
         self.repo.create(2, 200, self.persona_uid, "User2-1")
         time.sleep(0.01)  # ensure different timestamps
         self.repo.create(3, 100, self.persona_uid, "User1-2")
+        time.sleep(0.01)  # ensure different timestamps
         results = self.repo.list_by_user_uid(100)
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0].msg_uid, 3)  # latest
@@ -433,253 +461,6 @@ class TestPersonaMemoriesRepository(BaseTestWithDB):
         mid = self.repo.create("Delete", self.persona_uid, "1")
         self.assertTrue(self.repo.delete(mid))
         self.assertIsNone(self.repo.fetch_by_uid(mid))
-
-
-# class TestUserGroupsRepository(BaseTestWithDB):
-#     def setUp(self):
-#         super().setUp()
-#         self.repo = self.db.user_groups
-
-#     def test_create_and_fetch(self):
-#         gid = self.repo.create("Group1", [100, 200])
-#         group = self.repo.fetch_by_uid(gid)
-#         self.assertEqual(group.group_name, "Group1")
-#         self.assertEqual(_split_uid_list(group.member_uids), [100, 200])
-
-#     def test_create_no_members(self):
-#         gid = self.repo.create("Empty")
-#         group = self.repo.fetch_by_uid(gid)
-#         self.assertEqual(group.member_uids, "")
-
-#     def test_list_all(self):
-#         g1 = self.repo.create("G1")
-#         g2 = self.repo.create("G2")
-#         all_groups = self.repo.list_all()
-#         self.assertEqual(len(all_groups), 2)
-#         self.assertIn(g1, [g.group_uid for g in all_groups])
-#         self.assertIn(g2, [g.group_uid for g in all_groups])
-
-#     def test_update(self):
-#         gid = self.repo.create("OldName", [100])
-#         ok = self.repo.update(gid, group_name="NewName", member_uids=[100, 200])
-#         self.assertTrue(ok)
-#         group = self.repo.fetch_by_uid(gid)
-#         self.assertEqual(group.group_name, "NewName")
-#         self.assertEqual(_split_uid_list(group.member_uids), [100, 200])
-
-#     def test_update_no_fields(self):
-#         gid = self.repo.create("G")
-#         self.assertFalse(self.repo.update(gid))
-
-#     def test_update_invalid_field(self):
-#         gid = self.repo.create("G")
-#         with self.assertRaises(ValueError):
-#             self.repo.update(gid, wrong="field")
-
-#     def test_delete(self):
-#         gid = self.repo.create("Del")
-#         self.assertTrue(self.repo.delete(gid))
-#         self.assertIsNone(self.repo.fetch_by_uid(gid))
-
-#     def test_get_member_uids(self):
-#         gid = self.repo.create("Members", [1, 2, 3])
-#         self.assertEqual(self.repo.get_member_uids(gid), [1, 2, 3])
-
-#     def test_add_member(self):
-#         gid = self.repo.create("Group", [100])
-#         self.assertTrue(self.repo.add_member(gid, 200))
-#         self.assertEqual(self.repo.get_member_uids(gid), [100, 200])
-
-#     def test_add_duplicate_member(self):
-#         gid = self.repo.create("Group", [100])
-#         self.assertTrue(self.repo.add_member(gid, 100))  # no error
-#         self.assertEqual(self.repo.get_member_uids(gid), [100])
-
-#     def test_remove_member(self):
-#         gid = self.repo.create("Group", [100, 200, 300])
-#         self.assertTrue(self.repo.remove_member(gid, 200))
-#         self.assertEqual(self.repo.get_member_uids(gid), [100, 300])
-
-#     def test_remove_nonexistent_member(self):
-#         gid = self.repo.create("Group", [100])
-#         self.assertTrue(self.repo.remove_member(gid, 999))  # just does nothing
-#         self.assertEqual(self.repo.get_member_uids(gid), [100])
-
-#     def test_is_member(self):
-#         gid = self.repo.create("Group", [100])
-#         self.assertTrue(self.repo.is_member(gid, 100))
-#         self.assertFalse(self.repo.is_member(gid, 200))
-
-
-# class TestPersonaGroupAccessRepository(BaseTestWithDB):
-#     def setUp(self):
-#         super().setUp()
-#         self.repo = self.db.persona_group_access
-#         self.g1 = self.db.user_groups.create("G1")
-#         self.g2 = self.db.user_groups.create("G2")
-#         self.p1 = self.db.personas.create("P1", "", 100, PersonaVisibility.PRIVATE)
-#         self.p2 = self.db.personas.create("P2", "", 100, PersonaVisibility.PRIVATE)
-
-#     def test_grant_and_check(self):
-#         self.assertTrue(self.repo.grant_access(self.g1, self.p1))
-#         self.assertTrue(self.repo.has_access(self.g1, self.p1))
-#         self.assertFalse(self.repo.has_access(self.g1, self.p2))
-
-#     def test_grant_duplicate(self):
-#         self.repo.grant_access(self.g1, self.p1)
-#         self.assertFalse(self.repo.grant_access(self.g1, self.p1))  # INSERT OR IGNORE
-
-#     def test_revoke(self):
-#         self.repo.grant_access(self.g1, self.p1)
-#         self.assertTrue(self.repo.revoke_access(self.g1, self.p1))
-#         self.assertFalse(self.repo.has_access(self.g1, self.p1))
-
-#     def test_list_access_by_group(self):
-#         self.repo.grant_access(self.g1, self.p1)
-#         self.repo.grant_access(self.g1, self.p2)
-#         access_list = self.repo.list_access_by_group(self.g1)
-#         self.assertEqual(len(access_list), 2)
-#         uids = [a.persona_uid for a in access_list]
-#         self.assertIn(self.p1, uids)
-#         self.assertIn(self.p2, uids)
-
-#     def test_list_access_by_persona(self):
-#         self.repo.grant_access(self.g1, self.p1)
-#         self.repo.grant_access(self.g2, self.p1)
-#         access_list = self.repo.list_access_by_persona(self.p1)
-#         self.assertEqual(len(access_list), 2)
-#         uids = [a.group_uid for a in access_list]
-#         self.assertIn(self.g1, uids)
-#         self.assertIn(self.g2, uids)
-
-#     def test_list_persona_uids_for_group(self):
-#         self.repo.grant_access(self.g1, self.p1)
-#         self.repo.grant_access(self.g1, self.p2)
-#         pids = self.repo.list_persona_uids_for_group(self.g1)
-#         self.assertEqual(pids, [self.p1, self.p2])
-
-#     def test_list_group_uids_for_persona(self):
-#         self.repo.grant_access(self.g1, self.p1)
-#         self.repo.grant_access(self.g2, self.p1)
-#         gids = self.repo.list_group_uids_for_persona(self.p1)
-#         self.assertEqual(gids, [self.g1, self.g2])
-
-
-# class TestPersonaDatabaseIntegration(BaseTestWithDB):
-#     def setUp(self):
-#         super().setUp()
-#         self.user = 100
-#         self.other_user = 200
-#         self.db.create_discord_user(self.other_user)
-
-#     def test_create_persona_within_limit(self):
-#         for i in range(5):
-#             uid = self.db.create_persona(f"Bot{i}", "", self.user, PersonaVisibility.PRIVATE)
-#             self.assertGreater(uid, 0)
-#         self.assertEqual(self.db.personas.count_by_owner(self.user), 5)
-
-#     def test_create_persona_exceeds_limit(self):
-#         for i in range(5):
-#             self.db.create_persona(f"Bot{i}", "", self.user, PersonaVisibility.PRIVATE)
-#         # 6th should fail and return -1
-#         uid = self.db.create_persona("Extra", "", self.user, PersonaVisibility.PRIVATE)
-#         self.assertEqual(uid, -1)
-
-#     def test_get_persona_with_permission(self):
-#         pid = self.db.create_persona("Private", "", self.user, PersonaVisibility.PRIVATE)
-#         p = self.db.get_persona(pid, self.user)
-#         self.assertIsNotNone(p)
-#         # Another user should not see it
-#         self.assertIsNone(self.db.get_persona(pid, self.other_user))
-
-#     def test_set_selected_persona(self):
-#         pid = self.db.create_persona("Public", "", self.user, PersonaVisibility.PUBLIC)
-#         self.assertTrue(self.db.set_selected_persona(self.user, pid))
-#         sel = self.db.get_selected_persona(self.user)
-#         self.assertIsNotNone(sel)
-#         self.assertEqual(sel.uid, pid)
-
-#     def test_set_selected_persona_no_permission(self):
-#         pid = self.db.create_persona("Private", "", self.user, PersonaVisibility.PRIVATE)
-#         self.assertFalse(self.db.set_selected_persona(self.other_user, pid))
-
-#     def test_clear_selected_persona(self):
-#         pid = self.db.create_persona("P", "", self.user, PersonaVisibility.PUBLIC)
-#         self.db.set_selected_persona(self.user, pid)
-#         self.db.clear_selected_persona(self.user)
-#         self.assertIsNone(self.db.get_selected_persona(self.user))
-
-#     def test_delete_persona_clears_selection(self):
-#         pid = self.db.create_persona("ToDelete", "", self.user, PersonaVisibility.PUBLIC)
-#         self.db.set_selected_persona(self.user, pid)
-#         self.db.delete_persona(pid, self.user)
-#         self.assertIsNone(self.db.personas.fetch_by_uid(pid))
-#         self.assertEqual(self.db.users.get_selected_persona_uid(self.user), -1)
-
-#     def test_user_can_access_persona_via_group(self):
-#         gid = self.db.create_user_group("Friends", [self.other_user])
-#         pid = self.db.create_persona("Shared", "", self.user, PersonaVisibility.PRIVATE)
-#         self.db.grant_persona_group_access(gid, pid)
-#         # owner can always access, but other_user should now have group access
-#         self.assertTrue(self.db.user_can_access_persona_via_group(self.other_user, pid))
-
-#     def test_list_personas_accessible_via_group(self):
-#         gid = self.db.create_user_group("Fans", [self.other_user])
-#         pid1 = self.db.create_persona("Hidden1", "", self.user, PersonaVisibility.PRIVATE)
-#         pid2 = self.db.create_persona("Hidden2", "", self.user, PersonaVisibility.PRIVATE)
-#         self.db.grant_persona_group_access(gid, pid1)
-#         self.db.grant_persona_group_access(gid, pid2)
-#         personas = self.db.list_personas_accessible_via_group(self.other_user)
-#         self.assertEqual(len(personas), 2)
-#         self.assertIn(pid1, [p.uid for p in personas])
-
-#     def test_get_selected_persona_after_permission_loss(self):
-#         # Create a private persona and set it for user, then change visibility to public? Actually
-#         # permission_check depends on current visibility, so if it becomes private for another user
-#         # they lose access. But we can test that if user is removed from group that granted access,
-#         # selected persona becomes inaccessible.
-#         gid = self.db.create_user_group("Temp", [self.other_user])
-#         pid = self.db.create_persona("GroupOnly", "", self.user, PersonaVisibility.PRIVATE)
-#         self.db.grant_persona_group_access(gid, pid)
-#         # other_user sets it as selected
-#         self.assertTrue(self.db.set_selected_persona(self.other_user, pid))
-#         self.assertIsNotNone(self.db.get_selected_persona(self.other_user))
-#         # Now remove group membership
-#         self.db.remove_user_from_group(gid, self.other_user)
-#         # The permission check in get_selected_persona will fail because other_user is no longer owner
-#         # and not in group, so it should return None.
-#         res = self.db.get_selected_persona(self.other_user)
-#         print(f"Selected persona for other_user after group removal: {res}")
-#         self.assertIsNone(self.db.get_selected_persona(self.other_user))
-
-#     def test_increment_interaction_count_and_stats(self):
-#         pid = self.db.create_persona("Interactive", "", self.user, PersonaVisibility.PUBLIC)
-#         self.db.increment_interaction_count(pid, self.user)
-#         self.db.increment_interaction_count(pid, self.other_user)
-#         self.db.increment_interaction_count(pid, self.other_user)
-#         stats = self.db.get_user_interaction_stats(self.other_user)
-#         assert stats is not None
-#         self.assertEqual(stats["total_interactions"], 2)
-#         top = self.db.get_top_users()
-#         self.assertEqual(top[0][0], self.other_user)  # 2 > 1
-
-#     def test_chat_interaction_flow(self):
-#         pid = self.db.create_persona("Chatty", "", self.user, PersonaVisibility.PUBLIC)
-#         msg = 1001
-#         self.assertTrue(self.db.create_chat_interaction(msg, self.user, pid, "Hello"))
-#         ci = self.db.get_chat_interaction(msg)
-#         self.assertEqual(ci.main_content, "Hello")
-#         self.assertFalse(ci.is_memorized)
-#         self.db.mark_chat_interaction_memorized(msg, "Greeting")
-#         ci = self.db.get_chat_interaction(msg)
-#         self.assertTrue(ci.is_memorized)
-#         self.assertEqual(ci.summary, "Greeting")
-
-#     def test_user_balance_through_database(self):
-#         self.db.update_discord_user(self.user, balance=50)
-#         u = self.db.get_discord_user(self.user)
-#         self.assertEqual(u.balance, 50)
-
 
 if __name__ == '__main__':
     unittest.main()

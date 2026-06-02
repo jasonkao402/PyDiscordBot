@@ -5,6 +5,8 @@ from persona_db.DatabaseModels import Persona, PersonaVisibility
 from persona_db.helper_func import _now_iso, SQLiteRepository, _join_uid_list, _split_uid_list
 from typing import List, Optional, Set
 
+_allowed_fields = {"persona_name", "content", "is_public", "allowed_role_ids"}
+
 def _persona_from_row(row: tuple) -> Persona:
     return Persona(
         uid=row[0],
@@ -21,10 +23,6 @@ def _persona_from_row(row: tuple) -> Persona:
     )
 
 class PersonaRepository(SQLiteRepository):
-    allowed_everyone_update_fields = {"last_interaction_recv_at"}
-    allowed_owner_update_fields = {"persona_name", "content", "visibility", "is_public", "allowed_role_ids"} | allowed_everyone_update_fields
-    allowed_teammember_update_fields = {"persona_name", "content"} | allowed_everyone_update_fields
-    
     
     def create_tables(self, conn) -> None:
         conn.execute(
@@ -123,7 +121,7 @@ class PersonaRepository(SQLiteRepository):
             row = cursor.fetchone()
             return _persona_from_row(row) if row else None
 
-    def list_visible_for_user(self, user_uid: int, user_role_ids: List[int]) -> List[Persona]:
+    def list_visible_for_user(self, user_uid: int, user_role_ids: Set[int]) -> List[Persona]:
         with self.connection() as conn:
             cursor = conn.execute("""
                 SELECT uid, persona_name, content, owner_uid, is_public, allowed_role_ids,
@@ -138,33 +136,21 @@ class PersonaRepository(SQLiteRepository):
             # Unpack row (adapt to your _persona_from_row)
             is_public = row[4]
             owner = row[3]
-            allowed_roles = json.loads(row[5]) if row[5] else []
+            allowed_roles = set(_split_uid_list(row[5])) if row[5] else set()
 
             if is_public:
                 visible.append(_persona_from_row(row))
             elif owner == user_uid:
                 visible.append(_persona_from_row(row))
-            elif any(role_id in allowed_roles for role_id in user_role_ids):
+            elif allowed_roles & user_role_ids:
                 visible.append(_persona_from_row(row))
         return visible
     
-    def get_allowed_fields_for_user(self, persona_uid: int, user_uid: int, user_role_ids: Set[int] = set()) -> Set[str]:
-        persona = self.fetch_by_uid(persona_uid)
-        if not persona:
-            raise ValueError(f"Persona with uid {persona_uid} not found.")
-
-        if persona.owner_uid == user_uid:
-            return self.allowed_owner_update_fields
-        elif any(role_id in persona.allowed_role_ids for role_id in user_role_ids):
-            return self.allowed_teammember_update_fields
-        else:
-            return self.allowed_everyone_update_fields
-        
-    def update(self, persona_uid: int, allowed_fields: Set[str], **updates) -> bool:
+    def update(self, persona_uid: int, **updates) -> bool:
         if not updates:
             return False
 
-        invalid_fields = set(updates) - allowed_fields
+        invalid_fields = set(updates) - _allowed_fields
         if invalid_fields:
             raise ValueError(f"Unsupported persona update fields: {sorted(invalid_fields)}")
 

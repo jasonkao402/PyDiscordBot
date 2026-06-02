@@ -104,7 +104,7 @@ class DiscordUserRepository(SQLiteRepository):
             row = cursor.fetchone()
             return row[0] if row else -1
 
-    def clear_selected_persona(self, user_uid: int) -> None:
+    def deselect_persona(self, user_uid: int) -> None:
         with self.connection() as conn:
             conn.execute(
                 """
@@ -115,7 +115,7 @@ class DiscordUserRepository(SQLiteRepository):
                 (user_uid,),
             )
 
-    def clear_persona_selection(self, persona_uid: int) -> None:
+    def _unbind_selected_user_for_persona(self, persona_uid: int) -> None:
         with self.connection() as conn:
             conn.execute(
                 """

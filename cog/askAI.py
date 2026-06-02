@@ -83,9 +83,9 @@ class askAI(commands.Cog):
         """Edit an existing LLM persona using a modal."""
         user_id = interaction.user.id
         user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = [role.id for role in user_roles]
+        user_role_ids = set(role.id for role in user_roles)
         # Fetch the persona from the database
-        _persona = self.db.get_persona(persona_id, user_id)
+        _persona = self.db.get_persona(persona_id, user_id, user_role_ids)
         if not _persona:
             await interaction.response.send_message("Persona not found or you do not have permission to edit it.", ephemeral=True)
             return
@@ -137,7 +137,7 @@ class askAI(commands.Cog):
         """Select an LLM persona for interaction."""
         user_id = ctx.author.id
         user_roles = getattr(ctx.author, 'roles', [])
-        user_role_ids = [role.id for role in user_roles]
+        user_role_ids = set(role.id for role in user_roles)
         # Check cache first
         if persona_id in self.persona_cache:
             _persona = self.persona_cache[persona_id]

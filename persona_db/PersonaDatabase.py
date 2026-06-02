@@ -9,6 +9,9 @@ from typing import Any, Dict, List, Optional, Set
 
 DB_DEFAULT_PATH = "llm_character_cards.db"
 
+allowed_fields_everyone = frozenset({"last_interaction_recv_at"})
+allowed_fields_owner = frozenset({"persona_name", "content", "visibility", "is_public", "allowed_role_ids"})
+allowed_fields_teammember = frozenset({"persona_name", "content"})
 class PersonaDatabase:
     def __init__(self, db_path: str = DB_DEFAULT_PATH):
         self.db_path = db_path
@@ -32,17 +35,17 @@ class PersonaDatabase:
         self.chat_interactions.create_tables(self._conn)
         self.persona_memories.create_tables(self._conn)
 
-    def create_persona(self, persona: str, content: str, owner_uid: int, is_public: bool | PersonaVisibility) -> int:
+    def create_persona(self, persona: str, content: str, owner_uid: int, is_public: bool | PersonaVisibility, allowed_role_ids: Set[int] = set()) -> int:
         """Create a new persona, ensuring the user does not exceed the limit."""
         persona_count = self.personas.count_by_owner(owner_uid)
         if persona_count >= 5:
             print(f"User {owner_uid} has reached the persona limit.")
             return -1
         is_public_value = bool(is_public.value) if isinstance(is_public, PersonaVisibility) else is_public
-        return self.personas.create(persona, content, owner_uid, is_public_value)
+        return self.personas.create(persona, content, owner_uid, is_public_value, allowed_role_ids)
 
     def get_persona(self, persona_uid: int, user_uid: int, role_ids: Set[int]) -> Optional[Persona]:
-        """Get a persona if user has permission to view it"""
+        """Get a persona if user has permission to basic_read it"""
         persona = self.personas.fetch_by_uid(persona_uid)
         if persona and persona.permission_basic(user_uid, role_ids):
             return persona
@@ -51,35 +54,43 @@ class PersonaDatabase:
     def get_persona_no_check(self, persona_uid: int) -> Optional[Persona]:
         """Get a persona without permission check, only for cache use"""
         return self.personas.fetch_by_uid(persona_uid)
-
+    
+    def _get_allowed_fields_for_user(self, persona_uid: int, user_uid: int, user_role_ids: Set[int]) -> Set[str]:
+        _persona = self.personas.fetch_by_uid(persona_uid)
+        if not _persona:
+            raise ValueError(f"Persona with uid {persona_uid} not found.")
+        
+        _allowed_fields = set(allowed_fields_everyone)
+        if _persona.owner_uid == user_uid:
+            _allowed_fields |= allowed_fields_owner
+        # any intersection between persona's allowed_role_ids and user's role_ids:
+        elif (_persona.allowed_role_ids & user_role_ids):
+            _allowed_fields |= allowed_fields_teammember
+            
+        return _allowed_fields
+    
     def update_persona(self, persona_uid: int, user_uid: int, user_roles: Set[int], **updates) -> bool:
         """Update a persona - branching logic based on whether the user is owner or has role-based permission"""
         if not updates:
             return False
         
-        _persona = self.personas.fetch_by_uid(persona_uid)
-        if not _persona: # check if persona exists
+        allowed_fields = self._get_allowed_fields_for_user(persona_uid, user_uid, user_roles)
+        invalid_fields = set(updates) - allowed_fields
+        if invalid_fields:
+            # raise ValueError(f"Unsupported persona update fields: {sorted(invalid_fields)}")
+            print(f"User {user_uid} attempted to update fields {sorted(invalid_fields)} which are not allowed based on their permissions.")
             return False
         
-        if _persona.permission_full(user_uid, user_roles):
-            allowed_fields = self.personas.allowed_owner_update_fields
-            return self.personas.update(persona_uid, allowed_fields, **updates)
-        
-        elif _persona.permission_basic(user_uid, user_roles):
-            allowed_fields = self.personas.allowed_teammember_update_fields
-            return self.personas.update(persona_uid, allowed_fields, **updates)
-        
-        else:
-            return False
+        return self.personas.update(persona_uid, **updates)
 
     def delete_persona(self, persona_uid: int, user_uid: int) -> bool:
         """Delete a persona - only owner can delete"""
-        self.users.clear_persona_selection(persona_uid)
+        self.users._unbind_selected_user_for_persona(persona_uid)
         return self.personas.delete(persona_uid, user_uid)
 
-    def list_personas(self, user_uid: int) -> List[Persona]:
+    def list_personas(self, user_uid: int, role_ids: Set[int] = set()) -> List[Persona]:
         """List all personas visible to user (their own + public personas)"""
-        return self.personas.list_visible_for_user(user_uid, [])
+        return self.personas.list_visible_for_user(user_uid, role_ids)
 
     def set_selected_persona(self, user_uid: int, persona_uid: int, role_ids: Set[int] = set()) -> bool:
         """Set user's selected persona"""
@@ -105,9 +116,9 @@ class PersonaDatabase:
         """Get user's currently selected persona uid"""
         return self.users.get_selected_persona_uid(user_uid)
 
-    def clear_selected_persona(self, user_uid: int):
+    def deselect_persona(self, user_uid: int):
         """Clear user's selected persona"""
-        self.users.clear_selected_persona(user_uid)
+        self.users.deselect_persona(user_uid)
 
     def increment_interaction_count(self, persona_uid: int, user_uid: int):
         """Increment the interaction count for a user and persona."""
@@ -220,10 +231,11 @@ def main_test():
     manager.create_discord_user(user1_uid)
     manager.create_discord_user(user2_uid)
     manager.create_discord_user(user3_uid)
-    manager.create_persona("Test1", "Content for Test1", user1_uid, PersonaVisibility.PUBLIC)
-    manager.create_persona("Test2", "Content for Test2", user1_uid, PersonaVisibility.PRIVATE)
-    manager.create_persona("Test3", "Content for Test3", user2_uid, PersonaVisibility.PUBLIC)
-    result = manager.set_selected_persona(user1_uid, 1)
+    p1_uid = manager.create_persona("Test 1", "Content 1", user1_uid, PersonaVisibility.PUBLIC)
+    p2_uid = manager.create_persona("Test 2", "Content 2", user1_uid, PersonaVisibility.PRIVATE)
+    p3_uid = manager.create_persona("Test 3", "Content 3", user1_uid, PersonaVisibility.PRIVATE, allowed_role_ids={123})
+    p4_uid = manager.create_persona("Test 4", "Content 4", user2_uid, PersonaVisibility.PUBLIC)
+    result = manager.set_selected_persona(user1_uid, p1_uid)
     print(f"Select persona result: {result}")
     selected = manager.get_selected_persona(user1_uid)
     if selected:
