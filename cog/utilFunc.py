@@ -45,13 +45,12 @@ def simRank(a, b, K=3) -> tuple:
 class UserDict:
     uid: int
     name: str
-    display_name: str
     preferred_name: Optional[str] = None
     
     @property
     def effective_name(self):
         # Priority: preferred_name > display_name > name
-        return self.preferred_name or self.display_name or self.name
+        return self.preferred_name or self.name
 class embedVector:
     def __init__(self, text:str, vector:ndarray):
         # self.id = id

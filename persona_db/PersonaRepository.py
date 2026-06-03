@@ -13,7 +13,6 @@ def _persona_from_row(row: tuple) -> Persona:
         persona_name=row[1],
         content=row[2],
         owner_uid=row[3],
-        # visibility=PersonaVisibility(row[4]),
         is_public=bool(row[4]),
         allowed_role_ids=set(_split_uid_list(row[5])) if row[5] else set(),
         created_at=row[6],
@@ -79,16 +78,15 @@ class PersonaRepository(SQLiteRepository):
             row = cursor.fetchone()
             return row[0] if row else 0
 
-    def create(self, persona: str, content: str, owner_uid: int, is_public: bool, allowed_role_ids: Set[int] = set()) -> int:
+    def create(self, persona_name: str, content: str, owner_uid: int, is_public: bool, allowed_role_ids: Set[int] = set()) -> int:
         now = _now_iso()
-        # is_public_value = is_public.value if isinstance(is_public, PersonaVisibility) else int(is_public)
         with self.connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO personas (persona_name, content, owner_uid, is_public, allowed_role_ids, created_at, updated_at, last_interaction_recv_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (persona, content, owner_uid, is_public, _join_uid_list(allowed_role_ids), now, now, now),
+                (persona_name, content, owner_uid, is_public, _join_uid_list(allowed_role_ids), now, now, now),
             )
             persona_uid = cursor.lastrowid
             if not persona_uid:

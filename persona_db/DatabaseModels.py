@@ -57,6 +57,7 @@ class DiscordUser:
     interaction_count: int = 0 # unused for now
     last_payout_at: Optional[str] = None
     balance: int = 0
+    preferred_name: Optional[str] = None
 
     def __str__(self):
         return f"DiscordUser(user_uid={self.user_uid}, selected_persona_uid={self.selected_persona_uid}, balance={self.balance})"

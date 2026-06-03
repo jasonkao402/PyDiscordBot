@@ -8,6 +8,10 @@ import uvicorn
 from fastapi import FastAPI
 from cog_dev.moderation import PendingMessageManager
 import cog_dev.web_api as web_api
+import logging
+logging.basicConfig(level=logging.INFO)
+
+_debug_guild = discord.Object(configToml['debug_guild_id'])
 
 async def run_discord():
     absFilePath = os.path.abspath(__file__)
@@ -17,7 +21,7 @@ async def run_discord():
     global client, COG_LIST, LOADED_COG
     
     # PreLoad
-    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'msglog', 'personality'}
+    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'personality'}
     # Scan cog folder and add to COG_LIST
     cog_folder = os.path.join(currWorkDir, 'cog')
     for file in os.listdir(cog_folder):
@@ -29,7 +33,11 @@ async def run_discord():
     intents = discord.Intents.all()
     client = commands.Bot(command_prefix='%', intents=intents)
     
-    async def sync_tree(guild):
+    # if _debug_guild:
+    #     print(f"Debug guild set to ID: {_debug_guild.id}")
+    
+    async def sync_tree(guild=None):
+        # _guild = _debug_guild if guild is None else guild
         avail_cmds = await client.tree.sync(guild=guild)
         print(f'synced {len(avail_cmds)} commands')
         for cmd in avail_cmds:
@@ -41,17 +49,23 @@ async def run_discord():
         # PreLoad
         for c in LOADED_COG:
             await client.load_extension(f'cog.{c}')
-        # avail_cmds = await client.tree.sync()
-        await sync_tree(None)
-        print('Bot is online.')
         print('Default cogs loaded : ', LOADED_COG)
+        
+        # avail_cmds = await client.tree.sync()
+        await sync_tree()
+        print('Bot is online.')
         # print(f'synced {len(avail_cmds)} commands')
 
     @client.event
     async def on_connect():
         print(f'Connected, discord latency: {round(client.latency*1000)} ms')
-
-    @client.hybrid_command(name = 'reload')
+        
+    @client.event
+    async def on_command_error(ctx, error):
+        import traceback
+        traceback.print_exception(type(error), error, error.__traceback__)
+        
+    @client.hybrid_command(name = 'reload', description="Reload cogs and sync commands.")
     @commands.is_owner()
     async def _reload(ctx:commands.Context):
         suc = 0
@@ -60,10 +74,10 @@ async def run_discord():
             suc += 1
         if ctx.guild:
             await ctx.send(f'{suc} reloaded and sync done in {str(ctx.guild.name)}')
-            await sync_tree(ctx.guild)
+            await sync_tree()
         elif ctx.channel:
             await ctx.send(f'{suc} reloaded and sync done in {str(ctx.channel)} (DM)')
-            await sync_tree(None)
+            await sync_tree()
 
     @client.command()
     @commands.is_owner()

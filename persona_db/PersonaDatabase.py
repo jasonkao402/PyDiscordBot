@@ -44,16 +44,15 @@ class PersonaDatabase:
             self.interactions.create_tables(self._conn)
             self.chat_interactions.create_tables(self._conn)
             self.persona_memories.create_tables(self._conn)
-
-    def create_persona(self, persona: str, content: str, owner_uid: int, is_public: bool | PersonaVisibility, allowed_role_ids: Set[int] = set()) -> int:
-        """Create a new persona, ensuring the user does not exceed the limit."""
+            
+    def count_personas_by_owner(self, owner_uid: int) -> int:
+        """Count the number of personas owned by a specific user."""
+        return self.personas.count_by_owner(owner_uid)
+    
+    def create_persona(self, persona_name: str, content: str, owner_uid: int, is_public: bool, allowed_role_ids: Set[int] = set()) -> int:
+        """Create a new persona"""
         with self._transaction():
-            persona_count = self.personas.count_by_owner(owner_uid)
-            if persona_count >= 5:
-                print(f"User {owner_uid} has reached the persona limit.")
-                return -1
-            is_public_value = bool(is_public.value) if isinstance(is_public, PersonaVisibility) else is_public
-            return self.personas.create(persona, content, owner_uid, is_public_value, allowed_role_ids)
+            return self.personas.create(persona_name, content, owner_uid, is_public, allowed_role_ids)
 
     def get_persona(self, persona_uid: int, user_uid: int, role_ids: Set[int]) -> Optional[Persona]:
         """Get a persona if user has permission to basic_read it"""
@@ -240,6 +239,11 @@ class PersonaDatabase:
         """Update a Discord user's attributes."""
         with self._transaction():
             return self.users.update(user_uid, **updates)
+    
+    def get_discord_user_preferred_name(self, user_uid: int) -> Optional[str]:
+        """Get a Discord user's preferred name."""
+        user = self.get_discord_user(user_uid)
+        return user.preferred_name if user else None
 
 
 def main_test():
@@ -250,10 +254,10 @@ def main_test():
     manager.create_discord_user(user1_uid)
     manager.create_discord_user(user2_uid)
     manager.create_discord_user(user3_uid)
-    p1_uid = manager.create_persona("Test 1", "Content 1", user1_uid, PersonaVisibility.PUBLIC)
-    p2_uid = manager.create_persona("Test 2", "Content 2", user1_uid, PersonaVisibility.PRIVATE)
-    p3_uid = manager.create_persona("Test 3", "Content 3", user1_uid, PersonaVisibility.PRIVATE, allowed_role_ids={123})
-    p4_uid = manager.create_persona("Test 4", "Content 4", user2_uid, PersonaVisibility.PUBLIC)
+    p1_uid = manager.create_persona("Test 1", "Content 1", user1_uid, True)
+    p2_uid = manager.create_persona("Test 2", "Content 2", user1_uid, False)
+    p3_uid = manager.create_persona("Test 3", "Content 3", user1_uid, False, allowed_role_ids={123})
+    p4_uid = manager.create_persona("Test 4", "Content 4", user2_uid, True)
     result = manager.set_selected_persona(user1_uid, p1_uid)
     print(f"Select persona result: {result}")
     selected = manager.get_selected_persona(user1_uid)
@@ -284,7 +288,7 @@ def main_test():
 def message_test():
     db = PersonaDatabase(":memory:")
     user_uid = 1000
-    persona_uid = db.create_persona("Test Persona", "Test Content", user_uid, PersonaVisibility.PUBLIC)
+    persona_uid = db.create_persona("Test Persona", "Test Content", user_uid, True)
     db.create_discord_user(user_uid)
 
     log_msg = []

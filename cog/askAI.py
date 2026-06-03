@@ -1,15 +1,16 @@
-from typing import Optional, List
+from typing import Optional, List, Set
 from discord import Client as DC_Client
-from discord import Color, Embed, Interaction, Message, TextChannel, app_commands
+from discord import Color, Embed, Interaction, Message, TextChannel, app_commands, Webhook
 from discord.ext import commands
 from discord.abc import Messageable
 from typing import Optional
 from cog.llmAgentAPI import LLMAPI
 from cog.utilFunc import sepLines, wcformat, UserDict
-from cog.ui_modal import CreatePersonaModal, EditPersonaModal_Owner, EditPersonaModal_TeamMember
+from cog.ui_modal import CreatePersonaModal, EditPersonaModal_Full, EditPersonaModal_Basic, TestSelect
 from config_loader import configToml
 import re
 from persona_db.PersonaDatabase import PersonaDatabase, PersonaVisibility, Persona
+from persona_db.helper_func import _join_uid_list, _split_uid_list
 import base64
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
@@ -24,6 +25,7 @@ class askAI(commands.Cog):
         self.ban_list = configToml.get("auth", {}).get("ban_list", [])
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
+        self.preferred_name_cache: dict[int, str] = {}  # Cache for user preferred names
         
         debug_channel = bot.get_channel(configToml.get("debugChannelId", -1))
         # get_channel may return various channel types (TextChannel, DMChannel, Thread, etc.).
@@ -43,37 +45,37 @@ class askAI(commands.Cog):
     @commands.is_owner()
     async def clear_cache(self, interaction: Interaction):
         """Clear the persona and selection caches."""
-        pc, sc = len(self.persona_cache), len(self.selection_cache)
+        pc, sc, nc = len(self.persona_cache), len(self.selection_cache), len(self.preferred_name_cache)
         self.persona_cache.clear()
         self.selection_cache.clear()
-        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas and {sc} selections)", ephemeral=True)
+        self.preferred_name_cache.clear()
+        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas, {sc} selections and {nc} preferred names)", ephemeral=True)
         
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     async def create_persona(self, interaction: Interaction):
         """Create a new LLM persona using a modal."""
+        _check = self.db.count_personas_by_owner(interaction.user.id)
+        if _check >= 5:
+            await interaction.response.send_message(
+                content="You have reached the maximum limit of 5 personas. Please delete an existing persona to create a new one.",
+                # ephemeral=True
+            )
+            return
         modal = CreatePersonaModal(callback=self.handle_create_persona_submission)
         await interaction.response.send_modal(modal)
 
-    async def handle_create_persona_submission(self, interaction: Interaction, persona_name: str, content: str, visibility: bool):
-        """Handle the submission of the create persona modal."""
+    async def handle_create_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool, allowed_role_ids: str):
+        """Handle the submission of the create persona modal. persona_id is unused and will always be -1 for creation."""
         user_id = interaction.user.id
-        visibility_enum = PersonaVisibility.PUBLIC if visibility else PersonaVisibility.PRIVATE
 
-        # Create the persona
-        _persona_id = self.db.create_persona(persona_name, content, user_id, visibility_enum)
-
-        if _persona_id == -1:
-            # Send a warning message if persona creation fails
-            await interaction.response.send_message(
-                content="You have reached the maximum limit of 5 personas. Please delete an existing persona to create a new one.",
-                ephemeral=True
-            )
-            return
+        # Create the persona, the database will return the new persona's ID which we can use for confirmation
+        _persona_id = self.db.create_persona(persona_name, content, user_id, is_public, set(_split_uid_list(allowed_role_ids)))
 
         # Create an embed to confirm the creation
-        embed = Embed(title=f"{persona_name} (#{_persona_id}) Created", color=Color.green())
-        embed.add_field(name="Visibility", value="Public" if visibility else "Private", inline=False)
-        embed.add_field(name="Content", value=content[:1024], inline=False)  # Limit content to 1024 characters for embed
+        embed = Embed(title=f"{persona_name} Created", color=Color.green())
+        embed.add_field(name="Persona ID", value=f"#{_persona_id}", inline=False)
+        embed.add_field(name="Visibility", value="Public" if is_public else "Private", inline=False)
+        embed.add_field(name="Content", value=content[:50], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
     
@@ -92,43 +94,41 @@ class askAI(commands.Cog):
         
         if _persona.owner_uid == user_id:
         # Create and send the owner edit modal
-            modal = EditPersonaModal_Owner(
-            persona_id=persona_id,
-            persona_name=_persona.persona_name,
-            content=_persona.content,
-            is_public=_persona.is_public,
-            allowed_role_ids=_persona.allowed_role_ids,
-            callback=self.handle_edit_persona_submission
-        )
+            modal = EditPersonaModal_Full(
+                _persona=_persona,
+                callback=self.handle_edit_persona_submission
+            )
             await interaction.response.send_modal(modal)
         else:
             # Create and send the non-owner edit modal
-            modal = EditPersonaModal_TeamMember(
-                persona_id=persona_id,
-                persona_name=_persona.persona_name,
-                content=_persona.content,
+            modal = EditPersonaModal_Basic(
+                _persona=_persona,
                 callback=self.handle_edit_persona_submission
             )
             await interaction.response.send_modal(modal)
 
-    async def handle_edit_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool):
+    async def handle_edit_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool, allowed_role_ids: str):
         """Handle the submission of the edit persona modal."""
         user_id = interaction.user.id
+        user_roles = getattr(interaction.user, 'roles', [])
+        user_role_ids = set(role.id for role in user_roles)
         updates = {
             'persona_name': persona_name,
             'content': content,
-            'is_public': is_public
+            'is_public': is_public,
+            'allowed_role_ids': allowed_role_ids
         }
 
-        success = self.db.update_persona(persona_id, user_id, **updates)
+        success = self.db.update_persona(persona_id, user_id, user_role_ids, **updates)
         if success:
             await interaction.response.send_message(f"Persona #{persona_id} updated successfully.", ephemeral=True)
             # Update cache
             if persona_id in self.persona_cache:
-                _persona = self.persona_cache[persona_id]
-                _persona.persona_name = persona_name
-                _persona.content = content
-                _persona.is_public = is_public
+                _persona = self.db.get_persona_no_check(persona_id)
+                if not _persona:
+                    print(f"Failed to reload updated persona #{persona_id} into cache.")
+                    return
+                self.persona_cache[persona_id] = _persona  # Refresh the cache with updated persona
         else:
             await interaction.response.send_message("Failed to update persona. Ensure you own the persona.", ephemeral=True)
 
@@ -167,7 +167,9 @@ class askAI(commands.Cog):
     async def list_personas(self, ctx: commands.Context):
         """List all personas visible to the user."""
         user_id = ctx.author.id
-        personas = self.db.list_personas(user_id)
+        user_roles = getattr(ctx.author, 'roles', [])
+        user_role_ids = set(role.id for role in user_roles)
+        personas = self.db.list_personas(user_id, user_role_ids)
         if not personas:
             await ctx.send("No personas available.")
             return
@@ -208,73 +210,80 @@ class askAI(commands.Cog):
         embed = Embed(title=f"Current Persona: {_persona.persona_name} (#{_persona.uid})", color=Color.blue())
         embed.add_field(name="is_public", value="Yes" if _persona.is_public else "No", inline=False)
         if not _persona.is_public:
-            embed.add_field(name="Content", value=_persona.content[:1024], inline=False)  # Limit content to 1024 characters for embed
+            embed.add_field(name="Content", value=_persona.content[:50], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
         
-    async def _long_message_splitter(self, ctx: Messageable, text: str, title: str = "", chunk_size: int = 1900) -> Message:
+    async def _long_message_splitter(self, _ch: Messageable | Webhook, text: str, title: str = "", chunk_size: int = 1900) -> Message:
         """Split a long message into chunks that fit within Discord's message limits and send them sequentially."""
+        
         last_message: Message | None = None
 
         if len(text) > chunk_size:
             parts = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
             len_parts = len(parts)
             for i, part in enumerate(parts):
-                last_message = await ctx.send(f"# {title} part {i+1}/{len_parts}\n{part}")
+                last_message = await _ch.send(f"# {title} part {i+1}/{len_parts}\n{part}")
         else:
-            last_message = await ctx.send(f"# {title}\n{text}")
+            last_message = await _ch.send(f"# {title}\n{text}")
         
         if last_message is None:
             raise RuntimeError("Failed to send message chunk")
 
         return last_message
     
-    async def handle_llm_trigger(self, message: Message, user: UserDict):
+    async def handle_llm_trigger(self, _ch: Messageable, _msg: Message, userDict: UserDict):
         """Handle the logic for detecting and triggering the LLM feature."""
         # Load persona selection from cache or database
-        if user.uid not in self.selection_cache:
-            self.selection_cache[user.uid] = self.db.get_selected_persona_uid(user.uid)
-            print(f'from db load persona # {self.selection_cache[user.uid]} for user {user.uid} selection')
-            if self.selection_cache[user.uid] != -1:
+        if userDict.uid not in self.preferred_name_cache:
+            _from_db = self.db.get_discord_user_preferred_name(userDict.uid)
+            print(f'from db load preferred name "{_from_db}" for user {userDict.uid}')
+            self.preferred_name_cache[userDict.uid] = _from_db or userDict.name
+        userDict.name = self.preferred_name_cache[userDict.uid]
+        
+        if userDict.uid not in self.selection_cache:
+            self.selection_cache[userDict.uid] = self.db.get_selected_persona_uid(userDict.uid)
+            print(f'from db load persona # {self.selection_cache[userDict.uid]} for user {userDict.uid} selection')
+            if self.selection_cache[userDict.uid] != -1:
                 # Load persona into cache
-                db_persona = self.db.get_persona_no_check(self.selection_cache[user.uid])
+                db_persona = self.db.get_persona_no_check(self.selection_cache[userDict.uid])
                 if not db_persona:
-                    await message.channel.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
+                    await _ch.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
                     return
                 self.persona_cache[db_persona.uid] = db_persona
 
-        persona_id = self.selection_cache.get(user.uid, -1)
+        persona_id = self.selection_cache.get(userDict.uid, -1)
         _persona = self.persona_cache.get(persona_id, None)
         if not _persona:
-            await message.channel.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
+            await _ch.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
             return
 
-        async with message.channel.typing():
+        async with _ch.typing():
             encoded_image = None
-            if message.attachments:
-                attachment = message.attachments[0]
+            if _msg.attachments:
+                attachment = _msg.attachments[0]
                 if attachment.content_type and attachment.content_type.startswith('image/'):
                     image_bytes = await attachment.read()
                     encoded_image = base64.b64encode(image_bytes).decode('utf-8')
                     
             # strip out the bot mention part from the message content
-            if self.bot.user.mentioned_in(message):
-                _content = message.content.replace(self.bot.user.mention, '', 1).strip()
+            if self.bot.user.mentioned_in(_msg):
+                _content = _msg.content.replace(self.bot.user.mention, '', 1).strip()
             else:
-                _content = message.content
+                _content = _msg.content
             tResponse = await self.llm_api.persona_chat_oneshot(
                 prompt_str=_content,
                 _persona=_persona,
-                _user_dict=user,
+                _user_dict=userDict,
                 encoded_image=encoded_image
             )
             if tResponse._code == -1:
-                await message.channel.send(f"Error from LLM API: {tResponse.response_text}")
+                await _ch.send(f"Error from LLM API: {tResponse.response_text}")
                 return
-            self.db.increment_interaction_count(_persona.uid, user.uid)
+            self.db.increment_interaction_count(_persona.uid, userDict.uid)
             res = self.db.create_chat_interaction(
                 msg_uid=tResponse.timestamp,
-                user_uid=user.uid,
+                user_uid=userDict.uid,
                 persona_uid=_persona.uid,
                 main_content=tResponse.response_text,
                 user_prompt=_content,
@@ -284,7 +293,7 @@ class askAI(commands.Cog):
 
             # split both main and thinking content into multiple messages if too long for one message.
             # send thinking content reference link in the original channel to reduce clutter.
-            msg_response_text = await self._long_message_splitter(message.channel, tResponse.response_text, title=_persona.persona_name)
+            msg_response_text = await self._long_message_splitter(_ch, tResponse.response_text, title=_persona.persona_name)
                 
             if tResponse.thinking_content and self.debug_channel:
                 msg_thinking_text = await self._long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking")
@@ -301,17 +310,16 @@ class askAI(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
-        user, message_text = message.author, message.content
-        _user = UserDict(
+        user = message.author
+        userDict = UserDict(
             uid = user.id,
-            name = user.name,
-            display_name = user.display_name
+            name = user.display_name or user.name,
         )
         # Ignore self messages
-        if _user.uid == self.bot.user.id:
+        if userDict.uid == self.bot.user.id:
             return
-        if _user.uid in self.ban_list:
-            print(f'Ignored message from banned user {_user.name} ({_user.uid})')
+        if userDict.uid in self.ban_list:
+            print(f'Ignored message from banned user {userDict.name} ({userDict.uid})')
             return
         
         # Use mentions to trigger bot LLM chat
@@ -319,10 +327,10 @@ class askAI(commands.Cog):
             roles = getattr(user, 'roles', [])  # Ensure user.roles exists
             if not any(role.id in configToml.get("auth", {}).get("roleList", []) for role in roles):
                 extra_msg = 'You do not have the required role to interact with the bot.'
-                print(f'Rejected message from {_user.name} ({_user.uid}): {extra_msg}')
-                await message.channel.send(f'# To {_user.name}...\n{extra_msg}')
+                print(f'Rejected message from {userDict.name} ({userDict.uid}): {extra_msg}')
+                await message.channel.send(f'# To {userDict.name}...\n{extra_msg}')
                 return
-            await self.handle_llm_trigger(message, _user)
+            await self.handle_llm_trigger(message.channel, message, userDict)
 
     @commands.hybrid_command(name='scoreboard')
     async def _scoreboard(self, ctx: commands.Context):
@@ -406,31 +414,92 @@ class askAI(commands.Cog):
     async def _memo(self, interaction: Interaction):
         user_id = interaction.user.id
         persona_id = self.selection_cache.get(user_id, -1)
+
+        # --- Early validation (synchronous, send direct response) ---
         if persona_id == -1:
-            await interaction.response.send_message("No persona selected. Use /selectpersona to select one.")
-            return
-        _persona = self.persona_cache.get(persona_id, None)
-        if not _persona:
-            await interaction.response.send_message("Selected persona not found. Please select another persona using /selectpersona.")
-            return
-        source_msg_uids = self.llm_api.get_msg_uids_from_memory(persona_id, skip_memorized=True)
-        tResponse = await self.llm_api.persona_memory_summarize(_persona = _persona)
-        if tResponse._code == -1:
-            # print(f"Summarization failed: {tResponse.response_text}")
-            await interaction.response.send_message("Failed to summarize persona memory.")
-            return
-        self.db.increment_interaction_count(persona_id, user_id)
-        print(f"Memorized msg_uids: {source_msg_uids}")
-        res = self.db.create_persona_memory(
-            memory_content=tResponse.response_text,
-            persona_uid=persona_id,
-            source_msg_uids=source_msg_uids,
-        )
-        if not res:
-            print("Failed to create persona memory in database")
-            await interaction.response.send_message("Failed to create persona memory.")
+            await interaction.response.send_message(
+                "No persona selected. Use /selectpersona to select one."
+            )
             return
 
+        _persona = self.persona_cache.get(persona_id)
+        if not _persona:
+            await interaction.response.send_message(
+                "Selected persona not found. Please select another persona using /selectpersona."
+            )
+            return
+
+        # --- Defer the response (long operation) ---
+        await interaction.response.defer(thinking=True)
+
+        try:
+            source_msg_uids = self.llm_api.get_msg_uids_from_memory(persona_id, skip_memorized=True)
+            print(f"Source msg_uids for summarization: {source_msg_uids}")
+
+            tResponse = await self.llm_api.persona_memory_summarize(_persona=_persona)
+            print(f"Summarization response: {tResponse}")
+
+            if tResponse._code == -1:
+                # Summarization failed
+                await interaction.followup.send("Failed to summarize persona memory.")
+                return
+
+            # --- Success path ---
+            # Send initial confirmation via followup
+            await interaction.followup.send("Summarization successful. Saving summarized memory...")
+
+            # Send the long summary via channel splitter
+            msg_response_text = await self._long_message_splitter(interaction.followup, tResponse.response_text, title=f"{_persona.persona_name} Summary")
+                
+            if tResponse.thinking_content and self.debug_channel:
+                msg_thinking_text = await self._long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking Summary")
+                usage_info = '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items())
+                await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:\n{usage_info}")
+                # Edit the last one of original response messages to include a reference to the thinking content in the debug channel
+                edit_content = f"{msg_response_text.content}\n\n-# Thinking {msg_thinking_text.jump_url}"
+                await msg_response_text.edit(content=edit_content)
+                 
+            else:
+                # No thinking content or debug channel available, just print response and token usage in debug channel or console
+                print(str(tResponse))
+                    
+            # Update interaction count and save memory in DB
+            self.db.increment_interaction_count(persona_id, user_id)
+            res = self.db.create_persona_memory(
+                memory_content=tResponse.response_text,
+                persona_uid=persona_id,
+                source_msg_uids=source_msg_uids,
+            )
+            if not res:
+                print("Failed to create persona memory in database")
+                await interaction.followup.send("Failed to create persona memory.")
+                return
+
+            # Optional: final success message
+            # (already sent a confirmation; you can skip or send another followup)
+
+        except Exception as e:
+            print(f"Unexpected error in memo command: {e}")
+            await interaction.followup.send(f"An unexpected error occurred: {e}")
+            
+    @app_commands.command(name="testmodal", description="Test the select modal")
+    async def _test_modal(self, interaction: Interaction):
+        modal = TestSelect(member=interaction.user)
+        # await interaction.response.defer(thinking=True)  # Defer the response to allow time for the modal to be filled out
+        # await interaction.guild..send("Opening test modal...")
+        print(f"Opening test modal for {interaction.user.display_name} ({interaction.user.id})")
+        await interaction.response.send_modal(modal)
+    
+    @app_commands.command(name="setname", description="Set the preferred name for the user")
+    async def _set_name(self, interaction: Interaction, name: str):
+        user_id = interaction.user.id
+        res = self.db.update_discord_user(user_id, preferred_name=name)
+        if res:
+            await interaction.response.send_message(f"Your preferred name has been set to {name}.")
+        else:
+            await interaction.response.send_message("Failed to update preferred name.")
+        # await interaction.response.send_message(f"Your preferred name has been set to {name}.")
+        
 async def setup(bot:commands.Bot):
     cog_instance = askAI(bot)
     await bot.add_cog(cog_instance)

@@ -148,7 +148,7 @@ class LLMAPI:
         print(f'{user_persona_pair}: {prompt_str}')
 
         system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
-        latest_prompt = {'role': 'user', 'content': f'{_user_dict.display_name} said {prompt_str}'}
+        latest_prompt = {'role': 'user', 'content': f'{_user_dict.name} said {prompt_str}'}
 
         chatMem = self.persona_session_memory[_persona.uid]
         _timestamp = time_ns()
@@ -222,6 +222,7 @@ class LLMAPI:
             
         system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{chat_config["promptMemoryFormat"]}'
         expand_messages = self._expand_ChatInteraction_to_messages(chatMem, skip_memorized=True)
+        expand_messages.append({"role": "user", "content": chat_config["promptMemoryTrigger"]})
         tResponse : TrimedResponse
         try:
             if not expand_messages:
@@ -233,12 +234,12 @@ class LLMAPI:
                     _code=-1
                 )
             if self.debug_mode:
-                print(f"Summarizing memory with system instruction:\n{system_instruction}\nChatMem len() = {len(expand_messages)}:")
+                print(f"Summarizing memory with system instruction:\n...{system_instruction[-50:]}\nChatMem len() = {len(expand_messages)}:")
                 for idx, mem in enumerate(expand_messages):
                     print(f"{idx+1:2d} {mem['role'][0]}: {mem['content']}")
                 tResponse = self._debug_response("This is a debug response for memory summarization. No actual API call was made.", _timestamp)
             else:
-                tResponse = await self.llm_chat_v6(expand_messages, system_instruction, user_dict=UserDict(uid=0, name="System", display_name="System"))
+                tResponse = await self.llm_chat_v6(expand_messages, system_instruction, user_dict=UserDict(uid=0, name="System"))
 
         except Exception as e:
             print(f'Memory summarization error:\n{e}')

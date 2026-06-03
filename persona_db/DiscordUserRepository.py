@@ -10,6 +10,7 @@ def _discord_user_from_row(row: tuple) -> DiscordUser:
         interaction_count=row[3],
         last_payout_at=row[4],
         balance=row[5],
+        preferred_name=row[6],
     )
 
 class DiscordUserRepository(SQLiteRepository):
@@ -52,7 +53,7 @@ class DiscordUserRepository(SQLiteRepository):
         with self.connection() as conn:
             cursor = conn.execute(
                 """
-                SELECT user_uid, selected_persona_uid, last_interaction_send_at, interaction_count, last_payout_at, balance
+                SELECT user_uid, selected_persona_uid, last_interaction_send_at, interaction_count, last_payout_at, balance, preferred_name
                 FROM discord_users
                 WHERE user_uid = ?
                 """,
