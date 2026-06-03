@@ -1,3 +1,4 @@
+from turtle import up
 from typing import Optional, List, Set
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, TextChannel, app_commands, Webhook
@@ -89,35 +90,39 @@ class askAI(commands.Cog):
         # Fetch the persona from the database
         _persona = self.db.get_persona(persona_id, user_id, user_role_ids)
         if not _persona:
-            await interaction.response.send_message("Persona not found or you do not have permission to edit it.", ephemeral=True)
+            await interaction.response.send_message(f"Persona #{persona_id} not found.")
             return
         
         if _persona.owner_uid == user_id:
-        # Create and send the owner edit modal
+            # owner edit modal
             modal = EditPersonaModal_Full(
                 _persona=_persona,
                 callback=self.handle_edit_persona_submission
             )
             await interaction.response.send_modal(modal)
-        else:
-            # Create and send the non-owner edit modal
+        elif _persona.permission_full(user_id, user_role_ids):
+            # non-owner edit modal
             modal = EditPersonaModal_Basic(
                 _persona=_persona,
                 callback=self.handle_edit_persona_submission
             )
             await interaction.response.send_modal(modal)
-
+        else:
+            await interaction.response.send_message("You do not have permission to edit this persona.", ephemeral=True)
+            
     async def handle_edit_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool, allowed_role_ids: str):
         """Handle the submission of the edit persona modal."""
         user_id = interaction.user.id
         user_roles = getattr(interaction.user, 'roles', [])
         user_role_ids = set(role.id for role in user_roles)
+        _allowed_fields = self.db._get_allowed_fields_for_user(persona_id, user_id, user_role_ids)  # This will check permissions and return allowed fields, but we can skip the returned value since the modal already restricts input based on ownership
         updates = {
             'persona_name': persona_name,
             'content': content,
             'is_public': is_public,
             'allowed_role_ids': allowed_role_ids
         }
+        updates = {k: v for k, v in updates.items() if k in _allowed_fields}
 
         success = self.db.update_persona(persona_id, user_id, user_role_ids, **updates)
         if success:
@@ -157,7 +162,7 @@ class askAI(commands.Cog):
         self.selection_cache[user_id] = persona_id
         
         # Set selected persona in database
-        success = self.db.set_selected_persona(user_id, persona_id)
+        success = self.db.set_selected_persona(persona_id, user_id, user_role_ids)
         if success:
             await ctx.send(f"{self.persona_cache[persona_id].persona_name}(#{persona_id}) selected successfully.")
         else:

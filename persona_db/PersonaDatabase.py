@@ -104,7 +104,7 @@ class PersonaDatabase:
         """List all personas visible to user (their own + public personas)"""
         return self.personas.list_visible_for_user(user_uid, role_ids)
 
-    def set_selected_persona(self, user_uid: int, persona_uid: int, role_ids: Set[int] = set()) -> bool:
+    def set_selected_persona(self, persona_uid: int, user_uid: int, role_ids: Set[int] = set()) -> bool:
         """Set user's selected persona"""
         persona = self.get_persona(persona_uid, user_uid, role_ids)
         if not persona:

@@ -99,7 +99,6 @@ class EditPersonaModal_Full(BasePersonaModal):
             is_owner=True,
             _persona=_persona
         )
-        
 
 class EditPersonaModal_Basic(BasePersonaModal):
     # cannot edit is_public and allowed_role_ids
@@ -141,8 +140,6 @@ class TestSelect(Modal, title="Test Select Modal"):
     def __init__(self, member: Member | User):
         super().__init__()
         self.member = member
-        
-    
     
     async def on_submit(self, interaction: Interaction):
         assert isinstance(self.label.component, Select)
