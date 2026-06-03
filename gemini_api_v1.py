@@ -47,14 +47,17 @@ async def cog_chatbot():
         
         try:
             if userPrompt.lower() in ["memo"]:
-                tResponse = await api.llm_api.persona_memory_summarize(
-                    _persona=_persona)
+                source_msg_uids = api.llm_api.get_msg_uids_from_memory(debug_persona_id, skip_memorized=True)
+                tResponse = await api.llm_api.persona_memory_summarize(_persona = _persona)
+                if tResponse._code == -1:
+                    print(f"Summarization failed: {tResponse.response_text}")
+                    continue
                 db.increment_interaction_count(debug_persona_id, user_dict.uid)
-                # msg_uid = time.time_ns()  # Using timestamp in nanoseconds as a unique message ID
+                print(f"Memorized msg_uids: {source_msg_uids}")
                 db.create_persona_memory(
                     memory_content=tResponse.response_text,
                     persona_uid=debug_persona_id,
-                    source_msg_uids=api.llm_api._extract_msg_uids_from_memory(debug_persona_id)
+                    source_msg_uids=source_msg_uids,
                 )
             else:
                 tResponse = await api.llm_api.persona_chat_oneshot(
@@ -64,6 +67,9 @@ async def cog_chatbot():
                     encoded_image=None,
                 )
                 db.increment_interaction_count(debug_persona_id, user_dict.uid)
+                if tResponse._code == -1:
+                    print(f"Chat failed: {tResponse.response_text}")
+                    continue
                 res = db.create_chat_interaction(
                     msg_uid=tResponse.timestamp,
                     user_uid=user_dict.uid,

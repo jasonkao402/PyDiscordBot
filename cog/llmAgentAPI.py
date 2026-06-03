@@ -1,6 +1,4 @@
 from collections import deque, defaultdict
-
-from ollama import chat
 from cog.utilFunc import UserDict
 from cog_dev.responseParsing import parse_response
 from cog_dev.moderation import PendingMessage, TrimedResponse
@@ -51,22 +49,28 @@ class LLMAPI:
     def reset_memory(self, persona_id: int):
         self.persona_session_memory.pop(persona_id, None)
     
-    def _expand_ChatInteraction_to_messages(self, chat_interactions: deque[ChatInteraction]) -> list[dict]:
+    def _expand_ChatInteraction_to_messages(self, chat_interactions: deque[ChatInteraction], skip_memorized: bool = False) -> list[dict]:
         messages = []
         for interaction in chat_interactions:
-            if interaction.user_prompt:
+            # skip messages that are already marked as memorized if skip_memorized is True 
+            if skip_memorized and interaction.is_memorized:
+                continue
+
+            if interaction.user_prompt and interaction.main_content:
                 messages.append({"role": "user", "content": interaction.user_prompt})
-            messages.append({"role": "assistant", "content": interaction.main_content})
+                messages.append({"role": "assistant", "content": interaction.main_content})
+
         return messages
 
-    def _extract_msg_uids_from_memory(self, persona_id: int) -> list[int]:
-        return [interaction.msg_uid for interaction in self.persona_session_memory[persona_id]]
+    def get_msg_uids_from_memory(self, persona_id: int, skip_memorized: bool = False) -> list[int]:
+        chat_interactions = self.persona_session_memory[persona_id]
+        return [interaction.msg_uid for interaction in chat_interactions if not (skip_memorized and interaction.is_memorized)]
     
-    def _yield_debug_response(self, message: str) -> TrimedResponse:
+    def _debug_response(self, message: str, timestamp: int) -> TrimedResponse:
         return TrimedResponse(
             response_text=f"[Debug] {_now_iso()} {message}",
             thinking_content="",
-            timestamp=time_ns(),
+            timestamp=timestamp,
             token_usage={}
         )
         
@@ -79,31 +83,6 @@ class LLMAPI:
         """
         _timestamp = time_ns()
         try:
-            """
-            # Google API 將 messages 轉成 Google GenAI 的 contents
-            message_contents = [
-                gtypes.Content(parts=list([gtypes.Part(text=msg['content'])]), role=msg["role"]) for msg in messages
-            ]
-            
-            if image:
-                message_contents.append(
-                    gtypes.Content(parts=[image], role="user")
-                )
-            content_config = gtypes.GenerateContentConfig(
-                system_instruction=system,
-                max_output_tokens=4096,
-                thinking_config=gtypes.ThinkingConfig(
-                    thinking_level=gtypes.ThinkingLevel.LOW
-                ),
-            )
-            response = await self.llm_apis[self.round_robin_api_index].aio.models.generate_content(
-                model=self.main_model,
-                contents=list(message_contents),
-                config=content_config,
-            )
-            # """
-            # Deepseek API / OpenAI API
-            # """
             message_list=[
                     {"role": "system", "content": system},
                     *[
@@ -118,7 +97,7 @@ class LLMAPI:
                 message_list[-1]["content"] = [image, {"type": "text", "text": message_list[-1]["content"]}]
             
             if self.debug_mode:
-                return self._yield_debug_response("This is a debug response. No actual API call was made.")
+                return self._debug_response("This is a debug response. No actual API call was made.", _timestamp)
 
             else:
                 response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
@@ -127,11 +106,10 @@ class LLMAPI:
                     max_tokens=4096,
                     extra_body={"reasoning": {"enabled": True}},
                 )
-            # """
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
             print(f"API Error: {api_error}\n---")
-            return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", timestamp=_timestamp, token_usage={})
+            return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", timestamp=_timestamp, token_usage={}, _code=-1)
         
         response_text = str(response.choices[0].message.content)
         thinking_content = str(getattr(response.choices[0].message, 'reasoning', ""))
@@ -141,7 +119,8 @@ class LLMAPI:
             "total_tokens": response.usage.total_tokens,
             "cost": getattr(response.usage, 'cost', 0)  # Some APIs might provide estimated cost
         } if response.usage else {}
-        
+        response_code = 200 if response else -1
+
         final_msg = await web_api.pending_manager.moderate(
             PendingMessage(
                 uid=str(uuid4()),
@@ -156,7 +135,8 @@ class LLMAPI:
             response_text=final_msg.content,
             thinking_content=thinking_content,
             timestamp=_timestamp,
-            token_usage=token_usage
+            token_usage=token_usage,
+            _code=response_code
         )
     
     async def persona_chat_oneshot(self, prompt_str: str, _persona: Persona, _user_dict: UserDict, encoded_image: Optional[str]) -> TrimedResponse:
@@ -174,18 +154,7 @@ class LLMAPI:
         try:
             image_part = dict()
             if encoded_image:
-                # Handle image attachments
-                # base64_image = base64.b64encode(await message.attachments[0].read()).decode('utf-8')
-                # google AI code
-                # print(f'Encoded image size: {len(base64_image)} characters')
-                # image_part = gtypes.Part(
-                #     inline_data=gtypes.Blob(
-                #         mime_type="image/jpeg",
-                #         data=base64.b64decode(base64_image),
-                #     ),
-                #     media_resolution=gtypes.MediaResolution.MEDIA_RESOLUTION_LOW
-                # )
-                # OpenAI code
+                # OpenAI
                 image_part = {
                     "type": "image_url",
                     "image_url": {
@@ -203,7 +172,8 @@ class LLMAPI:
                 response_text = f'{user_persona_pair} API request timed out. Please try again later.\n{e}',
                 thinking_content="",
                 timestamp=_timestamp,
-                token_usage={}
+                token_usage={},
+                _code=-1
             )
             
         except Exception as e:
@@ -212,7 +182,8 @@ class LLMAPI:
                 response_text = f'{user_persona_pair} 發生錯誤，請聯繫主人\n{e}',
                 thinking_content="",
                 timestamp=_timestamp,
-                token_usage={}
+                token_usage={},
+                _code=-1
             )
             
         else:
@@ -228,7 +199,7 @@ class LLMAPI:
             if self.debug_mode:
                 print(f"Current session memory for persona {persona_name}:")
                 for idx, mem in enumerate(chatMem):
-                    print(f"{idx+1:2d}. User Prompt: {mem.user_prompt} | Assistant Reply: {mem.main_content}")
+                    print(f"{idx+1:2d}. User Prompt: {mem.user_prompt} | Assistant Reply: {mem.main_content} | Memorized: {mem.is_memorized}")
                 
             # chatMem.append(prompt)
             # chatMem.append({'role': 'assistant', 'content': reply_content})
@@ -244,27 +215,42 @@ class LLMAPI:
                 response_text="No recent interactions to summarize.",
                 thinking_content="",
                 timestamp=_timestamp,
-                token_usage={}
+                token_usage={},
+                _code=-1
             )
             
         system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{chat_config["promptMemoryFormat"]}'
-        expand_messages = self._expand_ChatInteraction_to_messages(chatMem)
+        expand_messages = self._expand_ChatInteraction_to_messages(chatMem, skip_memorized=True)
+        tResponse : TrimedResponse
         try:
+            if not expand_messages:
+                return TrimedResponse(
+                    response_text="No new interactions to summarize since the last summarization.",
+                    thinking_content="",
+                    timestamp=_timestamp,
+                    token_usage={},
+                    _code=-1
+                )
             if self.debug_mode:
-                print(f"Summarizing memory with system instruction:\n{system_instruction}\nchatMem:")
+                print(f"Summarizing memory with system instruction:\n{system_instruction}\nChatMem len() = {len(expand_messages)}:")
                 for idx, mem in enumerate(expand_messages):
                     print(f"{idx+1:2d} {mem['role'][0]}: {mem['content']}")
-                return self._yield_debug_response("This is a debug response for memory summarization. No actual API call was made.")
-            
-            result = await self.llm_chat_v6(expand_messages, system_instruction, user_dict=UserDict(uid=0, name="System", display_name="System"))
-            
+                tResponse = self._debug_response("This is a debug response for memory summarization. No actual API call was made.", _timestamp)
+            else:
+                tResponse = await self.llm_chat_v6(expand_messages, system_instruction, user_dict=UserDict(uid=0, name="System", display_name="System"))
+
         except Exception as e:
             print(f'Memory summarization error:\n{e}')
             return TrimedResponse(
                 response_text = f'Memory summarization error:\n{e}',
                 thinking_content="",
                 timestamp=_timestamp,
-                token_usage={}
+                token_usage={},
+                _code=-1
             )
-        
-        return result
+        else:
+            # only mark as memorized if summarization succeeded
+            for message in chatMem:
+                message.is_memorized = True
+
+        return tResponse

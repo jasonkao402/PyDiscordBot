@@ -18,6 +18,7 @@ class TrimedResponse:
     thinking_content: str
     timestamp: int
     token_usage: dict[str, int]
+    _code: int = 0
     
     def __str__(self):
         return f"Response:\n{self.response_text}\nThinking:\n{self.thinking_content}\nTokens:\n{' '.join(f'{k}: {v}' for k, v in self.token_usage.items())}"
