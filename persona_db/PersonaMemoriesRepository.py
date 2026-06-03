@@ -1,13 +1,13 @@
 from persona_db.DatabaseModels import PersonaMemories
 from typing import List, Optional
-from persona_db.helper_func import SQLiteRepository, _now_iso
+from persona_db.helper_func import SQLiteRepository, _now_iso, _join_uid_list, _split_uid_list
 
 def _persona_memory_from_row(row: tuple) -> PersonaMemories:
     return PersonaMemories(
         memory_uid=row[0],
         memory_content=row[1],
         persona_uid=row[2],
-        source_msg_uids=row[3],
+        source_msg_uids=_split_uid_list(row[3]),
         created_at=row[4],
         updated_at=row[5],
     )
@@ -32,13 +32,9 @@ class PersonaMemoriesRepository(SQLiteRepository):
         self,
         memory_content: str,
         persona_uid: int,
-        source_msg_uids: str,
-        created_at: Optional[str] = None,
-        updated_at: Optional[str] = None,
+        source_msg_uids: List[int],
     ) -> int:
-        now = _now_iso()
-        created_at = created_at or now
-        updated_at = updated_at or now
+        _now = _now_iso()
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -47,7 +43,7 @@ class PersonaMemoriesRepository(SQLiteRepository):
                 )
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (memory_content, persona_uid, source_msg_uids, created_at, updated_at),
+                (memory_content, persona_uid, _join_uid_list(source_msg_uids), _now, _now),
             )
             memory_uid = cursor.lastrowid
             if not memory_uid:

@@ -154,9 +154,8 @@ class PersonaDatabase:
         user_uid: int,
         persona_uid: int,
         main_content: str,
-        created_at: Optional[str] = None,
-        is_memorized: bool = False,
         summary: Optional[str] = None,
+        user_prompt: Optional[str] = None,
     ) -> bool:
         """Create a chat interaction record. returns the msg_uid if successful."""
         with self._transaction():
@@ -165,9 +164,8 @@ class PersonaDatabase:
                 user_uid=user_uid,
                 persona_uid=persona_uid,
                 main_content=main_content,
-                created_at=created_at,
-                is_memorized=is_memorized,
                 summary=summary,
+                user_prompt=user_prompt,
             )
 
     def get_chat_interaction(self, msg_uid: int) -> Optional[ChatInteraction]:
@@ -201,9 +199,7 @@ class PersonaDatabase:
         self,
         memory_content: str,
         persona_uid: int,
-        source_msg_uids: str,
-        created_at: Optional[str] = None,
-        updated_at: Optional[str] = None,
+        source_msg_uids: List[int],
     ) -> int:
         """Create a persona memory record."""
         with self._transaction():
@@ -211,8 +207,6 @@ class PersonaDatabase:
                 memory_content=memory_content,
                 persona_uid=persona_uid,
                 source_msg_uids=source_msg_uids,
-                created_at=created_at,
-                updated_at=updated_at,
             )
 
     def get_persona_memory(self, memory_uid: int) -> Optional[PersonaMemories]:
@@ -307,7 +301,7 @@ def message_test():
     mem_id = db.create_persona_memory(
         memory_content="This is a memory.", 
         persona_uid=persona_uid,
-        source_msg_uids=",".join(log_msg)
+        source_msg_uids=log_msg
     )
     memory = db.get_persona_memory(mem_id)
     print(f"Created memory: {memory}")

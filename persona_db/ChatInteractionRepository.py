@@ -12,6 +12,7 @@ def _chat_interaction_from_row(row: tuple) -> ChatInteraction:
         is_memorized=bool(row[4]),
         main_content=row[5],
         summary=row[6],
+        user_prompt=row[7] 
     )
 
 class ChatInteractionRepository(SQLiteRepository):
@@ -26,6 +27,7 @@ class ChatInteractionRepository(SQLiteRepository):
                 is_memorized INTEGER NOT NULL DEFAULT 0 CHECK(is_memorized IN (0, 1)),
                 main_content TEXT NOT NULL DEFAULT '',
                 summary TEXT DEFAULT NULL,
+                user_prompt TEXT DEFAULT NULL,
                 FOREIGN KEY (user_uid) REFERENCES discord_users (user_uid),
                 FOREIGN KEY (persona_uid) REFERENCES personas (uid)
             )
@@ -38,27 +40,27 @@ class ChatInteractionRepository(SQLiteRepository):
         user_uid: int,
         persona_uid: int,
         main_content: str,
-        created_at: Optional[str] = None,
-        is_memorized: bool = False,
         summary: Optional[str] = None,
+        user_prompt: Optional[str] = None,
     ) -> bool:
-        created_at = created_at or _now_iso()
+        _now = _now_iso()
         with self.connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO chat_interactions (
-                    msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary
+                    msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary, user_prompt
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     msg_uid,
                     user_uid,
                     persona_uid,
-                    created_at,
-                    int(is_memorized),
+                    _now,
+                    0,
                     main_content,
                     summary,
+                    user_prompt,
                 ),
             )
             return cursor.rowcount > 0
@@ -67,7 +69,7 @@ class ChatInteractionRepository(SQLiteRepository):
         with self.connection() as conn:
             cursor = conn.execute(
                 """
-                SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary
+                SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary, user_prompt
                 FROM chat_interactions
                 WHERE msg_uid = ?
                 """,
@@ -78,7 +80,7 @@ class ChatInteractionRepository(SQLiteRepository):
 
     def list_by_persona_uid(self, persona_uid: int, limit: Optional[int] = None) -> List[ChatInteraction]:
         query = """
-            SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary
+            SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary, user_prompt
             FROM chat_interactions
             WHERE persona_uid = ?
             ORDER BY created_at DESC
@@ -94,7 +96,7 @@ class ChatInteractionRepository(SQLiteRepository):
 
     def list_by_user_uid(self, user_uid: int, limit: Optional[int] = None) -> List[ChatInteraction]:
         query = """
-            SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary
+            SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary, user_prompt
             FROM chat_interactions
             WHERE user_uid = ?
             ORDER BY created_at DESC
@@ -112,7 +114,7 @@ class ChatInteractionRepository(SQLiteRepository):
         if not updates:
             return False
 
-        allowed_fields = {"user_uid", "persona_uid", "created_at", "is_memorized", "main_content", "summary"}
+        allowed_fields = {"user_uid", "persona_uid", "created_at", "is_memorized", "main_content", "summary", "user_prompt"}
         invalid_fields = set(updates) - allowed_fields
         if invalid_fields:
             raise ValueError(f"Unsupported chat interaction update fields: {sorted(invalid_fields)}")

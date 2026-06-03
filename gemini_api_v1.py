@@ -12,11 +12,11 @@ from config_loader import configToml
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
 llm_base_url = link_config.get("link_openrouter", "")
-mainModel = chat_config["modelDebug"]
+debugModel = chat_config["modelDebug"]
 
 class ChatCog:
     def __init__(self):
-        self.llm_api = LLMAPI(_main_model=mainModel)
+        self.llm_api = LLMAPI(_main_model=debugModel, _debug_mode=True)
         
     async def close(self):
         await self.llm_api.cleanup()
@@ -43,12 +43,19 @@ async def cog_chatbot():
         if userPrompt.lower() in ["exit", "quit"]:
             break
         
+        print("Processing...")
+        
         try:
-            print("Processing...")
             if userPrompt.lower() in ["memo"]:
                 tResponse = await api.llm_api.persona_memory_summarize(
                     _persona=_persona)
-                
+                db.increment_interaction_count(debug_persona_id, user_dict.uid)
+                # msg_uid = time.time_ns()  # Using timestamp in nanoseconds as a unique message ID
+                db.create_persona_memory(
+                    memory_content=tResponse.response_text,
+                    persona_uid=debug_persona_id,
+                    source_msg_uids=api.llm_api._extract_msg_uids_from_memory(debug_persona_id)
+                )
             else:
                 tResponse = await api.llm_api.persona_chat_oneshot(
                     prompt_str=userPrompt,
@@ -57,13 +64,14 @@ async def cog_chatbot():
                     encoded_image=None,
                 )
                 db.increment_interaction_count(debug_persona_id, user_dict.uid)
-                msg_uid = time.time_ns()  # Using timestamp in nanoseconds as a unique message ID
-                db.create_chat_interaction(
-                    msg_uid=msg_uid,
+                res = db.create_chat_interaction(
+                    msg_uid=tResponse.timestamp,
                     user_uid=user_dict.uid,
                     persona_uid=debug_persona_id,
                     main_content=tResponse.response_text,
+                    user_prompt=userPrompt,
                 )
+                assert res, "Failed to create chat interaction in database"
             print(str(tResponse))
 
         except Exception as e:

@@ -57,17 +57,13 @@ class PersonaRepository(SQLiteRepository):
         # Only migrate if old 'visibility' exists and new 'is_public' doesn't
         if "visibility" in columns and "is_public" not in columns:
             print(f"Existing columns in personas table before migration: {columns}")
-            conn.execute("ALTER TABLE personas ADD COLUMN is_public INTEGER NOT NULL CHECK(visibility IN (0, 1)) DEFAULT 0")
-            conn.execute("ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT ''")
-            conn.execute("UPDATE personas SET is_public = 1 WHERE visibility = 1")
+            # conn.execute("ALTER TABLE personas ADD COLUMN is_public INTEGER NOT NULL CHECK(visibility IN (0, 1)) DEFAULT 0")
+            # conn.execute("ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT ''")
+            # conn.execute("UPDATE personas SET is_public = 1 WHERE visibility = 1")
             
             cursor = conn.execute("PRAGMA table_info(personas)")
             columns = {row[1] for row in cursor.fetchall()}
             print(f"Existing columns in personas table after migration: {columns}")
-            
-        cursor = conn.execute("PRAGMA table_info(personas)")
-        columns = {row[1] for row in cursor.fetchall()}
-        print(f"Existing columns in personas table after migration: {columns}")
             
         
     def count_by_owner(self, owner_uid: int) -> int:
@@ -83,16 +79,16 @@ class PersonaRepository(SQLiteRepository):
             row = cursor.fetchone()
             return row[0] if row else 0
 
-    def create(self, persona: str, content: str, owner_uid: int, is_public: bool | PersonaVisibility, allowed_role_ids: Set[int] = set()) -> int:
+    def create(self, persona: str, content: str, owner_uid: int, is_public: bool, allowed_role_ids: Set[int] = set()) -> int:
         now = _now_iso()
-        is_public_value = is_public.value if isinstance(is_public, PersonaVisibility) else int(is_public)
+        # is_public_value = is_public.value if isinstance(is_public, PersonaVisibility) else int(is_public)
         with self.connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO personas (persona_name, content, owner_uid, is_public, allowed_role_ids, created_at, updated_at, last_interaction_recv_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (persona, content, owner_uid, is_public_value, _join_uid_list(allowed_role_ids), now, now, now),
+                (persona, content, owner_uid, is_public, _join_uid_list(allowed_role_ids), now, now, now),
             )
             persona_uid = cursor.lastrowid
             if not persona_uid:

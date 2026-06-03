@@ -1,8 +1,12 @@
 from collections import deque, defaultdict
+
+from ollama import chat
 from cog.utilFunc import UserDict
 from cog_dev.responseParsing import parse_response
 from cog_dev.moderation import PendingMessage, TrimedResponse
 from persona_db.PersonaDatabase import Persona
+from persona_db.DatabaseModels import ChatInteraction
+from persona_db.helper_func import _now_iso
 import cog_dev.web_api as web_api
 from config_loader import configToml
 
@@ -11,7 +15,7 @@ from openai import AsyncOpenAI
 from google.genai import types as gtypes, errors
 from typing import Optional
 from uuid import uuid4
-from time import strftime
+from time import strftime, time_ns
 from cog.utilFunc import wcformat
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
@@ -23,29 +27,49 @@ SUM_MEMORY_RANGE = 10
 VECTOR_MEMORY_RANGE = 3
 
 class LLMAPI:
-    def __init__(self, _main_model: Optional[str] = None):
+    def __init__(self, _main_model: Optional[str] = None, _debug_mode: bool = False):
         self.main_model = _main_model if _main_model is not None else chat_config["modelChat"]
         self.round_robin_api_index = 0
         self.api_call_count = 0  # Counter to track the number of API calls
         self.api_switch_threshold = 5  # Number of calls before switching to the next API
         self.round_robin_api_collection = configToml['apiToken'].get('openrouter_llm', [])
+        self.debug_mode = _debug_mode
         # self.llm_apis = [genai.Client(
         #     api_key=api_key, http_options=http_options,
         # ) for api_key in self.round_robin_api_collection]
         self.llm_apis = [AsyncOpenAI(api_key = api_key, base_url = llm_base_url) for api_key in self.round_robin_api_collection]
-        self.persona_session_memory: defaultdict[int, deque[dict]] = defaultdict(lambda: deque(maxlen=FULL_MEMORY_RANGE))
+        self.persona_session_memory: defaultdict[int, deque[ChatInteraction]] = defaultdict(lambda: deque(maxlen=FULL_MEMORY_RANGE))
         print(f'Loaded LLM API with model = {self.main_model}, created {len(self.llm_apis)} clients @ {llm_base_url}.')
     
     async def cleanup(self):
         for llm_api in self.llm_apis:
             await llm_api.close()
     
-    def inspect_memory(self, persona_id: int) -> list[dict]:
+    def inspect_memory(self, persona_id: int) -> list[ChatInteraction]:
         return list(self.persona_session_memory[persona_id])
-                
+    
     def reset_memory(self, persona_id: int):
         self.persona_session_memory.pop(persona_id, None)
-          
+    
+    def _expand_ChatInteraction_to_messages(self, chat_interactions: deque[ChatInteraction]) -> list[dict]:
+        messages = []
+        for interaction in chat_interactions:
+            if interaction.user_prompt:
+                messages.append({"role": "user", "content": interaction.user_prompt})
+            messages.append({"role": "assistant", "content": interaction.main_content})
+        return messages
+
+    def _extract_msg_uids_from_memory(self, persona_id: int) -> list[int]:
+        return [interaction.msg_uid for interaction in self.persona_session_memory[persona_id]]
+    
+    def _yield_debug_response(self, message: str) -> TrimedResponse:
+        return TrimedResponse(
+            response_text=f"[Debug] {_now_iso()} {message}",
+            thinking_content="",
+            timestamp=time_ns(),
+            token_usage={}
+        )
+        
     async def llm_chat_v6(self, messages: list[dict], system: str, user_dict: UserDict, image: Optional[gtypes.Part | dict] = None) -> TrimedResponse:
         """
         messages: list of strings (model / user messages)
@@ -53,6 +77,7 @@ class LLMAPI:
         user_dict: dictionary containing user information
         image: optional image part for the last user message
         """
+        _timestamp = time_ns()
         try:
             """
             # Google API 將 messages 轉成 Google GenAI 的 contents
@@ -92,17 +117,21 @@ class LLMAPI:
             if image:
                 message_list[-1]["content"] = [image, {"type": "text", "text": message_list[-1]["content"]}]
             
-            response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
-                model=self.main_model,
-                messages=message_list,
-                max_tokens=4096,
-                extra_body={"reasoning": {"enabled": True}},
-            )
+            if self.debug_mode:
+                return self._yield_debug_response("This is a debug response. No actual API call was made.")
+
+            else:
+                response = await self.llm_apis[self.round_robin_api_index].chat.completions.create(
+                    model=self.main_model,
+                    messages=message_list,
+                    max_tokens=4096,
+                    extra_body={"reasoning": {"enabled": True}},
+                )
             # """
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
             print(f"API Error: {api_error}\n---")
-            return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", token_usage={})
+            return TrimedResponse(response_text=f"API Error: {api_error}", thinking_content="", timestamp=_timestamp, token_usage={})
         
         response_text = str(response.choices[0].message.content)
         thinking_content = str(getattr(response.choices[0].message, 'reasoning', ""))
@@ -126,6 +155,7 @@ class LLMAPI:
         return TrimedResponse(
             response_text=final_msg.content,
             thinking_content=thinking_content,
+            timestamp=_timestamp,
             token_usage=token_usage
         )
     
@@ -137,9 +167,10 @@ class LLMAPI:
         print(f'{user_persona_pair}: {prompt_str}')
 
         system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
-        prompt = {'role': 'user', 'content': f'{_user_dict.display_name} said {prompt_str}'}
+        latest_prompt = {'role': 'user', 'content': f'{_user_dict.display_name} said {prompt_str}'}
 
         chatMem = self.persona_session_memory[_persona.uid]
+        _timestamp = time_ns()
         try:
             image_part = dict()
             if encoded_image:
@@ -162,7 +193,7 @@ class LLMAPI:
                         "detail": "low",
                     }
                 }
-            tResponse = await self.llm_chat_v6([*chatMem, prompt], system_instruction, user_dict=_user_dict, image=image_part)
+            tResponse = await self.llm_chat_v6([*self._expand_ChatInteraction_to_messages(chatMem), latest_prompt], system_instruction, user_dict=_user_dict, image=image_part)
 
             # print(f'{user_persona_pair} Response:\n{tResponse}')
 
@@ -171,6 +202,7 @@ class LLMAPI:
             return TrimedResponse(
                 response_text = f'{user_persona_pair} API request timed out. Please try again later.\n{e}',
                 thinking_content="",
+                timestamp=_timestamp,
                 token_usage={}
             )
             
@@ -179,27 +211,60 @@ class LLMAPI:
             return TrimedResponse(
                 response_text = f'{user_persona_pair} 發生錯誤，請聯繫主人\n{e}',
                 thinking_content="",
+                timestamp=_timestamp,
                 token_usage={}
             )
             
         else:
             # Only append to memory if no exception
-            reply_content = tResponse.response_text
-            chatMem.append(prompt)
-            chatMem.append({'role': 'assistant', 'content': reply_content})
+            chatMem.append(ChatInteraction(
+                msg_uid=_timestamp,
+                user_uid=_user_dict.uid,
+                persona_uid=_persona.uid,
+                main_content=tResponse.response_text,
+                user_prompt=latest_prompt["content"],
+            ))
+            # For debugging: print the current memory
+            if self.debug_mode:
+                print(f"Current session memory for persona {persona_name}:")
+                for idx, mem in enumerate(chatMem):
+                    print(f"{idx+1:2d}. User Prompt: {mem.user_prompt} | Assistant Reply: {mem.main_content}")
+                
+            # chatMem.append(prompt)
+            # chatMem.append({'role': 'assistant', 'content': reply_content})
             
             return tResponse
     
     async def persona_memory_summarize(self, _persona: Persona) -> TrimedResponse:
         """Summarize the recent memory for a given persona."""
         chatMem = self.persona_session_memory[_persona.uid]
+        _timestamp = time_ns()
         if not chatMem:
             return TrimedResponse(
                 response_text="No recent interactions to summarize.",
                 thinking_content="",
+                timestamp=_timestamp,
                 token_usage={}
             )
             
-        system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
-        system_instruction = chat_config["promptMemoryFormat"]
-        return await self.llm_chat_v6(list(chatMem), system_instruction, user_dict=UserDict(uid=0, name="System", display_name="System"))
+        system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{chat_config["promptMemoryFormat"]}'
+        expand_messages = self._expand_ChatInteraction_to_messages(chatMem)
+        try:
+            if self.debug_mode:
+                print(f"Summarizing memory with system instruction:\n{system_instruction}\nchatMem:")
+                for idx, mem in enumerate(expand_messages):
+                    print(f"{idx+1:2d} {mem['role'][0]}: {mem['content']}")
+                return self._yield_debug_response("This is a debug response for memory summarization. No actual API call was made.")
+            
+            result = await self.llm_chat_v6(expand_messages, system_instruction, user_dict=UserDict(uid=0, name="System", display_name="System"))
+            
+        except Exception as e:
+            print(f'Memory summarization error:\n{e}')
+            return TrimedResponse(
+                response_text = f'Memory summarization error:\n{e}',
+                thinking_content="",
+                timestamp=_timestamp,
+                token_usage={}
+            )
+        
+        return result

@@ -16,6 +16,7 @@ class ActionState(IntEnum):
 class TrimedResponse:
     response_text: str
     thinking_content: str
+    timestamp: int
     token_usage: dict[str, int]
     
     def __str__(self):

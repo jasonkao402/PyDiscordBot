@@ -3,6 +3,8 @@ from enum import Enum
 from typing import List, Optional, Set
 import json
 
+from persona_db.helper_func import _now_iso
+
 class PersonaVisibility(Enum):
     PRIVATE = 0
     PUBLIC = 1
@@ -19,8 +21,8 @@ class Persona:
     # visibility: PersonaVisibility
     is_public: bool
     allowed_role_ids: Set[int]
-    created_at: str
-    updated_at: str
+    created_at: str = _now_iso()
+    updated_at: str = _now_iso()
     last_interaction_recv_at: Optional[str] = None
     interaction_count: int = 0 # unused for now
 
@@ -72,16 +74,17 @@ class ChatInteraction:
     msg_uid: int #PK
     user_uid: int #FK
     persona_uid: int #FK
-    created_at: str
+    created_at: str = _now_iso()
     is_memorized: bool = False
     main_content: str = ""
-    summary: Optional[str] = None
+    summary: str = ""
+    user_prompt: str = ""
     
 @dataclass
 class PersonaMemories:
     memory_uid: int #PK
     memory_content: str
     persona_uid: int #FK
-    source_msg_uids: str # comma-separated list of msg_uids that contributed to this memory
-    created_at: str
-    updated_at: str
+    source_msg_uids: List[int]
+    created_at: str = _now_iso()
+    updated_at: str = _now_iso()

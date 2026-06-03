@@ -98,7 +98,7 @@ class TestPersonaRepository(BaseTestWithDB):
         self.repo = self.db.personas
 
     def test_create_and_fetch(self):
-        uid = self.repo.create("Bot1", "Hello", 100, PersonaVisibility.PUBLIC)
+        uid = self.repo.create("Bot1", "Hello", 100, True)
         self.assertIsNotNone(uid)
         p = self.repo.fetch_by_uid(uid)
         self.assertIsNotNone(p)
@@ -111,16 +111,16 @@ class TestPersonaRepository(BaseTestWithDB):
 
     def test_count_by_owner(self):
         self.assertEqual(self.repo.count_by_owner(100), 0)
-        self.repo.create("A", "", 100, PersonaVisibility.PRIVATE)
+        self.repo.create("A", "", 100, False)
         self.assertEqual(self.repo.count_by_owner(100), 1)
-        self.repo.create("B", "", 100, PersonaVisibility.PRIVATE)
+        self.repo.create("B", "", 100, False)
         self.assertEqual(self.repo.count_by_owner(100), 2)
 
     def test_list_visible_for_user(self):
-        uid1 = self.repo.create("Private", "", 100, PersonaVisibility.PRIVATE)
-        uid2 = self.repo.create("Public", "", 200, PersonaVisibility.PUBLIC)
-        uid3 = self.repo.create("OtherPrivate", "", 200, PersonaVisibility.PRIVATE, allowed_role_ids={999})
-        uid4 = self.repo.create("OtherPrivate2", "", 200, PersonaVisibility.PRIVATE, allowed_role_ids={888})
+        uid1 = self.repo.create("Private", "", 100, False)
+        uid2 = self.repo.create("Public", "", 200, True)
+        uid3 = self.repo.create("OtherPrivate", "", 200, False, allowed_role_ids={999})
+        uid4 = self.repo.create("OtherPrivate2", "", 200, False, allowed_role_ids={888})
         # User 100 sees own private + public
         visible = self.repo.list_visible_for_user(100, {999})
         self.assertEqual(len(visible), 3)
@@ -139,7 +139,7 @@ class TestPersonaRepository(BaseTestWithDB):
         self.assertEqual(visible[0].uid, uid2)
         
     def test_update_success(self):
-        uid = self.repo.create("MyABC", "", 100, PersonaVisibility.PRIVATE)
+        uid = self.repo.create("MyABC", "", 100, False)
         # allowed_fields = self.db.get_allowed_fields_for_user(uid, 100)
         result = self.repo.update(uid, persona_name="MyXYZ", is_public=True)
         self.assertTrue(result)
@@ -149,7 +149,7 @@ class TestPersonaRepository(BaseTestWithDB):
         
     def test_update_teammember(self):
         # Create a persona that allows role 999
-        uid = self.repo.create("TeamBot", "", 100, PersonaVisibility.PRIVATE, allowed_role_ids={999})
+        uid = self.repo.create("TeamBot", "", 100, False, allowed_role_ids={999})
         # User 200 with role 999 should be able to update allowed fields
         result = self.db.update_persona(uid, 200, {999}, persona_name="TeamBotUpdated")  # directly update to bypass permission check for this test
         self.assertTrue(result)
@@ -159,7 +159,7 @@ class TestPersonaRepository(BaseTestWithDB):
         self.assertEqual(p.persona_name, "TeamBotUpdated")
         
     def test_update_wrong_owner(self):
-        uid = self.repo.create("Test", "", 100, PersonaVisibility.PRIVATE)
+        uid = self.repo.create("Test", "", 100, False)
         perm = self.db._get_allowed_fields_for_user(uid, 300, set())  # user 300 with no roles should have only last_interaction_recv_at
         # print(f"Allowed fields for user 300: {perm}")
         self.assertEqual(perm, {"last_interaction_recv_at"})
@@ -169,7 +169,7 @@ class TestPersonaRepository(BaseTestWithDB):
         self.assertEqual(p.persona_name, "Test")  # unchanged
 
     def test_update_invalid_field(self):
-        uid = self.repo.create("Test", "", 100, PersonaVisibility.PRIVATE)
+        uid = self.repo.create("Test", "", 100, False)
         # with self.assertRaises(ValueError):
         result = self.db.update_persona(uid, 100, set(), fake_field="value")
         self.assertFalse(result)
@@ -181,13 +181,13 @@ class TestPersonaRepository(BaseTestWithDB):
         
 
     def test_delete_success(self):
-        uid = self.repo.create("DeleteMe", "", 100, PersonaVisibility.PRIVATE)
+        uid = self.repo.create("DeleteMe", "", 100, False)
         result = self.repo.delete(uid, 100)
         self.assertTrue(result)
         self.assertIsNone(self.repo.fetch_by_uid(uid))
 
     def test_delete_wrong_owner(self):
-        uid = self.repo.create("DeleteMe", "", 100, PersonaVisibility.PRIVATE)
+        uid = self.repo.create("DeleteMe", "", 100, False)
         result = self.repo.delete(uid, 200)
         self.assertFalse(result)
         self.assertIsNotNone(self.repo.fetch_by_uid(uid))
@@ -266,8 +266,8 @@ class TestInteractionRepository(BaseTestWithDB):
         super().setUp()
         self.repo = self.db.interactions
         # Create personas to interact with
-        self.p1 = self.db.personas.create("BotA", "", 100, PersonaVisibility.PUBLIC)
-        self.p2 = self.db.personas.create("BotB", "", 100, PersonaVisibility.PRIVATE)
+        self.p1 = self.db.personas.create("BotA", "", 100, True)
+        self.p2 = self.db.personas.create("BotB", "", 100, False)
         self.user_id = 100
 
     def test_increment_interaction_count_updates_persona(self):
@@ -332,7 +332,7 @@ class TestChatInteractionRepository(BaseTestWithDB):
         super().setUp()
         self.repo = self.db.chat_interactions
         
-        self.persona_uid = self.db.personas.create("TestPersona", "", 100, PersonaVisibility.PUBLIC)
+        self.persona_uid = self.db.personas.create("TestPersona", "", 100, True)
 
     def test_create_and_fetch(self):
         msg_id = 12345
@@ -424,21 +424,21 @@ class TestPersonaMemoriesRepository(BaseTestWithDB):
     def setUp(self):
         super().setUp()
         self.repo = self.db.persona_memories
-        self.persona_uid = self.db.personas.create("MemBot", "", 100, PersonaVisibility.PUBLIC)
+        self.persona_uid = self.db.personas.create("MemBot", "", 100, True)
 
     def test_create_and_fetch(self):
-        mid = self.repo.create("Memory1", self.persona_uid, "1,2,3")
+        mid = self.repo.create("Memory1", self.persona_uid, [1, 2, 3])
         mem = self.repo.fetch_by_uid(mid)
         self.assertIsNotNone(mem)
         self.assertEqual(mem.memory_content, "Memory1")
-        self.assertEqual(mem.source_msg_uids, "1,2,3")
+        self.assertEqual(mem.source_msg_uids, [1, 2, 3])
 
     def test_fetch_nonexistent(self):
         self.assertIsNone(self.repo.fetch_by_uid(9999))
 
     def test_list_by_persona_uid(self):
-        m1 = self.repo.create("M1", self.persona_uid, "1")
-        m2 = self.repo.create("M2", self.persona_uid, "2")
+        m1 = self.repo.create("M1", self.persona_uid, [1])
+        m2 = self.repo.create("M2", self.persona_uid, [2])
         results = self.repo.list_by_persona_uid(self.persona_uid)
         self.assertEqual(len(results), 2)
         uids = {m.memory_uid for m in results}
@@ -446,19 +446,19 @@ class TestPersonaMemoriesRepository(BaseTestWithDB):
         self.assertIn(m2, uids)
 
     def test_update(self):
-        mid = self.repo.create("Old", self.persona_uid, "1")
+        mid = self.repo.create("Old", self.persona_uid, [1])
         ok = self.repo.update(mid, memory_content="New")
         self.assertTrue(ok)
         mem = self.repo.fetch_by_uid(mid)
         self.assertEqual(mem.memory_content, "New")
 
     def test_update_invalid_field(self):
-        mid = self.repo.create("Test", self.persona_uid, "1")
+        mid = self.repo.create("Test", self.persona_uid, [1])
         with self.assertRaises(ValueError):
             self.repo.update(mid, not_allowed=True)
 
     def test_delete(self):
-        mid = self.repo.create("Delete", self.persona_uid, "1")
+        mid = self.repo.create("Delete", self.persona_uid, [1])
         self.assertTrue(self.repo.delete(mid))
         self.assertIsNone(self.repo.fetch_by_uid(mid))
 
