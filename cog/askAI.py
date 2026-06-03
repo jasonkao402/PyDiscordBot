@@ -214,8 +214,8 @@ class askAI(commands.Cog):
         # Create an embed to display persona details
         embed = Embed(title=f"Current Persona: {_persona.persona_name} (#{_persona.uid})", color=Color.blue())
         embed.add_field(name="is_public", value="Yes" if _persona.is_public else "No", inline=False)
-        if not _persona.is_public:
-            embed.add_field(name="Content", value=_persona.content[:50], inline=False)  # Limit content to 1024 characters for embed
+        # if not _persona.is_public:
+        #     embed.add_field(name="Content", value=_persona.content[:50], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
         

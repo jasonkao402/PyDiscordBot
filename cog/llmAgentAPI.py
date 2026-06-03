@@ -222,19 +222,19 @@ class LLMAPI:
             
         system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{chat_config["promptMemoryFormat"]}'
         expand_messages = self._expand_ChatInteraction_to_messages(chatMem, skip_memorized=True)
+        if not expand_messages:
+            return TrimedResponse(
+                response_text="No new interactions to summarize since the last summarization.",
+                thinking_content="",
+                timestamp=_timestamp,
+                token_usage={},
+                _code=-1
+            )
         expand_messages.append({"role": "user", "content": chat_config["promptMemoryTrigger"]})
         tResponse : TrimedResponse
+        print(f"Summarizing memory with system instruction:\n...{system_instruction[-50:]}\nChatMem len() = {len(expand_messages)}:")
         try:
-            if not expand_messages:
-                return TrimedResponse(
-                    response_text="No new interactions to summarize since the last summarization.",
-                    thinking_content="",
-                    timestamp=_timestamp,
-                    token_usage={},
-                    _code=-1
-                )
             if self.debug_mode:
-                print(f"Summarizing memory with system instruction:\n...{system_instruction[-50:]}\nChatMem len() = {len(expand_messages)}:")
                 for idx, mem in enumerate(expand_messages):
                     print(f"{idx+1:2d} {mem['role'][0]}: {mem['content']}")
                 tResponse = self._debug_response("This is a debug response for memory summarization. No actual API call was made.", _timestamp)
