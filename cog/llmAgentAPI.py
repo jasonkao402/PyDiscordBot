@@ -106,6 +106,7 @@ class LLMAPI:
                     max_tokens=4096,
                     extra_body={"reasoning": {"enabled": True}},
                 )
+                
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
             print(f"API Error: {api_error}\n---")

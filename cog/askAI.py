@@ -268,7 +268,20 @@ class askAI(commands.Cog):
                 _user_dict=user,
                 encoded_image=encoded_image
             )
-            
+            if tResponse._code == -1:
+                await message.channel.send(f"Error from LLM API: {tResponse.response_text}")
+                return
+            self.db.increment_interaction_count(_persona.uid, user.uid)
+            res = self.db.create_chat_interaction(
+                msg_uid=tResponse.timestamp,
+                user_uid=user.uid,
+                persona_uid=_persona.uid,
+                main_content=tResponse.response_text,
+                user_prompt=_content,
+            )
+            if not res:
+                print("Failed to create chat interaction in database")
+
             # split both main and thinking content into multiple messages if too long for one message.
             # send thinking content reference link in the original channel to reduce clutter.
             msg_response_text = await self._long_message_splitter(message.channel, tResponse.response_text, title=_persona.persona_name)
@@ -284,7 +297,7 @@ class askAI(commands.Cog):
             else:
                 # No thinking content or debug channel available, just print response and token usage in debug channel or console
                 print(str(tResponse))
-            self.db.increment_interaction_count(_persona.uid, user.uid)
+            
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
@@ -388,7 +401,36 @@ class askAI(commands.Cog):
             f"已切換至 `{model}`",
             ephemeral=True  # Confirmation messages are better as ephemeral
         )
-        
+
+    @app_commands.command(name="memo", description="Summarize the current persona memory into a new memory")
+    async def _memo(self, interaction: Interaction):
+        user_id = interaction.user.id
+        persona_id = self.selection_cache.get(user_id, -1)
+        if persona_id == -1:
+            await interaction.response.send_message("No persona selected. Use /selectpersona to select one.")
+            return
+        _persona = self.persona_cache.get(persona_id, None)
+        if not _persona:
+            await interaction.response.send_message("Selected persona not found. Please select another persona using /selectpersona.")
+            return
+        source_msg_uids = self.llm_api.get_msg_uids_from_memory(persona_id, skip_memorized=True)
+        tResponse = await self.llm_api.persona_memory_summarize(_persona = _persona)
+        if tResponse._code == -1:
+            # print(f"Summarization failed: {tResponse.response_text}")
+            await interaction.response.send_message("Failed to summarize persona memory.")
+            return
+        self.db.increment_interaction_count(persona_id, user_id)
+        print(f"Memorized msg_uids: {source_msg_uids}")
+        res = self.db.create_persona_memory(
+            memory_content=tResponse.response_text,
+            persona_uid=persona_id,
+            source_msg_uids=source_msg_uids,
+        )
+        if not res:
+            print("Failed to create persona memory in database")
+            await interaction.response.send_message("Failed to create persona memory.")
+            return
+
 async def setup(bot:commands.Bot):
     cog_instance = askAI(bot)
     await bot.add_cog(cog_instance)
