@@ -1,4 +1,3 @@
-from turtle import up
 from typing import Optional, List, Set
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, TextChannel, app_commands, Webhook
@@ -9,8 +8,7 @@ from cog.llmAgentAPI import LLMAPI
 from cog.utilFunc import sepLines, wcformat, UserDict
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal_Full, EditPersonaModal_Basic, TestSelect
 from config_loader import configToml
-import re
-from persona_db.PersonaDatabase import PersonaDatabase, PersonaVisibility, Persona
+from persona_db.PersonaDatabase import PersonaDatabase, Persona
 from persona_db.helper_func import _join_uid_list, _split_uid_list
 import base64
 
@@ -318,7 +316,7 @@ class askAI(commands.Cog):
         user = message.author
         userDict = UserDict(
             uid = user.id,
-            name = user.display_name or user.name,
+            name = user.display_name,
         )
         # Ignore self messages
         if userDict.uid == self.bot.user.id:
@@ -496,14 +494,17 @@ class askAI(commands.Cog):
         await interaction.response.send_modal(modal)
     
     @app_commands.command(name="setname", description="Set the preferred name for the user")
-    async def _set_name(self, interaction: Interaction, name: str):
+    async def _set_name(self, interaction: Interaction, name: Optional[str]):
         user_id = interaction.user.id
+        if not name:
+            name = interaction.user.display_name
+        
         res = self.db.update_discord_user(user_id, preferred_name=name)
         if res:
             await interaction.response.send_message(f"Your preferred name has been set to {name}.")
         else:
             await interaction.response.send_message("Failed to update preferred name.")
-        # await interaction.response.send_message(f"Your preferred name has been set to {name}.")
+        self.preferred_name_cache[user_id] = name  # Update cache immediately
         
 async def setup(bot:commands.Bot):
     cog_instance = askAI(bot)

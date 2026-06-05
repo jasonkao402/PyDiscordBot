@@ -1,6 +1,6 @@
-from discord.ui import LayoutView, Modal, TextInput, Select, Label, RoleSelect
-from discord import Color, Interaction, Message, TextStyle, SelectOption, Member, User
-from typing import Optional, Set
+from discord.ui import Modal, TextInput, Select, Label
+from discord import Interaction, Message, TextStyle, SelectOption, Member, User
+from typing import Optional
 
 from persona_db.DatabaseModels import Persona
 from persona_db.helper_func import _join_uid_list, _split_uid_list

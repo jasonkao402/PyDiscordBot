@@ -1,5 +1,5 @@
 import sqlite3
-from persona_db.DatabaseModels import Persona, DiscordUser, ChatInteraction, PersonaVisibility, PersonaMemories
+from persona_db.DatabaseModels import Persona, DiscordUser, ChatInteraction, PersonaMemories
 from persona_db.PersonaRepository import PersonaRepository
 from persona_db.DiscordUserRepository import DiscordUserRepository
 from persona_db.InteractionRepository import InteractionRepository
