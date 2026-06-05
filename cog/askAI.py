@@ -1,6 +1,7 @@
 from typing import Optional, List, Set
 from discord import Client as DC_Client
 from discord import Color, Embed, Interaction, Message, TextChannel, app_commands, Webhook
+from discord.app_commands import Choice
 from discord.ext import commands
 from discord.abc import Messageable
 from typing import Optional
@@ -134,8 +135,22 @@ class askAI(commands.Cog):
                 self.persona_cache[persona_id] = _persona  # Refresh the cache with updated persona
         else:
             await interaction.response.send_message("Failed to update persona. Ensure you own the persona.", ephemeral=True)
-
-    @commands.hybrid_command(name="selectpersona")
+            
+    async def autocomplete_persona_id(self, interaction: Interaction, current: str) -> List[Choice[int]]:
+        """Autocomplete function for persona_id parameter in editpersona command."""
+        user_id = interaction.user.id
+        user_roles = getattr(interaction.user, 'roles', [])
+        user_role_ids = set(role.id for role in user_roles)
+        personas = self.persona_cache.values() if self.persona_cache else self.db.list_personas(user_id, user_role_ids)
+        filtered_personas = [p for p in personas if current in str(p.uid) or current.lower() in p.persona_name.lower()]
+        return [
+            Choice(name=f"{p.persona_name} (#{p.uid})", value=p.uid)
+            for p in filtered_personas[:25]
+        ]
+        
+    @commands.hybrid_command(name="selectpersona", description="選擇一個角色進行互動")
+    @app_commands.describe(persona_id="請輸入要選擇的角色ID")
+    @app_commands.autocomplete(persona_id=autocomplete_persona_id)
     async def select_persona(self, ctx: commands.Context, persona_id: int):
         """Select an LLM persona for interaction."""
         user_id = ctx.author.id
@@ -376,7 +391,7 @@ class askAI(commands.Cog):
         self, 
         interaction: Interaction, 
         current: str
-    ) -> List[app_commands.Choice[str]]:
+    ) -> List[Choice[str]]:
         
         # Get your list of models
         models = chat_config["modelList"] 
@@ -386,7 +401,7 @@ class askAI(commands.Cog):
         
         # Return the choices (max 25)
         return [
-            app_commands.Choice(name=model, value=model)
+            Choice(name=model, value=model)
             for model in filtered_models[:25]
         ]
 

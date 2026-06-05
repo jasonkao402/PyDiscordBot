@@ -15,9 +15,9 @@ class ActionState(IntEnum):
 @dataclass
 class TrimedResponse:
     response_text: str
-    thinking_content: str
     timestamp: int
-    token_usage: dict[str, int]
+    thinking_content: str = ""
+    token_usage: dict[str, int] = field(default_factory=dict)
     _code: int = 0
     
     def __str__(self):
