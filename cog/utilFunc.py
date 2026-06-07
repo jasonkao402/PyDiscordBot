@@ -51,6 +51,13 @@ class UserDict:
     def effective_name(self):
         # Priority: preferred_name > display_name > name
         return self.preferred_name or self.name
+    
+    # discord name regex = ^[a-z0-9._]{2,32}$
+    # openai api role name regex = ^[a-zA-Z0-9_-]{1,64}$ 
+    @property
+    def role_name(self):
+        return self.name.replace('.', '_')
+        
 class embedVector:
     def __init__(self, text:str, vector:ndarray):
         # self.id = id

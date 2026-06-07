@@ -8,11 +8,11 @@ def _chat_interaction_from_row(row: tuple) -> ChatInteraction:
         msg_uid=row[0],
         user_uid=row[1],
         persona_uid=row[2],
-        created_at=row[3],
-        is_memorized=bool(row[4]),
+        user_prompt=row[7],
         main_content=row[5],
         summary=row[6],
-        user_prompt=row[7] 
+        created_at=row[3],
+        is_memorized=bool(row[4]),
     )
 
 class ChatInteractionRepository(SQLiteRepository):

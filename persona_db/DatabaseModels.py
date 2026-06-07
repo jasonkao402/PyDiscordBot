@@ -80,6 +80,7 @@ class ChatInteraction:
     main_content: str = ""
     summary: str = ""
     user_prompt: str = ""
+    user_internal_name: Optional[str] = None
     
 @dataclass
 class PersonaMemories:

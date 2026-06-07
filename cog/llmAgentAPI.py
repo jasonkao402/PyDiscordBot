@@ -81,7 +81,8 @@ class LLMAPI:
                 continue
 
             if interaction.user_prompt and interaction.main_content:
-                messages.append({"role": "user", "content": interaction.user_prompt})
+                _user_role_name = interaction.__getattribute__("user_internal_name") or f"User{interaction.user_uid}"
+                messages.append({"role": "user", "content": interaction.user_prompt, "name": _user_role_name})
                 messages.append(
                     {"role": "assistant", "content": interaction.main_content}
                 )
@@ -98,7 +99,7 @@ class LLMAPI:
             if not (skip_memorized and interaction.is_memorized)
         ]
 
-    def _debug_response(self, message: str, timestamp: int) -> TrimedResponse:
+    def _debug_response(self,  timestamp: int, message: str="") -> TrimedResponse:
         return TrimedResponse(
             response_text=f"[Debug] {_now_iso()} {message}",
             timestamp=timestamp,
@@ -113,7 +114,7 @@ class LLMAPI:
         image: Optional[gtypes.Part | dict] = None,
     ) -> TrimedResponse:
         """
-        messages: list of strings (model / user messages)
+        messages: list of strings (assistant / user messages)
         system: system instruction string
         user_dict: dictionary containing user information
         image: optional image part for the last user message
@@ -122,18 +123,19 @@ class LLMAPI:
         try:
             message_list = [
                 {"role": "system", "content": system},
-                *[{"role": msg["role"], "content": msg["content"]} for msg in messages],
+                *messages,
             ]
-
-            if image:
+            _temp = message_list[-1].get("content", "")
+            if image and isinstance(_temp, str):
                 message_list[-1]["content"] = [
                     image,
-                    {"type": "text", "text": message_list[-1]["content"]},
+                    {"type": "text", "text": _temp},
                 ]
 
             if self.debug_mode:
                 return self._debug_response(
-                    "This is a debug response. No actual API call was made.", _timestamp
+                    _timestamp,
+                    "Debug response."
                 )
 
             else:
@@ -142,17 +144,16 @@ class LLMAPI:
                 ].chat.completions.create(
                     model=self.main_model,
                     messages=message_list,
-                    max_tokens=4096,
+                    max_tokens=5120,
                     extra_body=extra_body,
                 )
 
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
             print(f"API Error: {api_error}\n---")
-            return TrimedResponse(
-                response_text=f"API Error: {api_error}",
-                timestamp=_timestamp,
-                _code=-1,
+            return self._debug_response(
+                _timestamp,
+                f"API Error: {api_error}"
             )
 
         response_text = str(response.choices[0].message.content)
@@ -196,7 +197,7 @@ class LLMAPI:
         _user_dict: UserDict,
         encoded_image: Optional[str],
     ) -> TrimedResponse:
-        """Handle the logic for interacting with the LLM agent."""
+        """Get a response from the LLM for a given persona and user prompt (and message context from recent memory)"""
         persona_name = (
             _persona.persona_name if _persona.persona_name else "UnknownPersona"
         )
@@ -236,18 +237,16 @@ class LLMAPI:
 
         except TimeoutError as e:
             print(f"{user_persona_pair} API request timed out. Error: {e}")
-            return TrimedResponse(
-                response_text=f"{user_persona_pair} API request timed out. Please try again later.\n{e}",
-                timestamp=_timestamp,
-                _code=-1,
+            return self._debug_response(
+                _timestamp,
+                f"{user_persona_pair} API request timed out. Please try again later.\n{e}"
             )
 
         except Exception as e:
             print(f"{user_persona_pair} Reply error:\n{e}")
-            return TrimedResponse(
-                response_text=f"{user_persona_pair} 發生錯誤，請聯繫主人\n{e}",
-                timestamp=_timestamp,
-                _code=-1,
+            return self._debug_response(
+                _timestamp,
+                f"{user_persona_pair} Caught an exception:\n{e}"
             )
 
         else:
@@ -259,6 +258,7 @@ class LLMAPI:
                     persona_uid=_persona.uid,
                     main_content=tResponse.response_text,
                     user_prompt=latest_prompt["content"],
+                    user_internal_name=_user_dict.role_name,
                 )
             )
             # For debugging: print the current memory
@@ -268,9 +268,6 @@ class LLMAPI:
                     print(
                         f"{idx+1:2d}. User Prompt: {mem.user_prompt} | Assistant Reply: {mem.main_content} | Memorized: {mem.is_memorized}"
                     )
-
-            # chatMem.append(prompt)
-            # chatMem.append({'role': 'assistant', 'content': reply_content})
 
             return tResponse
 
@@ -307,8 +304,8 @@ class LLMAPI:
                 for idx, mem in enumerate(expand_messages):
                     print(f"{idx+1:2d} {mem['role'][0]}: {mem['content']}")
                 tResponse = self._debug_response(
-                    "This is a debug response for memory summarization. No actual API call was made.",
                     _timestamp,
+                    "Debug response for memory summarization."
                 )
             else:
                 tResponse = await self.llm_chat_v6(
@@ -319,10 +316,9 @@ class LLMAPI:
 
         except Exception as e:
             print(f"Memory summarization error:\n{e}")
-            return TrimedResponse(
-                response_text=f"Memory summarization error:\n{e}",
-                timestamp=_timestamp,
-                _code=-1,
+            return self._debug_response(
+                _timestamp,
+                f"Memory summarization error:\n{e}"
             )
         else:
             # only mark as memorized if summarization succeeded

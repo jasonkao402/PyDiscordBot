@@ -192,7 +192,7 @@ class askAI(commands.Cog):
             await ctx.send("No personas available.")
             return
 
-        persona_list = sepLines([f"ID: {p.uid:03d}, Name: {wcformat(p.persona_name, w=10, strFront=False)}, is_public: {p.is_public}" for p in personas])
+        persona_list = sepLines([f"[{['私人', '公開'][int(p.is_public)]}] Name: {wcformat(p.persona_name)}(ID: {p.uid:03d})" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
     
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
