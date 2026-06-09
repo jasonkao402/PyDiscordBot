@@ -16,9 +16,12 @@ allowed_fields_teammember = frozenset({"persona_name", "content"})
 class PersonaDatabase:
     def __init__(self, db_path: str = DB_DEFAULT_PATH):
         self.db_path = db_path
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        # self._conn.execute("PRAGMA foreign_keys = ON;")
-
+        self._conn = sqlite3.connect(
+            self.db_path, 
+            check_same_thread=False, 
+            isolation_level=None
+        )
+        
         self.personas = PersonaRepository(self._conn)
         self.users = DiscordUserRepository(self._conn)
         self.interactions = InteractionRepository(self._conn)
@@ -29,6 +32,8 @@ class PersonaDatabase:
         
     @contextmanager
     def _transaction(self):
+        """Context manager for write/update/delete operations to ensure proper commit/rollback."""
+        self._conn.execute("BEGIN IMMEDIATE;")  # acquire a write lock to ensure all changes are flushed
         try:
             yield
             self._conn.commit()
@@ -37,13 +42,35 @@ class PersonaDatabase:
             raise
         
     def _init_db(self):
+        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._conn.execute("PRAGMA synchronous = FULL")
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        self._conn.execute("PRAGMA busy_timeout = 5000")
+        
         with self._transaction():
             self.personas.create_tables(self._conn)
-            self.personas.rename_legacy_persona_column(self._conn)
+            # self.personas.rename_legacy_persona_column(self._conn)
             self.users.create_tables(self._conn)
             self.interactions.create_tables(self._conn)
             self.chat_interactions.create_tables(self._conn)
             self.persona_memories.create_tables(self._conn)
+
+    def write_to_disk(self):
+        """
+        Manually forces a WAL checkpoint. 
+        Note: This is usually not required for data safety, as commit() already writes to the WAL file.
+        """
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            busy, log_pages, checkpoint_pages = cursor.fetchone()
+            
+            if busy:
+                print(f"Checkpoint was busy (active readers/writers). {log_pages} log pages and {checkpoint_pages} checkpoint pages remain.")
+            return not busy
+        except Exception as e:
+            print(f"Failed to checkpoint WAL: {e}")
+            raise
             
     def count_personas_by_owner(self, owner_uid: int) -> int:
         """Count the number of personas owned by a specific user."""
