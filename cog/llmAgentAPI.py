@@ -81,7 +81,7 @@ class LLMAPI:
                 continue
 
             if interaction.user_prompt and interaction.main_content:
-                _user_role_name = interaction.__getattribute__("user_internal_name") or f"User{interaction.user_uid}"
+                _user_role_name = interaction.__getattribute__("user_internal_name") or f"User{interaction.user_uid%10000}"
                 messages.append({"role": "user", "content": interaction.user_prompt, "name": _user_role_name})
                 messages.append(
                     {"role": "assistant", "content": interaction.main_content}
@@ -106,7 +106,7 @@ class LLMAPI:
             _code=-1,
         )
 
-    async def llm_chat_v6(
+    async def llm_api_v6(
         self,
         messages: list[dict],
         system: str,
@@ -201,16 +201,16 @@ class LLMAPI:
         persona_name = (
             _persona.persona_name if _persona.persona_name else "UnknownPersona"
         )
-        user_persona_pair = f"{wcformat(_user_dict.name)}@{persona_name}"
+        _debug_user_persona_pair = f"{wcformat(_user_dict.name)}@{persona_name}"
         # Filter out mention bot part
-        print(f"{user_persona_pair}: {prompt_str}")
+        print(f"{_debug_user_persona_pair}: {prompt_str}")
 
         system_instruction = (
             f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
         )
         latest_prompt = {
             "role": "user",
-            "content": f"{_user_dict.name} said {prompt_str}",
+            "content": f"{_user_dict.effective_name} said {prompt_str}",
         }
 
         chatMem = self.persona_session_memory[_persona.uid]
@@ -226,7 +226,7 @@ class LLMAPI:
                         "detail": "low",
                     },
                 }
-            tResponse = await self.llm_chat_v6(
+            tResponse = await self.llm_api_v6(
                 [*self._expand_ChatInteraction_to_messages(chatMem), latest_prompt],
                 system_instruction,
                 user_dict=_user_dict,
@@ -236,17 +236,17 @@ class LLMAPI:
             # print(f'{user_persona_pair} Response:\n{tResponse}')
 
         except TimeoutError as e:
-            print(f"{user_persona_pair} API request timed out. Error: {e}")
+            print(f"{_debug_user_persona_pair} API request timed out. Error: {e}")
             return self._debug_response(
                 _timestamp,
-                f"{user_persona_pair} API request timed out. Please try again later.\n{e}"
+                f"{_debug_user_persona_pair} API request timed out. Please try again later.\n{e}"
             )
 
         except Exception as e:
-            print(f"{user_persona_pair} Reply error:\n{e}")
+            print(f"{_debug_user_persona_pair} Reply error:\n{e}")
             return self._debug_response(
                 _timestamp,
-                f"{user_persona_pair} Caught an exception:\n{e}"
+                f"{_debug_user_persona_pair} Caught an exception:\n{e}"
             )
 
         else:
@@ -308,7 +308,7 @@ class LLMAPI:
                     "Debug response for memory summarization."
                 )
             else:
-                tResponse = await self.llm_chat_v6(
+                tResponse = await self.llm_api_v6(
                     expand_messages,
                     system_instruction,
                     user_dict=UserDict(uid=0, name="System"),

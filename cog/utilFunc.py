@@ -5,6 +5,7 @@ from typing import List, Optional
 from wcwidth import wcswidth
 from config_loader import configToml
 from dataclasses import dataclass
+import re
 
 TWTZ = timezone(timedelta(hours = 8))
 
@@ -90,6 +91,30 @@ class replyDict:
         #     result['images'] = self.images
         return result
 
+class PlaceholderReplacer:
+    def __init__(self, placeholder_dict: dict):
+        self.placeholder_dict = placeholder_dict
+
+    PLACEHOLDER_HANDLERS = {
+        "user": lambda: "艾利克斯",
+        "角色": lambda: "戰士",        # 中文變數名
+        "時間": lambda: datetime.now().strftime("%Y/%m/%d %H:%M %a"),
+    }
+
+    # 支援 Unicode（包含中文、日文、數字、底線）
+    def replace_placeholders(self, text: str) -> str:
+        PLACEHOLDER_PATTERN = re.compile(r"\\?\{\{([\w]+)\}\}", re.UNICODE)
+        
+        def replacer(match: re.Match) -> str:
+            full = match.group(0)
+            var = match.group(1)
+            if full.startswith("\\"):
+                return f"{{{{{var}}}}}"   # 輸出 {{var}}
+            if var in self.PLACEHOLDER_HANDLERS:
+                return str(self.PLACEHOLDER_HANDLERS[var]())
+            return full   # 未知變數保留原樣
+
+        return PLACEHOLDER_PATTERN.sub(replacer, text)
 # testing
 if __name__ == "__main__":
     d = {"a": 1, "b": 2, "c": 3}

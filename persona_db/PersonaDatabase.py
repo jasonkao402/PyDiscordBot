@@ -10,10 +10,12 @@ from contextlib import contextmanager
 
 DB_DEFAULT_PATH = "llm_character_cards.db"
 
-allowed_fields_everyone = frozenset({"last_interaction_recv_at"})
-allowed_fields_owner = frozenset({"persona_name", "content", "visibility", "is_public", "allowed_role_ids"})
-allowed_fields_teammember = frozenset({"persona_name", "content"})
 class PersonaDatabase:
+    # class variables to define allowed update fields for different permission levels
+    allowed_fields_basic = frozenset({"last_interaction_recv_at"})
+    allowed_fields_owner = frozenset({"persona_name", "content", "visibility", "is_public", "allowed_role_ids"})
+    allowed_fields_teammember = frozenset({"persona_name", "content"})
+    
     def __init__(self, db_path: str = DB_DEFAULT_PATH):
         self.db_path = db_path
         self._conn = sqlite3.connect(
@@ -97,12 +99,12 @@ class PersonaDatabase:
         if not _persona:
             raise ValueError(f"Persona with uid {persona_uid} not found.")
         
-        _allowed_fields = set(allowed_fields_everyone)
+        _allowed_fields = set(self.allowed_fields_basic)
         if _persona.owner_uid == user_uid:
-            _allowed_fields |= allowed_fields_owner
+            _allowed_fields |= self.allowed_fields_owner
         # any intersection between persona's allowed_role_ids and user's role_ids:
         elif (_persona.allowed_role_ids & user_role_ids):
-            _allowed_fields |= allowed_fields_teammember
+            _allowed_fields |= self.allowed_fields_teammember
             
         return _allowed_fields
     

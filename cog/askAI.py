@@ -25,7 +25,7 @@ class askAI(commands.Cog):
         self.ban_list = configToml.get("auth", {}).get("ban_list", [])
         self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
-        self.preferred_name_cache: dict[int, str] = {}  # Cache for user preferred names
+        self.discord_user_cache: dict[int, UserDict] = {}  # Cache for user preferred names
         
         debug_channel = bot.get_channel(configToml.get("debugChannelId", -1))
         # get_channel may return various channel types (TextChannel, DMChannel, Thread, etc.).
@@ -45,10 +45,10 @@ class askAI(commands.Cog):
     @commands.is_owner()
     async def clear_cache(self, interaction: Interaction):
         """Clear the persona and selection caches."""
-        pc, sc, nc = len(self.persona_cache), len(self.selection_cache), len(self.preferred_name_cache)
+        pc, sc, nc = len(self.persona_cache), len(self.selection_cache), len(self.discord_user_cache)
         self.persona_cache.clear()
         self.selection_cache.clear()
-        self.preferred_name_cache.clear()
+        self.discord_user_cache.clear()
         await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas, {sc} selections and {nc} preferred names)", ephemeral=True)
         
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
@@ -192,7 +192,7 @@ class askAI(commands.Cog):
             await ctx.send("No personas available.")
             return
 
-        persona_list = sepLines([f"[{['私人', '公開'][int(p.is_public)]}] Name: {wcformat(p.persona_name)}(ID: {p.uid:03d})" for p in personas])
+        persona_list = sepLines([f"[{['私人', '公開'][int(p.is_public)]}, ID: {p.uid:03d}] Name: {wcformat(p.persona_name)}" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
     
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
@@ -250,31 +250,43 @@ class askAI(commands.Cog):
 
         return last_message
     
-    async def handle_llm_trigger(self, _ch: Messageable, _msg: Message, userDict: UserDict):
-        """Handle the logic for detecting and triggering the LLM feature."""
-        # Load persona selection from cache or database
-        if userDict.uid not in self.preferred_name_cache:
-            _name_fromDB = self.db.get_discord_user_preferred_name(userDict.uid)
-            print(f'from db load preferred name "{_name_fromDB}" for user {userDict.uid}')
-            self.preferred_name_cache[userDict.uid] = _name_fromDB or userDict.name
-        userDict.name = self.preferred_name_cache[userDict.uid]
+    async def _handle_cache(self, _user_dict: UserDict, _ch: Messageable):
+        _user_id = _user_dict.uid
+        if _user_id not in self.discord_user_cache:
+            _name_fromDB = self.db.get_discord_user_preferred_name(_user_id)
+            print(f'from db load preferred name "{_name_fromDB}" for user {_user_id}')
+            self.discord_user_cache[_user_id] = UserDict(uid=_user_id, name=_user_dict.name, preferred_name=_name_fromDB or _user_dict.preferred_name)
         
-        if userDict.uid not in self.selection_cache:
-            _personaID_fromDB = self.db.get_selected_persona_uid(userDict.uid)
-            print(f'from db load persona # {_personaID_fromDB} for user {userDict.uid} selection')
-            self.selection_cache[userDict.uid] = _personaID_fromDB or -1
-            db_persona = self.db.get_persona_no_check(self.selection_cache[userDict.uid])
+        if _user_id not in self.selection_cache:
+            # get selected persona from database if not in cache
+            _personaID_fromDB = self.db.get_selected_persona_uid(_user_id) or -1
+            print(f'from db load persona # {_personaID_fromDB} for user {_user_id} selection')
+            if _personaID_fromDB == -1:
+                await _ch.send("No persona selected. Use /selectpersona to select one. (lvl 1)")
+                return
+            self.selection_cache[_user_id] = _personaID_fromDB
+            # load the selected persona into cache
+            db_persona = self.db.get_persona_no_check(self.selection_cache[_user_id])
             if not db_persona:
                 await _ch.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
                 return
             self.persona_cache[db_persona.uid] = db_persona
 
-        persona_id = self.selection_cache.get(userDict.uid, -1)
-        _persona = self.persona_cache.get(persona_id, None)
+        persona_id = self.selection_cache.get(_user_id, -1)
+        return self.persona_cache.get(persona_id, None)
+        
+    async def handle_llm_trigger(self, _ch: Messageable, _msg: Message, _user_dict: UserDict):
+        """Handle the logic for detecting and triggering the LLM feature."""
+        # Load persona selection from cache or database
+        _user_id = _user_dict.uid
+        await self._handle_cache(_user_dict, _ch)
+        _persona = self.persona_cache.get(self.selection_cache.get(_user_id, -1), None)
+        _user_dict.preferred_name = self.discord_user_cache.get(_user_id, _user_dict).effective_name
+        
         if not _persona:
             await _ch.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
             return
-
+        
         async with _ch.typing():
             encoded_image = None
             if _msg.attachments:
@@ -291,16 +303,16 @@ class askAI(commands.Cog):
             tResponse = await self.llm_api.persona_chat_oneshot(
                 prompt_str=_content,
                 _persona=_persona,
-                _user_dict=userDict,
+                _user_dict=_user_dict,
                 encoded_image=encoded_image
             )
             if tResponse._code == -1:
                 await _ch.send(f"Error from LLM API: {tResponse.response_text}")
                 return
-            self.db.increment_interaction_count(_persona.uid, userDict.uid)
+            self.db.increment_interaction_count(_persona.uid, _user_id)
             res = self.db.create_chat_interaction(
                 msg_uid=tResponse.timestamp,
-                user_uid=userDict.uid,
+                user_uid=_user_id,
                 persona_uid=_persona.uid,
                 main_content=tResponse.response_text,
                 user_prompt=_content,
@@ -328,15 +340,17 @@ class askAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: Message):
         user = message.author
+        _user_id = user.id
         userDict = UserDict(
-            uid = user.id,
-            name = user.display_name,
+            uid = _user_id,
+            name = user.name,
+            preferred_name = user.display_name
         )
         # Ignore self messages
-        if userDict.uid == self.bot.user.id:
+        if _user_id == self.bot.user.id:
             return
-        if userDict.uid in self.ban_list:
-            print(f'Ignored message from banned user {userDict.name} ({userDict.uid})')
+        if _user_id in self.ban_list:
+            print(f'Ignored message from banned user {userDict.name} ({_user_id})')
             return
         
         # Use mentions to trigger bot LLM chat
@@ -344,7 +358,7 @@ class askAI(commands.Cog):
             roles = getattr(user, 'roles', [])  # Ensure user.roles exists
             if not any(role.id in configToml.get("auth", {}).get("roleList", []) for role in roles):
                 extra_msg = 'You do not have the required role to interact with the bot.'
-                print(f'Rejected message from {userDict.name} ({userDict.uid}): {extra_msg}')
+                print(f'Rejected message from {userDict.name} ({_user_id}): {extra_msg}')
                 await message.channel.send(f'# To {userDict.name}...\n{extra_msg}')
                 return
             await self.handle_llm_trigger(message.channel, message, userDict)
@@ -518,7 +532,7 @@ class askAI(commands.Cog):
             await interaction.response.send_message(f"Your preferred name has been set to {name}.")
         else:
             await interaction.response.send_message("Failed to update preferred name.")
-        self.preferred_name_cache[user_id] = name  # Update cache immediately
+        self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=name)
         
 async def setup(bot:commands.Bot):
     cog_instance = askAI(bot)
