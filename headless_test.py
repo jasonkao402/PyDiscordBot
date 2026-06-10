@@ -13,7 +13,7 @@ chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
 llm_base_url = link_config.get("link_openrouter", "")
 debugModel = chat_config["modelDebug"]
-debug_persona_id = 21
+debug_persona_id = 28
 debug_user_id = configToml.get("auth", {}).get("adminList", [])[0]
 
 class ChatCog:
@@ -36,8 +36,8 @@ async def cog_chatbot():
     
     _user = db.get_discord_user(debug_user_id)
     assert isinstance(_user, DiscordUser)
-    user_dict = UserDict(uid=_user.user_uid, name=_user.preferred_name or "User")
-    print(f"Using user: {user_dict.effective_name} (UID: {user_dict.uid})")
+    user_dict = UserDict(uid=_user.user_uid, name=_user.preferred_name or "User", preferred_name=_user.preferred_name, descr=_user.descr)
+    print(f"Using user: {user_dict.effective_name}\nFull info:\n{user_dict}")
 
     while True:
         # example message: 哈基亞，你今天的日程計劃如何?
@@ -53,7 +53,8 @@ async def cog_chatbot():
                     debug_persona_id, skip_memorized=True
                 )
                 tResponse = await api.llm_api.persona_memory_summarize(
-                    _persona=_persona
+                    _persona=_persona,
+                    _user_dict=user_dict,
                 )
                 if tResponse._code == -1:
                     print(f"Summarization failed: {tResponse.response_text}")

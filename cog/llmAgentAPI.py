@@ -1,5 +1,5 @@
 from collections import deque, defaultdict
-from cog.utilFunc import UserDict
+from cog.utilFunc import UserDict, PlaceholderReplacer
 from cog_dev.responseParsing import parse_response
 from cog_dev.moderation import PendingMessage, TrimedResponse
 from persona_db.PersonaDatabase import Persona
@@ -201,13 +201,16 @@ class LLMAPI:
         persona_name = (
             _persona.persona_name if _persona.persona_name else "UnknownPersona"
         )
-        _debug_user_persona_pair = f"{wcformat(_user_dict.name)}@{persona_name}"
-        # Filter out mention bot part
-        print(f"{_debug_user_persona_pair}: {prompt_str}")
 
-        system_instruction = (
-            f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
-        )
+        _pr = PlaceholderReplacer(_user_dict)
+        system_instruction = _pr.replace_placeholders(_persona.content)
+        # f'\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
+        
+        _debug_user_persona_pair = f"{wcformat(_user_dict.name)}@{persona_name}"
+        print(f"{_debug_user_persona_pair}: {prompt_str}\n")
+        if self.debug_mode:
+            print(f"[System]:\n{system_instruction}\n")
+            
         latest_prompt = {
             "role": "user",
             "content": f"{_user_dict.effective_name} said {prompt_str}",
@@ -271,7 +274,7 @@ class LLMAPI:
 
             return tResponse
 
-    async def persona_memory_summarize(self, _persona: Persona) -> TrimedResponse:
+    async def persona_memory_summarize(self, _persona: Persona, _user_dict: UserDict) -> TrimedResponse:
         """Summarize the recent memory for a given persona."""
         chatMem = self.persona_session_memory[_persona.uid]
         _timestamp = time_ns()
@@ -281,8 +284,11 @@ class LLMAPI:
                 timestamp=_timestamp,
                 _code=-1,
             )
-
-        system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{chat_config["promptMemoryFormat"]}'
+        
+        _pr = PlaceholderReplacer(_user_dict)
+        system_instruction = _pr.replace_placeholders(_persona.content)
+        system_instruction += chat_config["promptMemoryFormat"]
+        # system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{chat_config["promptMemoryFormat"]}'
         expand_messages = self._expand_ChatInteraction_to_messages(
             chatMem, skip_memorized=True
         )
@@ -293,7 +299,7 @@ class LLMAPI:
                 _code=-1,
             )
         expand_messages.append(
-            {"role": "user", "content": chat_config["promptMemoryTrigger"]}
+            {"role": "user", "content": chat_config["promptMemoryTrigger"]+chat_config["promptMemoryFormat"]}
         )
         tResponse: TrimedResponse
         print(

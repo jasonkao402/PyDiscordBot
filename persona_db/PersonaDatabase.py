@@ -53,7 +53,7 @@ class PersonaDatabase:
             self.personas.create_tables(self._conn)
             # self.personas.rename_legacy_persona_column(self._conn)
             self.users.create_tables(self._conn)
-            self.users.migrate(self._conn)  # run migrations for users table
+            # self.users.migrate(self._conn)  # run migrations for users table
             self.interactions.create_tables(self._conn)
             self.chat_interactions.create_tables(self._conn)
             self.persona_memories.create_tables(self._conn)

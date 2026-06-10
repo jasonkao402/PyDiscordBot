@@ -445,7 +445,7 @@ class askAI(commands.Cog):
     async def _memo(self, interaction: Interaction):
         user_id = interaction.user.id
         persona_id = self.selection_cache.get(user_id, -1)
-
+        _user_dict = self.discord_user_cache.get(user_id, UserDict(uid=user_id, name=interaction.user.name, preferred_name=interaction.user.display_name))
         # --- Early validation (synchronous, send direct response) ---
         if persona_id == -1:
             await interaction.response.send_message(
@@ -467,7 +467,7 @@ class askAI(commands.Cog):
             source_msg_uids = self.llm_api.get_msg_uids_from_memory(persona_id, skip_memorized=True)
             print(f"Source msg_uids for summarization: {source_msg_uids}")
 
-            tResponse = await self.llm_api.persona_memory_summarize(_persona=_persona)
+            tResponse = await self.llm_api.persona_memory_summarize(_persona=_persona, _user_dict=_user_dict)
             print(f"Summarization response: {tResponse}")
 
             if tResponse._code == -1:
