@@ -11,6 +11,7 @@ def _discord_user_from_row(row: tuple) -> DiscordUser:
         last_payout_at=row[4],
         balance=row[5],
         preferred_name=row[6],
+        descr=row[7],
     )
 
 class DiscordUserRepository(SQLiteRepository):
@@ -21,6 +22,7 @@ class DiscordUserRepository(SQLiteRepository):
         "last_payout_at",
         "balance",
         "preferred_name",
+        "descr",
     }
 
     def create_tables(self, conn) -> None:
@@ -39,6 +41,14 @@ class DiscordUserRepository(SQLiteRepository):
             """
         )
 
+    def migrate(self, conn) -> None:
+        # migration for adding descr column
+        conn.execute(
+            """
+            ALTER TABLE discord_users ADD COLUMN descr TEXT DEFAULT NULL
+            """
+        )
+
     def create_if_missing(self, user_uid: int) -> None:
         with self.connection() as conn:
             conn.execute(
@@ -53,7 +63,7 @@ class DiscordUserRepository(SQLiteRepository):
         with self.connection() as conn:
             cursor = conn.execute(
                 """
-                SELECT user_uid, selected_persona_uid, last_interaction_send_at, interaction_count, last_payout_at, balance, preferred_name
+                SELECT user_uid, selected_persona_uid, last_interaction_send_at, interaction_count, last_payout_at, balance, preferred_name, descr
                 FROM discord_users
                 WHERE user_uid = ?
                 """,

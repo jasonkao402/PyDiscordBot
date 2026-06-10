@@ -522,18 +522,18 @@ class askAI(commands.Cog):
         await interaction.response.send_modal(modal)
     
     @app_commands.command(name="setname", description="Set the preferred name for the user")
-    async def _set_name(self, interaction: Interaction, name: Optional[str]):
+    async def _set_name(self, interaction: Interaction, name: Optional[str], description: Optional[str]):
         user_id = interaction.user.id
         if not name:
             name = interaction.user.display_name
-        
-        res = self.db.update_discord_user(user_id, preferred_name=name)
+
+        res = self.db.update_discord_user(user_id, preferred_name=name, descr=description)
         if res:
-            await interaction.response.send_message(f"Your preferred name has been set to {name}.")
+            await interaction.response.send_message(f"Your preferred name has been set to {name} and description to {description}.")
         else:
             await interaction.response.send_message("Failed to update preferred name.")
-        self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=name)
-        
+        self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=name, descr=description)
+
 async def setup(bot:commands.Bot):
     cog_instance = askAI(bot)
     await bot.add_cog(cog_instance)

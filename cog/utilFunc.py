@@ -47,6 +47,7 @@ class UserDict:
     uid: int
     name: str
     preferred_name: Optional[str] = None
+    descr: Optional[str] = None
     
     @property
     def effective_name(self):
@@ -92,14 +93,13 @@ class replyDict:
         return result
 
 class PlaceholderReplacer:
-    def __init__(self, placeholder_dict: dict):
-        self.placeholder_dict = placeholder_dict
-
-    PLACEHOLDER_HANDLERS = {
-        "user": lambda: "艾利克斯",
-        "角色": lambda: "戰士",        # 中文變數名
-        "時間": lambda: datetime.now().strftime("%Y/%m/%d %H:%M %a"),
-    }
+    def __init__(self, _user_dict: UserDict):
+        self.user_dict = _user_dict
+        self.converters = {
+            "user": lambda: self.user_dict.effective_name,
+            "descr": lambda: self.user_dict.descr or "",
+            "time": lambda: datetime.now().strftime("%Y/%m/%d %H:%M %a"),
+        }
 
     # 支援 Unicode（包含中文、日文、數字、底線）
     def replace_placeholders(self, text: str) -> str:
@@ -110,8 +110,8 @@ class PlaceholderReplacer:
             var = match.group(1)
             if full.startswith("\\"):
                 return f"{{{{{var}}}}}"   # 輸出 {{var}}
-            if var in self.PLACEHOLDER_HANDLERS:
-                return str(self.PLACEHOLDER_HANDLERS[var]())
+            if var in self.converters:
+                return str(self.converters[var]())
             return full   # 未知變數保留原樣
 
         return PLACEHOLDER_PATTERN.sub(replacer, text)
