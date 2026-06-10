@@ -49,7 +49,7 @@ class askAI(commands.Cog):
         self.persona_cache.clear()
         self.selection_cache.clear()
         self.discord_user_cache.clear()
-        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas, {sc} selections and {nc} preferred names)", ephemeral=True)
+        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas, {sc} selections and {nc} users)")
         
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     async def create_persona(self, interaction: Interaction):
@@ -253,36 +253,49 @@ class askAI(commands.Cog):
     async def _handle_cache(self, _user_dict: UserDict, _ch: Messageable):
         _user_id = _user_dict.uid
         if _user_id not in self.discord_user_cache:
-            _name_fromDB = self.db.get_discord_user_preferred_name(_user_id)
-            print(f'from db load preferred name "{_name_fromDB}" for user {_user_id}')
-            self.discord_user_cache[_user_id] = UserDict(uid=_user_id, name=_user_dict.name, preferred_name=_name_fromDB or _user_dict.preferred_name)
+            _user_fromDB = self.db.get_discord_user(_user_id)
+            print(f'from db loaded user {_user_id}')
+            if not _user_fromDB:
+                # if user not in database, create a new record with default preferred name as display name
+                self.db.create_discord_user(_user_id)
+                print(f'created new user {_user_id} in db')
+                self.discord_user_cache[_user_id] = UserDict(uid=_user_id, name=_user_dict.name, preferred_name=_user_dict.preferred_name)
+            else:
+                self.discord_user_cache[_user_id] = UserDict(uid=_user_id, name=_user_dict.name, preferred_name=_user_fromDB.preferred_name, descr=_user_fromDB.descr)
         
+        _personaID_fromDB = -1   
         if _user_id not in self.selection_cache:
             # get selected persona from database if not in cache
             _personaID_fromDB = self.db.get_selected_persona_uid(_user_id) or -1
             print(f'from db load persona # {_personaID_fromDB} for user {_user_id} selection')
             if _personaID_fromDB == -1:
                 await _ch.send("No persona selected. Use /selectpersona to select one. (lvl 1)")
-                return
             self.selection_cache[_user_id] = _personaID_fromDB
+            
+        if _personaID_fromDB != -1 and _personaID_fromDB not in self.persona_cache:
             # load the selected persona into cache
             db_persona = self.db.get_persona_no_check(self.selection_cache[_user_id])
             if not db_persona:
                 await _ch.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
                 return
             self.persona_cache[db_persona.uid] = db_persona
-
-        persona_id = self.selection_cache.get(_user_id, -1)
-        return self.persona_cache.get(persona_id, None)
         
     async def handle_llm_trigger(self, _ch: Messageable, _msg: Message, _user_dict: UserDict):
         """Handle the logic for detecting and triggering the LLM feature."""
         # Load persona selection from cache or database
         _user_id = _user_dict.uid
         await self._handle_cache(_user_dict, _ch)
-        _persona = self.persona_cache.get(self.selection_cache.get(_user_id, -1), None)
-        _user_dict.preferred_name = self.discord_user_cache.get(_user_id, _user_dict).effective_name
         
+        _persona = self.persona_cache.get(self.selection_cache.get(_user_id, -1), None)
+        _user_dict = self.discord_user_cache.get(_user_id, _user_dict)
+        
+        if self.llm_api.debug_mode:
+            debug_info = f"Debug Info:\n- User: {_user_dict}\n- Selected Persona ID: {self.selection_cache.get(_user_id, 'None')}\n- Persona in Cache: {'Yes' if self.selection_cache.get(_user_id, -1) in self.persona_cache else 'No'}"
+            print(debug_info)
+            
+            system_instruction = self.llm_api._debug_system_instruction(_persona, _user_dict) if _persona else "No persona available for system instruction."
+            print(f"System Instruction:\n{system_instruction}")
+            
         if not _persona:
             await _ch.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
             return
@@ -533,6 +546,13 @@ class askAI(commands.Cog):
         else:
             await interaction.response.send_message("Failed to update preferred name.")
         self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=name, descr=description)
+    
+    @commands.is_owner()
+    @app_commands.command(name="debugmode", description="Toggle debug mode for the user (for testing purposes)")
+    async def _debug_mode(self, interaction: Interaction):
+        user_id = interaction.user.id
+        self.llm_api.debug_mode = not self.llm_api.debug_mode
+        await interaction.response.send_message(f"Debug mode is now {'enabled' if self.llm_api.debug_mode else 'disabled'} for you.")
 
 async def setup(bot:commands.Bot):
     cog_instance = askAI(bot)

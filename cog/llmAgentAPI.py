@@ -106,6 +106,11 @@ class LLMAPI:
             _code=-1,
         )
 
+    def _debug_system_instruction(self, _persona: Persona, _user_dict: UserDict) -> str:
+        _pr = PlaceholderReplacer(_user_dict)
+        system_instruction = _pr.replace_placeholders(_persona.content)
+        return system_instruction
+
     async def llm_api_v6(
         self,
         messages: list[dict],
@@ -208,8 +213,6 @@ class LLMAPI:
         
         _debug_user_persona_pair = f"{wcformat(_user_dict.name)}@{persona_name}"
         print(f"{_debug_user_persona_pair}: {prompt_str}\n")
-        if self.debug_mode:
-            print(f"[System]:\n{system_instruction}\n")
             
         latest_prompt = {
             "role": "user",
