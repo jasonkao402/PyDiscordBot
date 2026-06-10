@@ -28,7 +28,7 @@ class DiscordUserRepository(SQLiteRepository):
             """
             CREATE TABLE IF NOT EXISTS discord_users (
                 user_uid INTEGER PRIMARY KEY,
-                selected_persona_uid INTEGER NOT NULL DEFAULT -1,
+                selected_persona_uid INTEGER DEFAULT NULL,
                 last_interaction_send_at TEXT DEFAULT NULL,
                 interaction_count INTEGER DEFAULT 0,
                 last_payout_at TEXT DEFAULT NULL,
@@ -92,7 +92,7 @@ class DiscordUserRepository(SQLiteRepository):
                 (user_uid, persona_uid),
             )
 
-    def get_selected_persona_uid(self, user_uid: int) -> int:
+    def get_selected_persona_uid(self, user_uid: int) -> Optional[int]:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -103,14 +103,14 @@ class DiscordUserRepository(SQLiteRepository):
                 (user_uid,),
             )
             row = cursor.fetchone()
-            return row[0] if row else -1
+            return row[0] if row else None
 
     def deselect_persona(self, user_uid: int) -> None:
         with self.connection() as conn:
             conn.execute(
                 """
                 UPDATE discord_users
-                SET selected_persona_uid = -1
+                SET selected_persona_uid = NULL
                 WHERE user_uid = ?
                 """,
                 (user_uid,),
@@ -121,7 +121,7 @@ class DiscordUserRepository(SQLiteRepository):
             conn.execute(
                 """
                 UPDATE discord_users
-                SET selected_persona_uid = -1
+                SET selected_persona_uid = NULL
                 WHERE selected_persona_uid = ?
                 """,
                 (persona_uid,),

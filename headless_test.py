@@ -6,6 +6,8 @@ from persona_db.PersonaDatabase import PersonaDatabase, Persona, DiscordUser
 import cog_dev.web_api as web_api
 import asyncio
 from config_loader import configToml
+import logging
+logging.basicConfig(level=logging.INFO)
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
@@ -14,10 +16,9 @@ debugModel = chat_config["modelDebug"]
 debug_persona_id = 21
 debug_user_id = configToml.get("auth", {}).get("adminList", [])[0]
 
-
 class ChatCog:
     def __init__(self):
-        self.llm_api = LLMAPI(_main_model=debugModel, _debug_mode=True)
+        self.llm_api = LLMAPI(_main_model=debugModel, _debug_mode=False)
 
     async def close(self):
         await self.llm_api.cleanup()
@@ -56,7 +57,7 @@ async def cog_chatbot():
                 )
                 if tResponse._code == -1:
                     print(f"Summarization failed: {tResponse.response_text}")
-                    continue
+                    # continue
                 db.increment_interaction_count(debug_persona_id, user_dict.uid)
                 print(f"Memorized msg_uids: {source_msg_uids}")
                 db.create_persona_memory(
@@ -74,7 +75,7 @@ async def cog_chatbot():
                 db.increment_interaction_count(debug_persona_id, user_dict.uid)
                 if tResponse._code == -1:
                     print(f"Chat failed: {tResponse.response_text}")
-                    continue
+                    # continue
                 res = db.create_chat_interaction(
                     msg_uid=tResponse.timestamp,
                     user_uid=user_dict.uid,

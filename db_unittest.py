@@ -6,7 +6,6 @@ import unittest
 from persona_db.helper_func import _split_uid_list, _join_uid_list
 from persona_db.PersonaDatabase import (
     Persona, DiscordUser, ChatInteraction, PersonaMemories,
-    PersonaVisibility,
     PersonaDatabase,
     main_test, message_test
 )
@@ -94,7 +93,7 @@ class BaseTestWithDB(unittest.TestCase):
 class TestPersonaRepository(BaseTestWithDB):
     def setUp(self):
         super().setUp()
-        # self.db.create_discord_user(200)  # another user for testing
+        self.db.create_discord_user(200)  # another user for testing
         self.repo = self.db.personas
 
     def test_create_and_fetch(self):
@@ -243,22 +242,22 @@ class TestDiscordUserRepository(BaseTestWithDB):
         self.assertEqual(self.repo.get_selected_persona_uid(100), 20)
 
     def test_get_selected_persona_uid_default(self):
-        # New user without selection returns -1
+        # New user without selection returns None
         self.repo.create_if_missing(300)
-        self.assertEqual(self.repo.get_selected_persona_uid(300), -1)
+        self.assertEqual(self.repo.get_selected_persona_uid(300), None)
 
     def test_clear_selected_persona(self):
         self.repo.upsert_selected_persona(100, 7)
         self.repo.deselect_persona(100)
-        self.assertEqual(self.repo.get_selected_persona_uid(100), -1)
+        self.assertEqual(self.repo.get_selected_persona_uid(100), None)
 
     def test_clear_persona_selection(self):
         # Set same persona for multiple users
         self.repo.upsert_selected_persona(100, 42)
         self.repo.upsert_selected_persona(200, 42)
         self.repo._unbind_selected_user_for_persona(42)
-        self.assertEqual(self.repo.get_selected_persona_uid(100), -1)
-        self.assertEqual(self.repo.get_selected_persona_uid(200), -1)
+        self.assertEqual(self.repo.get_selected_persona_uid(100), None)
+        self.assertEqual(self.repo.get_selected_persona_uid(200), None)
 
 
 class TestInteractionRepository(BaseTestWithDB):

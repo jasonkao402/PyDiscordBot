@@ -44,7 +44,7 @@ class PersonaDatabase:
     def _init_db(self):
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = FULL")
-        self._conn.execute("PRAGMA foreign_keys = ON")
+        # self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.execute("PRAGMA busy_timeout = 5000")
         
         with self._transaction():
@@ -144,7 +144,7 @@ class PersonaDatabase:
     def get_selected_persona(self, user_uid: int, role_ids: Set[int] = set()) -> Optional[Persona]:
         """Get user's currently selected persona"""
         persona_uid = self.users.get_selected_persona_uid(user_uid)
-        if persona_uid < 0:
+        if persona_uid is None:
             return None
 
         persona = self.personas.fetch_by_uid(persona_uid)
@@ -152,7 +152,7 @@ class PersonaDatabase:
             return persona
         return None
 
-    def get_selected_persona_uid(self, user_uid: int) -> int:
+    def get_selected_persona_uid(self, user_uid: int) -> Optional[int]:
         """Get user's currently selected persona uid"""
         return self.users.get_selected_persona_uid(user_uid)
 

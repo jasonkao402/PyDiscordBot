@@ -254,21 +254,20 @@ class askAI(commands.Cog):
         """Handle the logic for detecting and triggering the LLM feature."""
         # Load persona selection from cache or database
         if userDict.uid not in self.preferred_name_cache:
-            _from_db = self.db.get_discord_user_preferred_name(userDict.uid)
-            print(f'from db load preferred name "{_from_db}" for user {userDict.uid}')
-            self.preferred_name_cache[userDict.uid] = _from_db or userDict.name
+            _name_fromDB = self.db.get_discord_user_preferred_name(userDict.uid)
+            print(f'from db load preferred name "{_name_fromDB}" for user {userDict.uid}')
+            self.preferred_name_cache[userDict.uid] = _name_fromDB or userDict.name
         userDict.name = self.preferred_name_cache[userDict.uid]
         
         if userDict.uid not in self.selection_cache:
-            self.selection_cache[userDict.uid] = self.db.get_selected_persona_uid(userDict.uid)
-            print(f'from db load persona # {self.selection_cache[userDict.uid]} for user {userDict.uid} selection')
-            if self.selection_cache[userDict.uid] != -1:
-                # Load persona into cache
-                db_persona = self.db.get_persona_no_check(self.selection_cache[userDict.uid])
-                if not db_persona:
-                    await _ch.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
-                    return
-                self.persona_cache[db_persona.uid] = db_persona
+            _personaID_fromDB = self.db.get_selected_persona_uid(userDict.uid)
+            print(f'from db load persona # {_personaID_fromDB} for user {userDict.uid} selection')
+            self.selection_cache[userDict.uid] = _personaID_fromDB or -1
+            db_persona = self.db.get_persona_no_check(self.selection_cache[userDict.uid])
+            if not db_persona:
+                await _ch.send("Selected persona not found in database.\nPlease select another persona using /selectpersona.")
+                return
+            self.persona_cache[db_persona.uid] = db_persona
 
         persona_id = self.selection_cache.get(userDict.uid, -1)
         _persona = self.persona_cache.get(persona_id, None)
