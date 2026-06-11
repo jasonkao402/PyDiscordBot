@@ -534,23 +534,36 @@ class askAI(commands.Cog):
         print(f"Opening test modal for {interaction.user.display_name} ({interaction.user.id})")
         await interaction.response.send_modal(modal)
     
-    @app_commands.command(name="setname", description="Set the preferred name for the user")
+    @app_commands.command(name="setname", description="Update the preferred name and description for the user")
     async def _set_name(self, interaction: Interaction, name: Optional[str], description: Optional[str]):
         user_id = interaction.user.id
-        if not name:
-            name = interaction.user.display_name
-
-        res = self.db.update_discord_user(user_id, preferred_name=name, descr=description)
+        # reset to default only if both name and description are empty, else keep the existing value if one of them is provided, 
+        # final fallback to display name for preferred name and "None" for description if both are empty and no existing value in database
+        orig = self.db.get_discord_user(user_id)
+        # Condition 1: Both are empty -> Reset to defaults
+        if name is None and description is None:
+            _new_name = interaction.user.display_name
+            _new_description = "None"
+            
+        # Condition 2: At least one is provided -> Update given, keep existing for the other
+        else:
+            # Fallbacks for existing data if the user only updates one field
+            existing_name = orig.preferred_name if orig and orig.preferred_name else interaction.user.display_name
+            existing_desc = orig.descr if orig and orig.descr else "None"
+            
+            _new_name = name if name is not None else existing_name
+            _new_description = description if description is not None else existing_desc
+            
+        res = self.db.update_discord_user(user_id, preferred_name=_new_name, descr=_new_description)
         if res:
-            await interaction.response.send_message(f"Your preferred name has been set to {name} and description to {description}.")
+            await interaction.response.send_message(f"Your preferred name has been set to {_new_name} and description to {_new_description}.")
         else:
             await interaction.response.send_message("Failed to update preferred name.")
-        self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=name, descr=description)
+        self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=_new_name, descr=_new_description)
     
     @commands.is_owner()
     @app_commands.command(name="debugmode", description="Toggle debug mode for the user (for testing purposes)")
     async def _debug_mode(self, interaction: Interaction):
-        user_id = interaction.user.id
         self.llm_api.debug_mode = not self.llm_api.debug_mode
         await interaction.response.send_message(f"Debug mode is now {'enabled' if self.llm_api.debug_mode else 'disabled'} for you.")
 
