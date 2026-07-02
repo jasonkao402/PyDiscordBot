@@ -24,6 +24,7 @@ llm_base_url = link_config.get("link_openrouter", "")
 FULL_MEMORY_RANGE = 10
 SUM_MEMORY_RANGE = 10
 VECTOR_MEMORY_RANGE = 3
+ROUND_ROBIN_QUOTA = 1  # Number of requests before switching to the next API key
 extra_body = {
     "provider": {
         "order": [],
@@ -38,14 +39,15 @@ class LLMAPI:
         self.main_model = (
             _main_model if _main_model is not None else chat_config["modelChat"]
         )
-        self.round_robin_api_index = 0
-        self.api_call_count = 0  # Counter to track the number of API calls
-        self.api_switch_threshold = (
-            5  # Number of calls before switching to the next API
-        )
+        # Initialize round-robin usage counter and quota
+        self.round_robin_usage = 0
+        self.round_robin_quota = ROUND_ROBIN_QUOTA
         self.round_robin_api_collection = configToml["apiToken"].get(
             "openrouter_llm", []
         )
+        self.round_robin_api_index = 0
+        self.round_robin_api_total = len(self.round_robin_api_collection)
+        
         self.debug_mode = _debug_mode
         # self.llm_apis = [genai.Client(
         #     api_key=api_key, http_options=http_options,
@@ -152,6 +154,15 @@ class LLMAPI:
                     max_tokens=5120,
                     extra_body=extra_body,
                 )
+                # round-robin API switching logic
+                self.round_robin_usage += 1
+                if self.round_robin_usage >= self.round_robin_quota:
+                    print(f"Switching API from index {self.round_robin_api_index} to {(self.round_robin_api_index + 1) % self.round_robin_api_total}.")
+                    self.round_robin_api_index = (
+                        self.round_robin_api_index + 1
+                    ) % self.round_robin_api_total
+                    self.round_robin_usage = 0  # Reset the counter after switching
+
 
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
