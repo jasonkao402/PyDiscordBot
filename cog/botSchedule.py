@@ -5,13 +5,13 @@ from cog.utilFunc import utctimeFormat, TWTZ
 
 timet = datetime.now(timezone.utc) + timedelta(seconds=-10)
 timet = timet.time()
-    
+debug_channel = 1234567890
 class botSchedule(commands.Cog):
     __slots__ = ('bot')
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.channel = self.bot.get_channel(1088253899871371284)
+        self.channel = self.bot.get_channel(debug_channel)
         # self.my_task.start()
 
     def cog_unload(self):

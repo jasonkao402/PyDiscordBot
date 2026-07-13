@@ -55,7 +55,7 @@ class drawing_sd(commands.Cog):
     @app_commands.describe(prompt = 'Prompt for the image', width = 'Width of the image', height = 'Height of the image')
     @commands.cooldown(RATELIMIT_SDIMAGE_API, 1800.0, commands.BucketType.user)
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=False)
-    async def _sd2(self, interaction: Interaction, prompt:str, width: Optional[int] = 640, height: Optional[int] = 640):
+    async def _sd2(self, interaction: Interaction, prompt:str, width: int = 640, height: int = 640):
         
         if self.isEnabled is False:
             extra = "unknown (notify bot owner!)" if self.reenable_timestamp is None else f"<t:{int(self.reenable_timestamp.timestamp())}:R>"
@@ -68,17 +68,21 @@ class drawing_sd(commands.Cog):
 
         await interaction.response.defer()
         response = await self.sdimageAPI.imageGen(prompt, width, height)
+        dest = None
         for image in response['images']:
             dest = f'acc/imgLog/{strftime("%Y_%m%d_%H%M")}.png'
             with open(dest, 'wb') as f:
                 f.write(base64.b64decode(image))
+        if dest is None:
+            await interaction.followup.send("No image generated. Please try again.")
+            return
         await interaction.followup.send(prompt, file=File(dest))
     
     @app_commands.command(name = 'sdtoggle')
     @app_commands.describe(duration = 'Duration to temporarily disable the drawing cog (in minutes)')
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=False)
     @commands.is_owner()
-    async def _sdtoggle(self, interaction: Interaction, duration: Optional[int] = 0, toggle: Optional[bool] = None):
+    async def _sdtoggle(self, interaction: Interaction, duration: int = 0, toggle: Optional[bool] = None):
         """Temporarily disable the drawing cog"""
         if toggle is not None:
             self.isEnabled = toggle

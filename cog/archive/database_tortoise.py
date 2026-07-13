@@ -1,6 +1,6 @@
 from unittest import result
 from tortoise import Tortoise, run_async
-from cog.archive.database_base import Persona, PersonaVisibility, DiscordUser, UserPersonaInteraction
+from persona_db.DatabaseModels import Persona, PersonaVisibility, DiscordUser
 from typing import Optional, List
 from datetime import datetime
 from tortoise.expressions import F
@@ -10,7 +10,7 @@ class PersonaDatabase:
     async def init(self, db_path="sqlite://llm_character_cards.db"):
         await Tortoise.init(
             db_url=db_path,
-            modules={"models": ["cog_dev.database_base"]},
+            modules={"models": ["persona_db.DatabaseModels"]},
         )
         await Tortoise.generate_schemas()
 
@@ -178,8 +178,8 @@ async def main():
     manager = PersonaDatabase()
     await manager.init()
 
-    user1_uid = 999999
-    user2_uid = 225833749156331520
+    user1_uid = 12345
+    user2_uid = 67890
 
     # Cleanup for fresh run (optional)
     await Persona.all().delete()

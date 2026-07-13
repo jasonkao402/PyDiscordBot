@@ -5,7 +5,7 @@ import asyncio
 from itertools import islice
 import sys
 import traceback
-from cog.music_tool.SongData import *
+from cog.archive.music_tool.SongData import *
 
 class VoiceConnectionError(commands.CommandError):
     """Custom Exception class for connection errors."""

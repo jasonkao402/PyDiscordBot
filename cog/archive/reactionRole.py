@@ -4,8 +4,8 @@ from discord.ext import commands
 KEYWORD = "[⚡] 找我領取身分組 [⚡]"
 roleDict = {
 "❔": "A", "⚡": "B",
-"<:nsysu_isc:877159351272493058>": "資安社",
-"<:nsysu_cc:877159351582871552>": "程式研習社",
+"🤠": "資安社",
+"🖥️": "程式研習社",
 }
 
 class React(commands.Cog):
