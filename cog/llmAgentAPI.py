@@ -19,19 +19,21 @@ from cog.utilFunc import wcformat
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
-llm_base_url = link_config.get("link_openrouter", "")
+# llm_base_url = link_config.get("link_openrouter", "")
+llm_base_url = link_config.get("link_ggchan", "")
 
 FULL_MEMORY_RANGE = 10
 SUM_MEMORY_RANGE = 10
 VECTOR_MEMORY_RANGE = 3
 ROUND_ROBIN_QUOTA = 1  # Number of requests before switching to the next API key
 extra_body = {
-    "provider": {
-        "order": [],
-        "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
-        "sort": "throughput",
-    },
-    "reasoning": {"enabled": True},
+    # "provider": {
+    #     "order": [],
+    #     "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
+    #     "sort": "throughput",
+    # },
+    "reasoning_effort": "high",
+    # "reasoning": {"enabled": True},
 }
 
 class LLMAPI:
@@ -43,7 +45,8 @@ class LLMAPI:
         self.round_robin_usage = 0
         self.round_robin_quota = ROUND_ROBIN_QUOTA
         self.round_robin_api_collection = configToml["apiToken"].get(
-            "openrouter_llm", []
+            # "openrouter_llm", []
+            "ggchan_llm", []
         )
         self.round_robin_api_index = 0
         self.round_robin_api_total = len(self.round_robin_api_collection)
@@ -173,7 +176,11 @@ class LLMAPI:
             )
 
         response_text = str(response.choices[0].message.content)
-        thinking_content = str(getattr(response.choices[0].message, "reasoning", ""))
+        thinking_content = str(
+            getattr(response.choices[0].message, "reasoning", None) or
+            getattr(response.choices[0].message, "reasoning_content", None) or
+            ""
+        )
         token_usage = (
             {
                 "prompt_tokens": response.usage.prompt_tokens,
