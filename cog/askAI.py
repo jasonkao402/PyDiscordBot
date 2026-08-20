@@ -191,8 +191,8 @@ class askAI(commands.Cog):
         if not personas:
             await ctx.send("No personas available.")
             return
-
-        persona_list = sepLines([f"[{['私人', '公開'][int(p.is_public)]}, ID: {p.uid:03d}] Name: {wcformat(p.persona_name)}" for p in personas])
+        personas = sorted(personas, key=lambda p: p.uid)  # Sort by persona ID
+        persona_list = sepLines([f"ID: {p.uid:03d}, [{['私人', '公開'][int(p.is_public)]}] Name: {wcformat(p.persona_name)}" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
     
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
@@ -354,6 +354,7 @@ class askAI(commands.Cog):
     async def on_message(self, message: Message):
         user = message.author
         _user_id = user.id
+        _user_roles = getattr(user, 'roles', [])
         userDict = UserDict(
             uid = _user_id,
             name = user.name,
@@ -368,9 +369,13 @@ class askAI(commands.Cog):
         
         # Use mentions to trigger bot LLM chat
         if self.bot.user.mentioned_in(message) and not message.mention_everyone:
-            roles = getattr(user, 'roles', [])  # Ensure user.roles exists
-            if not any(role.id in configToml.get("auth", {}).get("roleList", []) for role in roles):
-                extra_msg = 'You do not have the required role to interact with the bot.'
+            # Check if the user has the required role or is the owner
+            role_whitelist = configToml.get("auth", {}).get("role_whitelist", [])
+            id_whitelist = configToml.get("auth", {}).get("adminList", [])
+            role_check = any(role.id in role_whitelist for role in _user_roles)
+            id_check = _user_id in id_whitelist
+            if not (role_check or id_check):
+                extra_msg = 'You do not have the required permission to interact with the bot.'
                 print(f'Rejected message from {userDict.name} ({_user_id}): {extra_msg}')
                 await message.channel.send(f'# To {userDict.name}...\n{extra_msg}')
                 return
