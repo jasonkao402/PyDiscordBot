@@ -25,14 +25,14 @@ llm_base_url = link_config.get("link_ggchan", "")
 FULL_MEMORY_RANGE = 10
 SUM_MEMORY_RANGE = 10
 VECTOR_MEMORY_RANGE = 3
-ROUND_ROBIN_QUOTA = 1  # Number of requests before switching to the next API key
+ROUND_ROBIN_QUOTA = 50  # Number of requests before switching to the next API key
 extra_body = {
     # "provider": {
     #     "order": [],
     #     "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
     #     "sort": "throughput",
     # },
-    "reasoning_effort": "high",
+    "reasoning_effort": "low",
     # "reasoning": {"enabled": True},
 }
 
@@ -174,7 +174,7 @@ class LLMAPI:
                 _timestamp,
                 f"API Error: {api_error}"
             )
-
+        print(f"{response.choices[0].message}\n"+"="*20)
         response_text = str(response.choices[0].message.content)
         thinking_content = str(
             getattr(response.choices[0].message, "reasoning", None) or

@@ -370,7 +370,7 @@ class askAI(commands.Cog):
         # Use mentions to trigger bot LLM chat
         if self.bot.user.mentioned_in(message) and not message.mention_everyone:
             # Check if the user has the required role or is the owner
-            role_whitelist = configToml.get("auth", {}).get("role_whitelist", [])
+            role_whitelist = configToml.get("auth", {}).get("roleList", [])
             id_whitelist = configToml.get("auth", {}).get("adminList", [])
             role_check = any(role.id in role_whitelist for role in _user_roles)
             id_check = _user_id in id_whitelist
