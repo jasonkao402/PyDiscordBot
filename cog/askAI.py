@@ -425,7 +425,7 @@ class askAI(commands.Cog):
     ) -> List[Choice[str]]:
         
         # Get your list of models
-        models = chat_config["modelList"] 
+        models = configToml.get("llmChat", {}).get("modelList", [])
         
         # Filter models based on what the user is typing
         filtered_models = [model for model in models if current.lower() in model.lower()]
@@ -443,7 +443,7 @@ class askAI(commands.Cog):
         # 'model' is now the string the user selected from the autocomplete list
         
         # A quick check to make sure the model is valid
-        if model not in chat_config["modelList"]:
+        if model not in configToml.get("llmChat", {}).get("modelList", []):
             await interaction.response.send_message(
                 f"錯誤：無效的模型 `{model}`", 
                 ephemeral=True
@@ -451,7 +451,7 @@ class askAI(commands.Cog):
             return
 
         # Update your config
-        chat_config["modelChat"] = model
+        configToml.get("llmChat", {})["modelChat"] = model
         
         # Send the confirmation
         await interaction.response.send_message(

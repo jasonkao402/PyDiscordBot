@@ -22,7 +22,7 @@ link_config: dict[str, str] = configToml.get("llmLink", "")
 # llm_base_url = link_config.get("link_openrouter", "")
 llm_base_url = link_config.get("link_ggchan", "")
 
-FULL_MEMORY_RANGE = 10
+FULL_MEMORY_RANGE = 14
 SUM_MEMORY_RANGE = 10
 VECTOR_MEMORY_RANGE = 3
 ROUND_ROBIN_QUOTA = 50  # Number of requests before switching to the next API key
