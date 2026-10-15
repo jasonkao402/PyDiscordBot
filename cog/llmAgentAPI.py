@@ -19,21 +19,21 @@ from cog.utilFunc import wcformat
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
-# llm_base_url = link_config.get("link_openrouter", "")
-llm_base_url = link_config.get("link_ggchan", "")
+llm_base_url = link_config.get("link_openrouter", "")
+# llm_base_url = link_config.get("link_ggchan", "")
 
 FULL_MEMORY_RANGE = 14
-SUM_MEMORY_RANGE = 10
+SUM_MEMORY_RANGE = 14
 VECTOR_MEMORY_RANGE = 3
 ROUND_ROBIN_QUOTA = 50  # Number of requests before switching to the next API key
 extra_body = {
-    # "provider": {
-    #     "order": [],
-    #     "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
-    #     "sort": "throughput",
-    # },
-    "reasoning_effort": "low",
-    # "reasoning": {"enabled": True},
+    "provider": {
+        "order": ["coreweave/fp8", "relace", ,"digitalocean", "deepinfra/fp8"],
+        "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
+        "sort": "throughput",
+    },
+    # "reasoning_effort": "low",
+    "reasoning": {"enabled": True},
 }
 
 class LLMAPI:
