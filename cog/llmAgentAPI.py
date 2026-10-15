@@ -353,3 +353,14 @@ class LLMAPI:
                 message.is_memorized = True
 
         return tResponse
+
+    def revert_last_interaction(self, persona_id: int) -> bool:
+        """Revert the last interaction for a given persona."""
+        chatMem = self.persona_session_memory[persona_id]
+        if chatMem:
+            removed_interaction = chatMem.pop()
+            print(f"Reverted last interaction for persona {persona_id}: {removed_interaction}")
+            return True
+        else:
+            print(f"No interactions to revert for persona {persona_id}.")
+            return False

@@ -210,7 +210,26 @@ class askAI(commands.Cog):
         # Clear the memory for the selected persona
         self.llm_api.reset_memory(_persona.uid)
         await interaction.response.send_message(f"Session memory for {_persona.persona_name} has been erased.")
-            
+        
+    @app_commands.command(name="goback", description="Revert the last interaction for the selected persona")
+    async def goback(self, interaction: Interaction):
+        """Revert the last interaction for the selected persona."""
+        user_id = interaction.user.id
+        
+        # Get the selected persona
+        _persona = self.persona_cache.get(self.selection_cache.get(user_id, -1), None)
+
+        if not _persona:
+            await interaction.response.send_message("No persona selected. Use /selectpersona to select one.", ephemeral=True)
+            return
+
+        # Revert the last interaction for the selected persona
+        success = self.llm_api.revert_last_interaction(_persona.uid)
+        if success:
+            await interaction.response.send_message(f"The last interaction for {_persona.persona_name} has been reverted.")
+        else:
+            await interaction.response.send_message(f"No interactions to revert for {_persona.persona_name}.")
+
     @app_commands.command(name="currentpersona", description="Show the currently selected persona")
     async def current_persona(self, interaction: Interaction):
         """Show the currently selected persona."""
