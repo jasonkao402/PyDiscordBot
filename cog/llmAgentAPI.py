@@ -32,8 +32,8 @@ extra_body = {
         "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
         "sort": "throughput",
     },
-    # "reasoning_effort": "low",
-    "reasoning": {"enabled": True},
+    "reasoning_effort": "low",
+    # "reasoning": {"enabled": True},
 }
 
 class LLMAPI:
