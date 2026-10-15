@@ -11,9 +11,9 @@ logging.basicConfig(level=logging.INFO)
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
-llm_base_url = link_config.get("link_ggchan", "")
+# llm_base_url = link_config.get("link_ggchan", "")
 debugModel = chat_config["modelChat"]
-debug_persona_id = 28
+debug_persona_id = 29
 debug_user_id = configToml.get("auth", {}).get("adminList", [])[0]
 
 class ChatCog:

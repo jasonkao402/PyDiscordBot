@@ -19,7 +19,7 @@ from cog.utilFunc import wcformat
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
-llm_base_url = link_config.get("link_openrouter", "")
+llm_base_url = link_config.get("link_sukaka", "")
 # llm_base_url = link_config.get("link_ggchan", "")
 
 FULL_MEMORY_RANGE = 14
@@ -28,7 +28,7 @@ VECTOR_MEMORY_RANGE = 3
 ROUND_ROBIN_QUOTA = 50  # Number of requests before switching to the next API key
 extra_body = {
     "provider": {
-        "order": ["coreweave/fp8", "relace", ,"digitalocean", "deepinfra/fp8"],
+        "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
         "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
         "sort": "throughput",
     },
@@ -45,8 +45,8 @@ class LLMAPI:
         self.round_robin_usage = 0
         self.round_robin_quota = ROUND_ROBIN_QUOTA
         self.round_robin_api_collection = configToml["apiToken"].get(
-            # "openrouter_llm", []
-            "ggchan_llm", []
+            "sukaka_llm", []
+            # "ggchan_llm", []
         )
         self.round_robin_api_index = 0
         self.round_robin_api_total = len(self.round_robin_api_collection)
