@@ -13,8 +13,6 @@ from persona_db.PersonaDatabase import PersonaDatabase, Persona
 from persona_db.helper_func import _join_uid_list, _split_uid_list
 import base64
 
-chat_config: dict[str, str] = configToml.get("llmChat", "")
-
 class askAI(commands.Cog):
     __slots__ = ('bot', 'db')
 
@@ -446,7 +444,6 @@ class askAI(commands.Cog):
     ) -> List[Choice[str]]:
         
         # Get your list of models
-        # fav_models = configToml.get("llmChat", {}).get("modelList", [])
         api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
         api_models = [model for model in api_models if "假流式" in model]
         # Filter models based on what the user is typing
@@ -466,7 +463,7 @@ class askAI(commands.Cog):
         # 'model' is now the string the user selected from the autocomplete list
         
         # A quick check to make sure the model is valid
-        if model not in configToml.get("llmChat", {}).get("modelList", []):
+        if model not in self.llm_api.available_models:
             await interaction.response.send_message(
                 f"錯誤：無效的模型 `{model}`", 
                 ephemeral=True
@@ -474,7 +471,7 @@ class askAI(commands.Cog):
             return
 
         # Update your config
-        configToml.get("llmChat", {})["modelChat"] = model
+        configToml.get("llmChat", {})["ModelMain"] = model
         
         # Send the confirmation
         await interaction.response.send_message(

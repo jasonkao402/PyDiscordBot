@@ -9,14 +9,12 @@ from config_loader import configToml
 import logging
 logging.basicConfig(level=logging.INFO)
 
-chat_config: dict[str, str] = configToml.get("llmChat", "")
-link_config: dict[str, str] = configToml.get("llmLink", "")
-# llm_base_url = link_config.get("link_ggchan", "")
-debugModel = chat_config["modelChat"]
-debug_persona_id = 29
+chat_config: dict[str, str] = configToml.get("llmModel", "")
+debugModel = chat_config["ModelMain"]
+debug_persona_id = 26
 debug_user_id = configToml.get("auth", {}).get("adminList", [])[0]
 
-class ChatCog:
+class FakeChatCog:
     def __init__(self):
         self.llm_api = LLMAPI(_main_model=debugModel, _debug_mode=False)
         
@@ -30,7 +28,7 @@ class ChatCog:
 async def fake_cog_chatbot():
     # print(http_options)
     db = PersonaDatabase("llm_character_cards.db")
-    api = ChatCog()
+    api = FakeChatCog()
     models = await api.get_available_models()
     print(f"Available models:")
     print("\n".join([f"- {m}" for m in sorted(models)]))

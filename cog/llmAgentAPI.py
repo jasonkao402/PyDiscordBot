@@ -17,21 +17,20 @@ from uuid import uuid4
 from time import strftime, time_ns
 from cog.utilFunc import wcformat
 
-chat_config: dict[str, str] = configToml.get("llmChat", "")
-link_config: dict[str, str] = configToml.get("llmLink", "")
-# llm_base_url = link_config.get("link_sukaka", "")
-llm_base_url = link_config.get("link_ggchan", "")
+model_config: dict[str, str] = configToml.get("llmModel", "")
+prompt_config: dict[str, str] = configToml.get("PromptTemplate", "")
 
+PROVIDER = "opencode"
 FULL_MEMORY_RANGE = 14
 SUM_MEMORY_RANGE = 14
 VECTOR_MEMORY_RANGE = 3
 ROUND_ROBIN_QUOTA = 50  # Number of requests before switching to the next API key
 extra_body = {
-    "provider": {
-        "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
-        "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
-        "sort": "throughput",
-    },
+    # "provider": {
+    #     "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
+    #     "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
+    #     "sort": "throughput",
+    # },
     "reasoning_effort": "low",
     # "reasoning": {"enabled": True},
 }
@@ -39,33 +38,31 @@ extra_body = {
 class LLMAPI:
     def __init__(self, _main_model: Optional[str] = None, _debug_mode: bool = False):
         self.main_model = (
-            _main_model if _main_model is not None else chat_config["modelChat"]
+            _main_model if _main_model is not None else model_config["ModelMain"]
         )
         self.available_models: List[str] = []  # Cache for available models
-                
+
+        _api_key_pool = configToml["apiToken"][PROVIDER].get("keys", [])
+        _api_base_url = configToml["apiToken"][PROVIDER].get("api", "")
         # Initialize round-robin usage counter and quota
         self.round_robin_usage = 0
         self.round_robin_quota = ROUND_ROBIN_QUOTA
-        self.round_robin_api_collection = configToml["apiToken"].get(
-            # "sukaka_llm", []
-            "ggchan_llm", []
-        )
         self.round_robin_api_index = 0
-        self.round_robin_api_total = len(self.round_robin_api_collection)
+        self.round_robin_api_total = len(_api_key_pool)
         
         self.debug_mode = _debug_mode
         # self.llm_apis = [genai.Client(
         #     api_key=api_key, http_options=http_options,
-        # ) for api_key in self.round_robin_api_collection]
+        # ) for api_key in _api_key_pool]
         self.llm_apis = [
-            AsyncOpenAI(api_key=api_key, base_url=llm_base_url)
-            for api_key in self.round_robin_api_collection
+            AsyncOpenAI(api_key=api_key, base_url=_api_base_url)
+            for api_key in _api_key_pool
         ]
         self.persona_session_memory: defaultdict[int, deque[ChatInteraction]] = (
             defaultdict(lambda: deque(maxlen=FULL_MEMORY_RANGE))
         )
         print(
-            f"Loaded LLM API with model = {self.main_model}, created {len(self.llm_apis)} clients @ {llm_base_url}."
+            f"Loaded LLM API with model = {self.main_model}, created {len(self.llm_apis)} clients @ {_api_base_url}."
         )
 
     async def cleanup(self):
@@ -310,8 +307,8 @@ class LLMAPI:
         
         _pr = PlaceholderReplacer(_user_dict)
         system_instruction = _pr.replace_placeholders(_persona.content)
-        system_instruction += chat_config["promptMemoryFormat"]
-        # system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{chat_config["promptMemoryFormat"]}'
+        system_instruction += prompt_config["MemoryFormat"]
+        # system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{prompt_config["MemoryFormat"]}'
         expand_messages = self._expand_ChatInteraction_to_messages(
             chatMem, skip_memorized=True
         )
@@ -322,7 +319,7 @@ class LLMAPI:
                 _code=-1,
             )
         expand_messages.append(
-            {"role": "user", "content": chat_config["promptMemoryTrigger"]+chat_config["promptMemoryFormat"]}
+            {"role": "user", "content": prompt_config["MemoryRequest"]+prompt_config["MemoryFormat"]}
         )
         tResponse: TrimedResponse
         print(

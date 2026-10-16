@@ -26,7 +26,7 @@ class SDImage_APIHandler():
     async def imageGen(self, prompt:str, width:int = 640, height:int = 640):
         payload = {
             "prompt": prompt,
-            "negative_prompt": configToml['llmChat'].get('promptNeg', ''),
+            "negative_prompt": configToml['stablediffusion'].get('promptNeg', ''),
             "steps": 20,
             "width": width,
             "height": height,
@@ -34,7 +34,7 @@ class SDImage_APIHandler():
             "cfg_scale": 8.0,
         }
         print(f"SD Image Gen Payload:\n\t{payload['prompt']}\n\t{payload['width']}x{payload['height']}")
-        async with self.clientSession.post(configToml['llmChat']['linkSDImg'], json=payload) as request:
+        async with self.clientSession.post(configToml['stablediffusion']['linkSDImg'], json=payload) as request:
             response = await request.json()
         return response
 
