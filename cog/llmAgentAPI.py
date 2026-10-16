@@ -12,15 +12,15 @@ from openai import AsyncOpenAI
 
 # from google import genai
 from google.genai import types as gtypes, errors
-from typing import Optional
+from typing import List, Optional
 from uuid import uuid4
 from time import strftime, time_ns
 from cog.utilFunc import wcformat
 
 chat_config: dict[str, str] = configToml.get("llmChat", "")
 link_config: dict[str, str] = configToml.get("llmLink", "")
-llm_base_url = link_config.get("link_sukaka", "")
-# llm_base_url = link_config.get("link_ggchan", "")
+# llm_base_url = link_config.get("link_sukaka", "")
+llm_base_url = link_config.get("link_ggchan", "")
 
 FULL_MEMORY_RANGE = 14
 SUM_MEMORY_RANGE = 14
@@ -41,12 +41,14 @@ class LLMAPI:
         self.main_model = (
             _main_model if _main_model is not None else chat_config["modelChat"]
         )
+        self.available_models: List[str] = []  # Cache for available models
+                
         # Initialize round-robin usage counter and quota
         self.round_robin_usage = 0
         self.round_robin_quota = ROUND_ROBIN_QUOTA
         self.round_robin_api_collection = configToml["apiToken"].get(
-            "sukaka_llm", []
-            # "ggchan_llm", []
+            # "sukaka_llm", []
+            "ggchan_llm", []
         )
         self.round_robin_api_index = 0
         self.round_robin_api_total = len(self.round_robin_api_collection)
@@ -364,3 +366,16 @@ class LLMAPI:
         else:
             print(f"No interactions to revert for persona {persona_id}.")
             return False
+
+    async def get_available_models(self, force_refresh: bool = False) -> list[str]:
+        """Return a list of available models from the current LLM API."""
+        if self.available_models and not force_refresh:
+            return self.available_models  # Return cached models if available
+        
+        self.available_models = []  # Clear the cache
+        _list = self.llm_apis[0].models.list()
+        result = []
+        async for model in _list:
+            result.append(model.id)
+        self.available_models = result
+        return result

@@ -49,7 +49,9 @@ class askAI(commands.Cog):
         self.persona_cache.clear()
         self.selection_cache.clear()
         self.discord_user_cache.clear()
-        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas, {sc} selections and {nc} users)")
+        models = await self.llm_api.get_available_models(force_refresh=True)  # Refresh the model list in the LLM API
+        models_str = "\n  - ".join(models) if models else "No models available."
+        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas, {sc} selections and {nc} users)\nAvailable models:\n```{models_str}```")
         
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     async def create_persona(self, interaction: Interaction):
@@ -210,7 +212,7 @@ class askAI(commands.Cog):
         # Clear the memory for the selected persona
         self.llm_api.reset_memory(_persona.uid)
         await interaction.response.send_message(f"Session memory for {_persona.persona_name} has been erased.")
-        
+
     @app_commands.command(name="goback", description="Revert the last interaction for the selected persona")
     async def goback(self, interaction: Interaction):
         """Revert the last interaction for the selected persona."""
@@ -444,17 +446,19 @@ class askAI(commands.Cog):
     ) -> List[Choice[str]]:
         
         # Get your list of models
-        models = configToml.get("llmChat", {}).get("modelList", [])
-        
+        # fav_models = configToml.get("llmChat", {}).get("modelList", [])
+        api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
+        api_models = [model for model in api_models if "假流式" in model]
         # Filter models based on what the user is typing
-        filtered_models = [model for model in models if current.lower() in model.lower()]
+        filtered_models = [model for model in api_models if current.lower() in model.lower()]
         
         # Return the choices (max 25)
         return [
             Choice(name=model, value=model)
             for model in filtered_models[:25]
         ]
-
+    
+    @commands.is_owner()
     @app_commands.command(name="selectmodel", description="選擇要使用的模型")
     @app_commands.describe(model="請從列表中選擇一個模型")  # Add a description for the option
     @app_commands.autocomplete(model=model_autocomplete)   # Link the autocomplete function
@@ -474,8 +478,7 @@ class askAI(commands.Cog):
         
         # Send the confirmation
         await interaction.response.send_message(
-            f"已切換至 `{model}`",
-            ephemeral=True  # Confirmation messages are better as ephemeral
+            f"已切換至\n# `{model}`",
         )
 
     @app_commands.command(name="memo", description="Summarize the current persona memory into a new memory")

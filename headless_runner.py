@@ -19,16 +19,21 @@ debug_user_id = configToml.get("auth", {}).get("adminList", [])[0]
 class ChatCog:
     def __init__(self):
         self.llm_api = LLMAPI(_main_model=debugModel, _debug_mode=False)
-
+        
     async def close(self):
         await self.llm_api.cleanup()
 
+    async def get_available_models(self) -> list[str]:
+        return await self.llm_api.get_available_models()
 
-async def cog_chatbot():
+
+async def fake_cog_chatbot():
     # print(http_options)
     db = PersonaDatabase("llm_character_cards.db")
     api = ChatCog()
-    # print(api.list_models())
+    models = await api.get_available_models()
+    print(f"Available models:")
+    print("\n".join([f"- {m}" for m in sorted(models)]))
 
     _persona = db.get_persona_no_check(debug_persona_id)
     assert isinstance(_persona, Persona)
@@ -97,7 +102,7 @@ async def main():
     pending_manager = PendingMessageManager(update_callback=web_api.push_update)
     web_api.pending_manager = pending_manager
 
-    bot_task = asyncio.create_task(cog_chatbot())
+    bot_task = asyncio.create_task(fake_cog_chatbot())
 
     # Run web API in background
     uvicorn_config = uvicorn.Config(
