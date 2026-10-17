@@ -6,7 +6,7 @@ from discord.ext import commands
 from discord.abc import Messageable
 from typing import Optional
 from cog.llmAgentAPI import LLMAPI
-from cog.utilFunc import sepLines, wcformat, UserDict
+from cog.utilFunc import sepLines, wcformat, long_message_splitter, UserDict, is_admin_check
 from cog.ui_modal import CreatePersonaModal, EditPersonaModal_Full, EditPersonaModal_Basic, TestSelect
 from config_loader import configToml
 from persona_db.PersonaDatabase import PersonaDatabase, Persona
@@ -14,7 +14,6 @@ from persona_db.helper_func import _join_uid_list, _split_uid_list
 import base64
 
 class askAI(commands.Cog):
-    __slots__ = ('bot', 'db')
 
     def __init__(self, bot: DC_Client):
         self.bot = bot
@@ -250,24 +249,6 @@ class askAI(commands.Cog):
         #     embed.add_field(name="Content", value=_persona.content[:50], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
-        
-    async def _long_message_splitter(self, _ch: Messageable | Webhook, text: str, title: str = "", chunk_size: int = 1900) -> Message:
-        """Split a long message into chunks that fit within Discord's message limits and send them sequentially."""
-        
-        last_message: Message | None = None
-
-        if len(text) > chunk_size:
-            parts = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
-            len_parts = len(parts)
-            for i, part in enumerate(parts):
-                last_message = await _ch.send(f"# {title} part {i+1}/{len_parts}\n{part}")
-        else:
-            last_message = await _ch.send(f"# {title}\n{text}")
-        
-        if last_message is None:
-            raise RuntimeError("Failed to send message chunk")
-
-        return last_message
     
     async def _handle_cache(self, _user_dict: UserDict, _ch: Messageable):
         _user_id = _user_dict.uid
@@ -309,7 +290,11 @@ class askAI(commands.Cog):
         _user_dict = self.discord_user_cache.get(_user_id, _user_dict)
         
         if self.llm_api.debug_mode:
-            debug_info = f"Debug Info:\n- User: {_user_dict}\n- Selected Persona ID: {self.selection_cache.get(_user_id, 'None')}\n- Persona in Cache: {'Yes' if self.selection_cache.get(_user_id, -1) in self.persona_cache else 'No'}"
+            debug_info = f"""
+                Debug Info:
+                  - User: {_user_dict}
+                  - Selected Persona ID: {self.selection_cache.get(_user_id, 'None')}
+                """
             print(debug_info)
             
             system_instruction = self.llm_api._debug_system_instruction(_persona, _user_dict) if _persona else "No persona available for system instruction."
@@ -354,16 +339,15 @@ class askAI(commands.Cog):
 
             # split both main and thinking content into multiple messages if too long for one message.
             # send thinking content reference link in the original channel to reduce clutter.
-            msg_response_text = await self._long_message_splitter(_ch, tResponse.response_text, title=_persona.persona_name)
+            msg_response_text = await long_message_splitter(_ch, tResponse.response_text, title=_persona.persona_name)
                 
             if tResponse.thinking_content and self.debug_channel:
-                msg_thinking_text = await self._long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking")
+                msg_thinking_text = await long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking")
                 usage_info = '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items())
                 await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:\n{usage_info}")
                 # Edit the last one of original response messages to include a reference to the thinking content in the debug channel
                 edit_content = f"{msg_response_text.content}\n\n-# Thinking {msg_thinking_text.jump_url}"
                 await msg_response_text.edit(content=edit_content)
-                 
             else:
                 # No thinking content or debug channel available, just print response and token usage in debug channel or console
                 print(str(tResponse))
@@ -445,7 +429,6 @@ class askAI(commands.Cog):
         
         # Get your list of models
         api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
-        api_models = [model for model in api_models if "假流式" in model]
         # Filter models based on what the user is typing
         filtered_models = [model for model in api_models if current.lower() in model.lower()]
         
@@ -475,7 +458,7 @@ class askAI(commands.Cog):
         
         # Send the confirmation
         await interaction.response.send_message(
-            f"已切換至\n# `{model}`",
+            f"成功，已切換模型至 `{model}`",
         )
 
     @app_commands.command(name="memo", description="Summarize the current persona memory into a new memory")
@@ -517,10 +500,10 @@ class askAI(commands.Cog):
             await interaction.followup.send("Summarization successful. Saving summarized memory...")
 
             # Send the long summary via channel splitter
-            msg_response_text = await self._long_message_splitter(interaction.followup, tResponse.response_text, title=f"{_persona.persona_name} Summary")
+            msg_response_text = await long_message_splitter(interaction.followup, tResponse.response_text, title=f"{_persona.persona_name} Summary")
                 
             if tResponse.thinking_content and self.debug_channel:
-                msg_thinking_text = await self._long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking Summary")
+                msg_thinking_text = await long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking Summary")
                 usage_info = '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items())
                 await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:\n{usage_info}")
                 # Edit the last one of original response messages to include a reference to the thinking content in the debug channel
@@ -585,7 +568,7 @@ class askAI(commands.Cog):
             await interaction.response.send_message("Failed to update preferred name.")
         self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=_new_name, descr=_new_description)
     
-    @commands.is_owner()
+    @is_admin_check()
     @app_commands.command(name="debugmode", description="Toggle debug mode for the user (for testing purposes)")
     async def _debug_mode(self, interaction: Interaction):
         self.llm_api.debug_mode = not self.llm_api.debug_mode

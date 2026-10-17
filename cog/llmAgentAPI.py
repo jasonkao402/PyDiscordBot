@@ -20,7 +20,7 @@ from cog.utilFunc import wcformat
 model_config: dict[str, str] = configToml.get("llmModel", "")
 prompt_config: dict[str, str] = configToml.get("PromptTemplate", "")
 
-PROVIDER = "opencode"
+PROVIDER = configToml.get("provider", "NOT_FOUND")
 FULL_MEMORY_RANGE = 14
 SUM_MEMORY_RANGE = 14
 VECTOR_MEMORY_RANGE = 3

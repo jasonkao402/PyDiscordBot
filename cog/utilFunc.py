@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from discord import Interaction, Message, Webhook, app_commands
+from discord.abc import Messageable
 from numpy import argsort, array, dot, ndarray
 from numpy.linalg import norm
 from typing import List, Optional
@@ -12,6 +14,12 @@ TWTZ = timezone(timedelta(hours = 8))
 def clamp(n: float, minn: float = 0, maxn: float = 100) -> float:
     '''clamp n in set range'''
     return max(min(maxn, n), minn)
+
+def is_admin_check():
+    ''' Check if the user is in the admin list from configToml. Use as a decorator for commands.'''
+    def predicate(interaction: Interaction) -> bool:
+        return int(interaction.user.id) in configToml.get('auth', {}).get('adminList', [])
+    return app_commands.check(predicate)
 
 def devChk(id:int) -> bool:
     # admin = 
@@ -41,6 +49,24 @@ def simRank(a, b, K=3) -> tuple:
     sim = array([cosineSim(a, vector) for vector in b])
     idx = argsort(sim)[:-K-1:-1]
     return idx, sim[idx]
+
+async def long_message_splitter(_ch: Messageable | Webhook, text: str, title: str = "", chunk_size: int = 1900) -> Message:
+    """Split a long message into chunks that fit within Discord's message limits and send them sequentially."""
+    
+    last_message: Message | None = None
+
+    if len(text) > chunk_size:
+        parts = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+        len_parts = len(parts)
+        for i, part in enumerate(parts):
+            last_message = await _ch.send(f"# {title} part {i+1}/{len_parts}\n{part}")
+    else:
+        last_message = await _ch.send(f"# {title}\n{text}")
+    
+    if last_message is None:
+        raise RuntimeError("Failed to send message chunk")
+
+    return last_message
 
 @dataclass
 class UserDict:

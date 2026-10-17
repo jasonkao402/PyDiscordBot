@@ -9,7 +9,6 @@ BADARGUMENT = '參數 Bad!'
 
 class mainbot(commands.Cog):
     """Main functions."""
-    __slots__ = ('bot')
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot

@@ -1,4 +1,5 @@
 import os
+from typing import Any
 import toml
 
 def loadToml():
@@ -13,4 +14,4 @@ def loadToml():
         return _configToml
 
 # Load the configuration once and make it accessible
-configToml = loadToml()
+configToml: dict[str, Any] = loadToml()

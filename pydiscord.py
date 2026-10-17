@@ -5,7 +5,6 @@ from discord.ext import commands
 from config_loader import configToml, loadToml
 import asyncio
 import uvicorn
-from fastapi import FastAPI
 from cog_dev.moderation import PendingMessageManager
 import cog_dev.web_api as web_api
 import logging
@@ -21,7 +20,7 @@ async def run_discord():
     global client, COG_LIST, LOADED_COG
     
     # PreLoad
-    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'okgoodjoke', 'latex_render', 'personality'}
+    COG_LIST, LOADED_COG = set(), {'mainbot', 'askAI', 'latex_render'}
     # Scan cog folder and add to COG_LIST
     cog_folder = os.path.join(currWorkDir, 'cog')
     for file in os.listdir(cog_folder):
@@ -149,7 +148,7 @@ async def run_discord():
     async def _toml(ctx:commands.Context):
         global configToml
         configToml = loadToml()
-        # configToml.pop('apiToken', None)
+        # only expose llmModel section to avoid leaking sensitive info
         await ctx.send(f'toml reload done.```json\n{json.dumps(configToml["llmModel"], indent=2, ensure_ascii=False)}```')
     
     # Load API token, and delete it from configToml
