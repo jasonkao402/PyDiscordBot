@@ -2,4 +2,4 @@
 *
 */
 !.gitignore
-!readme_acc.txt
+!config_example.toml

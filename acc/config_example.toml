@@ -1,0 +1,66 @@
+debugChannelId = -1
+debug_guild_id = -1
+provider = "deepseek"
+
+[Webhook]
+webhook_url = "EXAMPLE_WEBHOOK_URL"
+
+[llmModel]
+ModelMain = "deepseek-v4.1-flash-free"
+ModelDebug = "deepseek-v4.1-flash-free"
+ModelEmbed = "shaw/dmeta-embedding-zh"
+
+[PromptTemplate]
+MemoryRequest = "可以幫忙依照時間順序整理一下剛剛在聊什麼嗎？保留大綱即可，省略不重要的零碎小事。"
+MemoryFormat = """
+<記憶格式>
+使用json格式，每則記錄一定要記錄到下列 key & value，並且嚴格遵守格式。
+"event_id": 從1遞增的整數(int)
+"what": 要記憶的互動或事件(string)
+"who": 互動或事件的參與者名字(string)
+
+備註:"when"已幫你記住，記得遵守上述json格式。
+</記憶格式>
+"""
+ReplyFormat = """
+<回答格式> 使用json格式，每次回覆使用者一定要記錄到下列 key & value，並且嚴格遵守格式。
+"what_to_reply" : 要回答的實際內容(string)
+"delta_affection" : 對使用者的好感度變化，範圍從 -3 到 +3(int)
+</回答格式>
+"""
+
+[stablediffusion]
+promptNeg = "(lowres:1.2), EasyNegative, badhandv4, negative_hand-neg, (worst quality:1.4), (low quality:1.4), (bad anatomy:1.4), bad hands, multiple views, comic, jpeg artifacts, bad feet, text, error, missing fingers, extra digits, fewer digits, cropped, signature, watermark, username, blurry"
+
+[auth]
+adminList = [
+]
+roleList = [
+]
+ban_list = [
+]
+
+[apiToken]
+discord = "EXAMPLE_DISCORD_TOKEN"
+[apiToken.deepseek]
+api = "https://api.deepseek.com"
+keys = [
+    "EXAMPLE_DEEPSEEK_API_KEY",
+]
+[apiToken.openrouter]
+api = "https://openrouter.ai/api/v1"
+keys = [
+    "EXAMPLE_OPENROUTER_API_KEY",
+]
+[apiToken.jev]
+api = "https://api.typesafe.ai/v1/systemone"
+keys = [
+    "EXAMPLE_JEV_API_KEY",
+]
+[apiToken.jev_local]
+api = "http://localhost/v1/systemone"
+keys = [
+    "EXAMPLE_JEV_LOCAL_API_KEY",
+]
+[directory]
+cogs = "./cogs"
