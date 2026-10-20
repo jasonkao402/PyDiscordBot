@@ -46,7 +46,7 @@ reply_format = """
 promptNeg = "(lowres:1.2), EasyNegative, badhandv4, negative_hand-neg, (worst quality:1.4), (low quality:1.4), (bad anatomy:1.4), bad hands, multiple views, comic, jpeg artifacts, bad feet, text, error, missing fingers, extra digits, fewer digits, cropped, signature, watermark, username, blurry"
 
 [auth]
-adminList = [
+admin_list = [
 ]
 role_list = [
 ]

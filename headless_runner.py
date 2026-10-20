@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 chat_config: dict[str, str] = configToml.get("llm_model", "")
 debugModel = chat_config["model_main"]
 debug_persona_id = 26
-debug_user_id = configToml.get("auth", {}).get("adminList", [])[0]
+debug_user_id = configToml.get("auth", {}).get("admin_list", [])[0]
 
 class FakeChatCog:
     def __init__(self):

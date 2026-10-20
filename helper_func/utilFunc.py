@@ -18,12 +18,12 @@ def clamp(n: float, minn: float = 0, maxn: float = 100) -> float:
 def is_admin_check():
     ''' Check if the user is in the admin list from configToml. Use as a decorator for commands.'''
     def predicate(interaction: Interaction) -> bool:
-        return int(interaction.user.id) in configToml.get('auth', {}).get('adminList', [])
+        return int(interaction.user.id) in configToml.get('auth', {}).get('admin_list', [])
     return app_commands.check(predicate)
 
 def devChk(id:int) -> bool:
     # admin = 
-    return int(id) in configToml.get('auth', {}).get('adminList', [])
+    return int(id) in configToml.get('auth', {}).get('admin_list', [])
 
 def sepLines(itr, sep='\n'):
     return sep.join(itr)

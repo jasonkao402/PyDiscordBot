@@ -209,7 +209,7 @@ class askAI(commands.Cog):
         if self.bot.user.mentioned_in(message) and not message.mention_everyone:
             # Check if the user has the required role or is the owner
             role_whitelist = configToml.get("auth", {}).get("role_list", [])
-            id_whitelist = configToml.get("auth", {}).get("adminList", [])
+            id_whitelist = configToml.get("auth", {}).get("admin_list", [])
             role_check = any(role.id in role_whitelist for role in _user_roles)
             id_check = _user_id in id_whitelist
             if not (role_check or id_check):

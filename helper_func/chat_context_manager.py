@@ -1,5 +1,5 @@
 from typing import List, Optional
-from discord import TextChannel, Client as DC_Client
+from discord import TextChannel, Object
 from persona_db.PersonaDatabase import PersonaDatabase, Persona
 from helper_func.llmAgentAPI import LLMAPI
 from helper_func.utilFunc import UserDict
@@ -7,8 +7,7 @@ from config_loader import configToml
 
 class ChatContextManager:
     """Holds shared database, API, and cache references across multiple Cogs."""
-    def __init__(self, bot: DC_Client):
-        self.bot = bot
+    def __init__(self):
         self.db = PersonaDatabase("llm_character_cards.db")
         self.llm_api = LLMAPI()
         self.ban_list: list[int] = configToml.get("auth", {}).get("ban_list", [])
@@ -24,7 +23,7 @@ class ChatContextManager:
         if self.debug_channel_cache is not None:
             return self.debug_channel_cache
         
-        _ch = self.bot.get_channel(configToml.get("discord_bot", {}).get("debug_channel_id", -1))
+        _ch = Object(configToml.get("discord_bot", {}).get("debug_channel_id", -1))
         # get_channel may return various channel types (TextChannel, DMChannel, Thread, etc.).
         # Use the more general TextChannel type for the attribute to avoid
         # type errors when assigning different channel kinds.

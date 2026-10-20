@@ -57,7 +57,7 @@ class MyBot(commands.Bot):
 
     async def setup_hook(self):
         # 1. Attach shared state singleton
-        self.chat_state = ChatContextManager(self)
+        self.chat_state = ChatContextManager()
 
         # 2. Load preload cogs from config.toml
         for cog in self.bot_config.get("preload", []):
