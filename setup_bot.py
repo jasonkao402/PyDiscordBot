@@ -36,7 +36,7 @@ def ext_name(name: str) -> str:
 class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="%", intents=discord.Intents.all())
-        self.chat_state: Optional[ChatContextManager] = None
+        self.chat_state: ChatContextManager
 
     @property
     def bot_config(self) -> dict:
@@ -44,6 +44,7 @@ class MyBot(commands.Bot):
 
     async def sync_tree(self, guild: Optional[discord.abc.Snowflake] = None):
         gid = self.bot_config.get("debug_guild_id", -1)
+        print(f"Syncing slash commands to guild {guild or gid}...")
         target = guild or (discord.Object(id=gid) if isinstance(gid, int) and gid > 0 else None)
 
         if target:
@@ -138,7 +139,7 @@ def register_admin_commands(client: MyBot):
     async def _toml(ctx: commands.Context):
         loadToml()
         llm_cfg = json.dumps(configToml.get("llm_model", {}), indent=2, ensure_ascii=False)
-        await ctx.send(f"✅ `config.toml` reloaded.\n```json\n{llm_cfg}```")
+        await ctx.send(f"`config.toml` reloaded.\n```json\n{llm_cfg}```")
 
     @client.command(name="close")
     @commands.is_owner()

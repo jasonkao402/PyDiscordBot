@@ -3,7 +3,7 @@ from discord import Interaction, Message, TextStyle, SelectOption, Member, User
 from typing import Optional
 
 from persona_db.DatabaseModels import Persona
-from persona_db.helper_func import _join_uid_list, _split_uid_list
+from persona_db.helper_func import _join_uid_list
 
 class BasePersonaModal(Modal):
     def __init__(self, title: str, callback, is_owner: bool, _persona: Optional[Persona] = None):

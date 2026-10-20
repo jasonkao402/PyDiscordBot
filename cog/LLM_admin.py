@@ -1,0 +1,113 @@
+from discord.ext import commands
+from typing import Optional, List, Set
+from discord import app_commands, Interaction
+from discord.app_commands import Choice
+from helper_func.llmAgentAPI import LLMAPI
+from helper_func.chat_context_manager import ChatContextManager
+from helper_func.utilFunc import is_admin_check
+from helper_func.ui_modal import TestSelect
+from setup_bot import MyBot
+
+class LLMAdminCog(commands.Cog):
+    def __init__(self, bot: MyBot):
+        self.bot = bot
+        self.state: ChatContextManager = bot.chat_state
+        self.db = self.state.db
+        self.llm_api: LLMAPI = self.state.llm_api
+
+    @is_admin_check()
+    @app_commands.command(name="clearcache", description="Clear the persona and selection caches")
+    async def clear_cache(self, interaction: Interaction):
+        """Clear the persona and selection caches."""
+        result = await self.state.clear_cache()
+        await interaction.response.send_message(result)
+
+    @is_admin_check()
+    @app_commands.command(name="debugmode", description="Toggle debug mode for the user (for testing purposes)")
+    async def _debug_mode(self, interaction: Interaction):
+        self.llm_api.debug_mode = not self.llm_api.debug_mode
+        await interaction.response.send_message(f"Debug mode is now {'enabled' if self.llm_api.debug_mode else 'disabled'} for you.")
+
+    @is_admin_check()
+    @app_commands.command(name="refreshmodels", description="Refresh the available models in the LLM API")
+    async def refresh_models(self, interaction: Interaction):
+        """Refresh the available models in the LLM API."""
+        result = await self.state.refresh_models()
+        await interaction.response.send_message(result)
+
+    async def autocomplete_persona_id(
+        self, 
+        interaction: Interaction, 
+        current: str
+    ) -> List[Choice[str]]:
+        """Autocomplete function for persona_id parameter in editpersona command."""
+        user_id = interaction.user.id
+        user_roles = getattr(interaction.user, 'roles', [])
+        user_role_ids = set(role.id for role in user_roles)
+
+        result = await self.state.autocomplete_persona_id(user_id, user_role_ids, current)
+        return [Choice(name=f"{p.persona_name} (#{p.uid})", value=str(p.uid)) for p in result[:25]]
+
+    @is_admin_check()
+    @app_commands.command(name="chathistory", description="Inspect the current memory usage of the bot")
+    async def inspect_memory(self, interaction: Interaction, persona_id: Optional[int] = None):
+        """Inspect the persona's chat history"""
+        if persona_id is not None:
+            persona = self.db.get_persona_no_check(persona_id)
+            history = self.llm_api.inspect_memory(persona_id)
+            history_str = "\n".join([f"{i+1}. {entry}" for i, entry in enumerate(history)]) if history else "No chat history found."
+            await interaction.response.send_message(f"Chat history for {persona.persona_name}:\n{history_str}")
+        else:
+            await interaction.response.send_message("Please provide a persona ID to inspect its chat history.", ephemeral=True)
+
+    async def model_autocomplete(
+        self, 
+        interaction: Interaction, 
+        current: str
+    ) -> List[Choice[str]]:
+        
+        # Get your list of models
+        api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
+        # Filter models based on what the user is typing
+        filtered_models = [model for model in api_models if current.lower() in model.lower()]
+        
+        # Return the choices (max 25)
+        return [
+            Choice(name=model, value=model)
+            for model in filtered_models[:25]
+        ]
+    
+    @is_admin_check()
+    @app_commands.command(name="selectmodel", description="選擇要使用的模型")
+    @app_commands.describe(model="請從列表中選擇一個模型")  # Add a description for the option
+    @app_commands.autocomplete(model=model_autocomplete)   # Link the autocomplete function
+    async def _selectModel(self, interaction: Interaction, model: str):
+        # 'model' is now the string the user selected from the autocomplete list
+        
+        # A quick check to make sure the model is valid
+        if model not in self.llm_api.available_models:
+            await interaction.response.send_message(
+                f"錯誤：無效的模型 `{model}`", 
+                ephemeral=True
+            )
+            return
+
+        # Update your config
+        # configToml.get("llmChat", {})["model_main"] = model
+        
+        # Send the confirmation
+        await interaction.response.send_message(
+            f"成功，已切換模型至 `{model}`",
+        )
+
+    @app_commands.command(name="testmodal", description="Test the select modal")
+    async def _test_modal(self, interaction: Interaction):
+        modal = TestSelect(member=interaction.user)
+        # await interaction.response.defer(thinking=True)  # Defer the response to allow time for the modal to be filled out
+        # await interaction.guild..send("Opening test modal...")
+        print(f"Opening test modal for {interaction.user.display_name} ({interaction.user.id})")
+        await interaction.response.send_modal(modal)
+
+async def setup(bot:MyBot):
+    cog_instance = LLMAdminCog(bot)
+    await bot.add_cog(cog_instance)

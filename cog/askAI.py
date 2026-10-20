@@ -1,198 +1,34 @@
-from typing import Optional, List, Set
-from discord import Client as DC_Client
-from discord import Color, Embed, Interaction, Message, TextChannel, app_commands, Webhook
-from discord.app_commands import Choice
+from discord import Color, Embed, Interaction, Message, app_commands
 from discord.ext import commands
 from discord.abc import Messageable
 from typing import Optional
 from helper_func.llmAgentAPI import LLMAPI
-from helper_func.utilFunc import sepLines, wcformat, long_message_splitter, UserDict, is_admin_check
-from helper_func.ui_modal import CreatePersonaModal, EditPersonaModal_Full, EditPersonaModal_Basic, TestSelect
+from helper_func.utilFunc import long_message_splitter, UserDict, is_admin_check
+from helper_func.chat_context_manager import ChatContextManager
 from config_loader import configToml
-from persona_db.PersonaDatabase import PersonaDatabase, Persona
-from persona_db.helper_func import _join_uid_list, _split_uid_list
+
 import base64
+from setup_bot import MyBot
 
 class askAI(commands.Cog):
 
-    def __init__(self, bot: DC_Client):
+    def __init__(self, bot: MyBot):
         self.bot = bot
-        self.db = PersonaDatabase("llm_character_cards.db")  # Initialize the database for character cards
-        self.llm_api = LLMAPI()  # Initialize the LLM API handler
-        self.ban_list = configToml.get("auth", {}).get("ban_list", [])
-        self.persona_cache: dict[int, Persona] = {}  # Cache for persona objects
-        self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
-        self.discord_user_cache: dict[int, UserDict] = {}  # Cache for user preferred names
-        
-        debug_channel = bot.get_channel(configToml.get("debug_channel_id", -1))
-        # get_channel may return various channel types (TextChannel, DMChannel, Thread, etc.).
-        # Use the more general TextChannel type for the attribute to avoid
-        # type errors when assigning different channel kinds.
-        self.debug_channel: Optional[TextChannel] = debug_channel if isinstance(debug_channel, TextChannel) else None
+        self.state: ChatContextManager = bot.chat_state
+        self.db = self.state.db
+        self.llm_api: LLMAPI = self.state.llm_api
+        self.ban_list = self.state.ban_list
+
+        self.persona_cache = self.state.persona_cache
+        self.selection_cache = self.state.selection_cache
+        self.discord_user_cache = self.state.discord_user_cache
+        self.debug_channel = self.state.debug_channel
+
         if self.debug_channel:
             ch_name = getattr(self.debug_channel, 'name', 'Unknown')
             print(f"Debug channel found: {ch_name} (ID: {getattr(self.debug_channel, 'id', 'N/A')})")
         else:
             print("Debug channel not found or invalid. Debug messages will be printed to console.")
-        
-    async def cog_unload(self):
-        await self.llm_api.cleanup()
-
-    @app_commands.command(name="clearcache", description="Clear the persona and selection caches")
-    @commands.is_owner()
-    async def clear_cache(self, interaction: Interaction):
-        """Clear the persona and selection caches."""
-        pc, sc, nc = len(self.persona_cache), len(self.selection_cache), len(self.discord_user_cache)
-        self.persona_cache.clear()
-        self.selection_cache.clear()
-        self.discord_user_cache.clear()
-        models = await self.llm_api.get_available_models(force_refresh=True)  # Refresh the model list in the LLM API
-        models_str = "\n  - ".join(models) if models else "No models available."
-        await interaction.response.send_message(f"Persona and selection caches have been cleared. (Removed {pc} personas, {sc} selections and {nc} users)\nAvailable models:\n```{models_str}```")
-        
-    @app_commands.command(name="createpersona", description="Create a new LLM persona")
-    async def create_persona(self, interaction: Interaction):
-        """Create a new LLM persona using a modal."""
-        _check = self.db.count_personas_by_owner(interaction.user.id)
-        if _check >= 5:
-            await interaction.response.send_message(
-                content="You have reached the maximum limit of 5 personas. Please delete an existing persona to create a new one.",
-                # ephemeral=True
-            )
-            return
-        modal = CreatePersonaModal(callback=self.handle_create_persona_submission)
-        await interaction.response.send_modal(modal)
-
-    async def handle_create_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool, allowed_role_ids: str):
-        """Handle the submission of the create persona modal. persona_id is unused and will always be -1 for creation."""
-        user_id = interaction.user.id
-
-        # Create the persona, the database will return the new persona's ID which we can use for confirmation
-        _persona_id = self.db.create_persona(persona_name, content, user_id, is_public, set(_split_uid_list(allowed_role_ids)))
-
-        # Create an embed to confirm the creation
-        embed = Embed(title=f"{persona_name} Created", color=Color.green())
-        embed.add_field(name="Persona ID", value=f"#{_persona_id}", inline=False)
-        embed.add_field(name="Visibility", value="Public" if is_public else "Private", inline=False)
-        embed.add_field(name="Content", value=content[:50], inline=False)  # Limit content to 1024 characters for embed
-
-        await interaction.response.send_message(embed=embed)
-    
-    @app_commands.command(name="editpersona", description="Edit an existing LLM persona")
-    @app_commands.describe(persona_id="ID of the persona to edit")
-    async def edit_persona(self, interaction: Interaction, persona_id: int):
-        """Edit an existing LLM persona using a modal."""
-        user_id = interaction.user.id
-        user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
-        # Fetch the persona from the database
-        _persona = self.db.get_persona(persona_id, user_id, user_role_ids)
-        if not _persona:
-            await interaction.response.send_message(f"Persona #{persona_id} not found.")
-            return
-        
-        if _persona.owner_uid == user_id:
-            # owner edit modal
-            modal = EditPersonaModal_Full(
-                _persona=_persona,
-                callback=self.handle_edit_persona_submission
-            )
-            await interaction.response.send_modal(modal)
-        elif _persona.permission_full(user_id, user_role_ids):
-            # non-owner edit modal
-            modal = EditPersonaModal_Basic(
-                _persona=_persona,
-                callback=self.handle_edit_persona_submission
-            )
-            await interaction.response.send_modal(modal)
-        else:
-            await interaction.response.send_message("You do not have permission to edit this persona.", ephemeral=True)
-            
-    async def handle_edit_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool, allowed_role_ids: str):
-        """Handle the submission of the edit persona modal."""
-        user_id = interaction.user.id
-        user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
-        _allowed_fields = self.db._get_allowed_fields_for_user(persona_id, user_id, user_role_ids)  # This will check permissions and return allowed fields, but we can skip the returned value since the modal already restricts input based on ownership
-        updates = {
-            'persona_name': persona_name,
-            'content': content,
-            'is_public': is_public,
-            'allowed_role_ids': allowed_role_ids
-        }
-        updates = {k: v for k, v in updates.items() if k in _allowed_fields}
-
-        success = self.db.update_persona(persona_id, user_id, user_role_ids, **updates)
-        if success:
-            await interaction.response.send_message(f"Persona #{persona_id} updated successfully.", ephemeral=True)
-            # Update cache
-            if persona_id in self.persona_cache:
-                _persona = self.db.get_persona_no_check(persona_id)
-                if not _persona:
-                    print(f"Failed to reload updated persona #{persona_id} into cache.")
-                    return
-                self.persona_cache[persona_id] = _persona  # Refresh the cache with updated persona
-        else:
-            await interaction.response.send_message("Failed to update persona. Ensure you own the persona.", ephemeral=True)
-            
-    async def autocomplete_persona_id(self, interaction: Interaction, current: str) -> List[Choice[int]]:
-        """Autocomplete function for persona_id parameter in editpersona command."""
-        user_id = interaction.user.id
-        user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
-        personas = self.persona_cache.values() if self.persona_cache else self.db.list_personas(user_id, user_role_ids)
-        filtered_personas = [p for p in personas if current in str(p.uid) or current.lower() in p.persona_name.lower()]
-        return [
-            Choice(name=f"{p.persona_name} (#{p.uid})", value=p.uid)
-            for p in filtered_personas[:25]
-        ]
-        
-    @commands.hybrid_command(name="selectpersona", description="選擇一個角色進行互動")
-    @app_commands.describe(persona_id="請輸入要選擇的角色ID")
-    @app_commands.autocomplete(persona_id=autocomplete_persona_id)
-    async def select_persona(self, ctx: commands.Context, persona_id: int):
-        """Select an LLM persona for interaction."""
-        user_id = ctx.author.id
-        user_roles = getattr(ctx.author, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
-        # Check cache first
-        if persona_id in self.persona_cache:
-            _persona = self.persona_cache[persona_id]
-        else:
-            # Fetch from database if not in cache
-            print(f'load persona {persona_id} from db')
-            _persona = self.db.get_persona_no_check(persona_id)
-            if not _persona:
-                await ctx.send(f"Failed to retrieve persona ID {persona_id} details.")
-                return
-            # Build cache
-            self.persona_cache[persona_id] = _persona
-        
-        if not _persona.permission_basic(user_id, user_role_ids):
-            await ctx.send(f"You do not have permission to select persona ID {persona_id}.")
-            return
-        self.selection_cache[user_id] = persona_id
-        
-        # Set selected persona in database
-        success = self.db.set_selected_persona(persona_id, user_id, user_role_ids)
-        if success:
-            await ctx.send(f"{self.persona_cache[persona_id].persona_name}(#{persona_id}) selected successfully.")
-        else:
-            await ctx.send(f"Failed to select {self.persona_cache[persona_id].persona_name}(#{persona_id}).")
-
-    @commands.hybrid_command(name="listpersonas")
-    async def list_personas(self, ctx: commands.Context):
-        """List all personas visible to the user."""
-        user_id = ctx.author.id
-        user_roles = getattr(ctx.author, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
-        personas = self.db.list_personas(user_id, user_role_ids)
-        if not personas:
-            await ctx.send("No personas available.")
-            return
-        personas = sorted(personas, key=lambda p: p.uid)  # Sort by persona ID
-        persona_list = sepLines([f"ID: {p.uid:03d}, [{['私人', '公開'][int(p.is_public)]}] Name: {wcformat(p.persona_name)}" for p in personas])
-        await ctx.send(f"Available Personas:\n```{persona_list}```")
     
     @app_commands.command(name="bonk", description="Erase the current chat session memory for the selected persona")
     async def bonk(self, interaction: Interaction):
@@ -351,7 +187,6 @@ class askAI(commands.Cog):
             else:
                 # No thinking content or debug channel available, just print response and token usage in debug channel or console
                 print(str(tResponse))
-            
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
@@ -383,83 +218,6 @@ class askAI(commands.Cog):
                 await message.channel.send(f'# To {userDict.name}...\n{extra_msg}')
                 return
             await self.handle_llm_trigger(message.channel, message, userDict)
-
-    @commands.hybrid_command(name='scoreboard')
-    async def _scoreboard(self, ctx: commands.Context):
-        """Display interaction statistics and leaderboard."""
-        user = ctx.author
-        uid, user_name = user.id, user.name
-
-        # Check if the user has interacted with any AI
-        user_stats = self.db.get_user_interaction_stats(uid)
-        if not user_stats:
-            return await ctx.send(f'{user_name} 尚未和AI們對話過')
-
-        # Retrieve user interaction data
-        total_interactions = user_stats['total_interactions']
-        most_interacted_count = user_stats['most_interacted_count']
-        most_interacted_name = user_stats['most_interacted_persona_name']
-
-        # Retrieve top 5 users with the most interactions
-        top_users = self.db.get_top_users(limit=5)
-        top_users_list = sepLines(
-            f'{username.name if (username := self.bot.get_user(user_id)) else "ERROR"}: {count}'
-            for user_id, count in top_users
-        )
-
-        # Prepare and send the scoreboard message
-        if most_interacted_name:
-            await ctx.send(
-                f'```{top_users_list}```\n'
-                f'{user_name}共對話 {total_interactions} 次，'
-                f'最常找 {most_interacted_name} 互動 '
-                f'({most_interacted_count} 次，佔 {most_interacted_count / total_interactions:.2%})'
-            )
-        else:
-            await ctx.send(
-                f'```{top_users_list}```\n'
-                f'{user_name}共對話 {total_interactions} 次'
-            )
-        
-    async def model_autocomplete(
-        self, 
-        interaction: Interaction, 
-        current: str
-    ) -> List[Choice[str]]:
-        
-        # Get your list of models
-        api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
-        # Filter models based on what the user is typing
-        filtered_models = [model for model in api_models if current.lower() in model.lower()]
-        
-        # Return the choices (max 25)
-        return [
-            Choice(name=model, value=model)
-            for model in filtered_models[:25]
-        ]
-    
-    @commands.is_owner()
-    @app_commands.command(name="selectmodel", description="選擇要使用的模型")
-    @app_commands.describe(model="請從列表中選擇一個模型")  # Add a description for the option
-    @app_commands.autocomplete(model=model_autocomplete)   # Link the autocomplete function
-    async def _selectModel(self, interaction: Interaction, model: str):
-        # 'model' is now the string the user selected from the autocomplete list
-        
-        # A quick check to make sure the model is valid
-        if model not in self.llm_api.available_models:
-            await interaction.response.send_message(
-                f"錯誤：無效的模型 `{model}`", 
-                ephemeral=True
-            )
-            return
-
-        # Update your config
-        configToml.get("llmChat", {})["model_main"] = model
-        
-        # Send the confirmation
-        await interaction.response.send_message(
-            f"成功，已切換模型至 `{model}`",
-        )
 
     @app_commands.command(name="memo", description="Summarize the current persona memory into a new memory")
     async def _memo(self, interaction: Interaction):
@@ -532,51 +290,10 @@ class askAI(commands.Cog):
         except Exception as e:
             print(f"Unexpected error in memo command: {e}")
             await interaction.followup.send(f"An unexpected error occurred: {e}")
-            
-    @app_commands.command(name="testmodal", description="Test the select modal")
-    async def _test_modal(self, interaction: Interaction):
-        modal = TestSelect(member=interaction.user)
-        # await interaction.response.defer(thinking=True)  # Defer the response to allow time for the modal to be filled out
-        # await interaction.guild..send("Opening test modal...")
-        print(f"Opening test modal for {interaction.user.display_name} ({interaction.user.id})")
-        await interaction.response.send_modal(modal)
-    
-    @app_commands.command(name="setname", description="Update the preferred name and description for the user")
-    async def _set_name(self, interaction: Interaction, name: Optional[str], description: Optional[str]):
-        user_id = interaction.user.id
-        # reset to default only if both name and description are empty, else keep the existing value if one of them is provided, 
-        # final fallback to display name for preferred name and "None" for description if both are empty and no existing value in database
-        orig = self.db.get_discord_user(user_id)
-        # Condition 1: Both are empty -> Reset to defaults
-        if name is None and description is None:
-            _new_name = interaction.user.display_name
-            _new_description = "None"
-            
-        # Condition 2: At least one is provided -> Update given, keep existing for the other
-        else:
-            # Fallbacks for existing data if the user only updates one field
-            existing_name = orig.preferred_name if orig and orig.preferred_name else interaction.user.display_name
-            existing_desc = orig.descr if orig and orig.descr else "None"
-            
-            _new_name = name if name is not None else existing_name
-            _new_description = description if description is not None else existing_desc
-            
-        res = self.db.update_discord_user(user_id, preferred_name=_new_name, descr=_new_description)
-        if res:
-            await interaction.response.send_message(f"Your preferred name has been set to {_new_name} and description to {_new_description}.")
-        else:
-            await interaction.response.send_message("Failed to update preferred name.")
-        self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=_new_name, descr=_new_description)
-    
-    @is_admin_check()
-    @app_commands.command(name="debugmode", description="Toggle debug mode for the user (for testing purposes)")
-    async def _debug_mode(self, interaction: Interaction):
-        self.llm_api.debug_mode = not self.llm_api.debug_mode
-        await interaction.response.send_message(f"Debug mode is now {'enabled' if self.llm_api.debug_mode else 'disabled'} for you.")
 
-async def setup(bot:commands.Bot):
+async def setup(bot:MyBot):
     cog_instance = askAI(bot)
     await bot.add_cog(cog_instance)
 
-async def teardown(bot:commands.Bot):
+async def teardown(bot:MyBot):
     print('ai saved')
