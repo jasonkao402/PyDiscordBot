@@ -5,7 +5,7 @@ from aiohttp import ClientSession, TCPConnector
 from time import strftime
 from config_loader import configToml
 from typing import Optional
-from cog.utilFunc import clamp
+from helper_func.utilFunc import clamp
 import base64
 import asyncio
 from datetime import datetime, timezone, timedelta

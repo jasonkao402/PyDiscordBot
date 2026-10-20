@@ -2,7 +2,7 @@ import random
 
 from discord import DMChannel, GroupChannel, PartialMessageable
 from discord.ext import commands
-from cog.utilFunc import devChk
+from helper_func.utilFunc import devChk
 
 POSINT = '正整數啦!'
 BADARGUMENT = '參數 Bad!'

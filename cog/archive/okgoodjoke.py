@@ -2,7 +2,7 @@ from collections import deque
 import pandas as pd
 from discord import RawReactionActionEvent
 from discord.ext import commands
-from cog.utilFunc import sepLines, wcformat
+from helper_func.utilFunc import sepLines, wcformat
 import numpy as np
 
 MEMOLEN = 32

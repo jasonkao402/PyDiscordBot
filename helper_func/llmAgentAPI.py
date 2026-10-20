@@ -1,5 +1,5 @@
 from collections import deque, defaultdict
-from cog.utilFunc import UserDict, PlaceholderReplacer
+from helper_func.utilFunc import UserDict, PlaceholderReplacer
 from cog_dev.responseParsing import parse_response
 from cog_dev.moderation import PendingMessage, TrimedResponse
 from persona_db.PersonaDatabase import Persona
@@ -15,16 +15,16 @@ from google.genai import types as gtypes, errors
 from typing import List, Optional
 from uuid import uuid4
 from time import strftime, time_ns
-from cog.utilFunc import wcformat
+from helper_func.utilFunc import wcformat
 
-model_config: dict[str, str] = configToml.get("llmModel", "")
-prompt_config: dict[str, str] = configToml.get("PromptTemplate", "")
+model_config: dict[str, str] = configToml.get("llm_model", "")
+prompt_config: dict[str, str] = configToml.get("prompt_template", "")
 
-PROVIDER = configToml.get("provider", "NOT_FOUND")
-FULL_MEMORY_RANGE = 14
-SUM_MEMORY_RANGE = 14
-VECTOR_MEMORY_RANGE = 3
-ROUND_ROBIN_QUOTA = 50  # Number of requests before switching to the next API key
+PROVIDER = configToml["llm_model"].get("provider", "NOT_FOUND")
+detail_memory_range = 14
+summary_memory_range = 14
+retrieval_memory_range = 3
+round_robin_quota = 50  # Number of requests before switching to the next API key
 extra_body = {
     # "provider": {
     #     "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
@@ -38,15 +38,15 @@ extra_body = {
 class LLMAPI:
     def __init__(self, _main_model: Optional[str] = None, _debug_mode: bool = False):
         self.main_model = (
-            _main_model if _main_model is not None else model_config["ModelMain"]
+            _main_model if _main_model is not None else model_config["model_main"]
         )
         self.available_models: List[str] = []  # Cache for available models
 
-        _api_key_pool = configToml["apiToken"][PROVIDER].get("keys", [])
-        _api_base_url = configToml["apiToken"][PROVIDER].get("api", "")
+        _api_key_pool = configToml["api_token"][PROVIDER].get("keys", [])
+        _api_base_url = configToml["api_token"][PROVIDER].get("api", "")
         # Initialize round-robin usage counter and quota
         self.round_robin_usage = 0
-        self.round_robin_quota = ROUND_ROBIN_QUOTA
+        self.round_robin_quota = round_robin_quota
         self.round_robin_api_index = 0
         self.round_robin_api_total = len(_api_key_pool)
         
@@ -59,7 +59,7 @@ class LLMAPI:
             for api_key in _api_key_pool
         ]
         self.persona_session_memory: defaultdict[int, deque[ChatInteraction]] = (
-            defaultdict(lambda: deque(maxlen=FULL_MEMORY_RANGE))
+            defaultdict(lambda: deque(maxlen=detail_memory_range))
         )
         print(
             f"Loaded LLM API with model = {self.main_model}, created {len(self.llm_apis)} clients @ {_api_base_url}."
@@ -68,6 +68,7 @@ class LLMAPI:
     async def cleanup(self):
         for llm_api in self.llm_apis:
             await llm_api.close()
+        print(f"Closed {len(self.llm_apis)} LLM API clients.")
 
     def inspect_memory(self, persona_id: int) -> list[ChatInteraction]:
         return list(self.persona_session_memory[persona_id])
@@ -307,8 +308,8 @@ class LLMAPI:
         
         _pr = PlaceholderReplacer(_user_dict)
         system_instruction = _pr.replace_placeholders(_persona.content)
-        system_instruction += prompt_config["MemoryFormat"]
-        # system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{prompt_config["MemoryFormat"]}'
+        system_instruction += prompt_config["memory_format"]
+        # system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{prompt_config["memory_format"]}'
         expand_messages = self._expand_ChatInteraction_to_messages(
             chatMem, skip_memorized=True
         )
@@ -319,7 +320,7 @@ class LLMAPI:
                 _code=-1,
             )
         expand_messages.append(
-            {"role": "user", "content": prompt_config["MemoryRequest"]+prompt_config["MemoryFormat"]}
+            {"role": "user", "content": prompt_config["memory_request"]+prompt_config["memory_format"]}
         )
         tResponse: TrimedResponse
         print(

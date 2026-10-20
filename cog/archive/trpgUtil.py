@@ -1,6 +1,6 @@
 import random
 import re
-from cog.utilFunc import *
+from helper_func.utilFunc import *
 from discord.ext import commands
 
 class trpgUtil(commands.Cog):

@@ -1,6 +1,6 @@
 import uvicorn
-from cog.llmAgentAPI import LLMAPI
-from cog.utilFunc import UserDict
+from helper_func.llmAgentAPI import LLMAPI
+from helper_func.utilFunc import UserDict
 from cog_dev.moderation import PendingMessage, PendingMessageManager, TrimedResponse
 from persona_db.PersonaDatabase import PersonaDatabase, Persona, DiscordUser
 import cog_dev.web_api as web_api
@@ -9,8 +9,8 @@ from config_loader import configToml
 import logging
 logging.basicConfig(level=logging.INFO)
 
-chat_config: dict[str, str] = configToml.get("llmModel", "")
-debugModel = chat_config["ModelMain"]
+chat_config: dict[str, str] = configToml.get("llm_model", "")
+debugModel = chat_config["model_main"]
 debug_persona_id = 26
 debug_user_id = configToml.get("auth", {}).get("adminList", [])[0]
 

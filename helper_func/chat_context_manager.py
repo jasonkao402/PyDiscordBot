@@ -1,9 +1,9 @@
 from typing import Optional
 from discord import TextChannel, Client as DC_Client
 from persona_db.PersonaDatabase import PersonaDatabase, Persona
-from cog.llmAgentAPI import LLMAPI
+from helper_func.llmAgentAPI import LLMAPI
 from discord.ext.commands import Bot
-from cog.utilFunc import UserDict
+from helper_func.utilFunc import UserDict
 from config_loader import configToml
 
 class ChatContextManager:
@@ -21,7 +21,7 @@ class ChatContextManager:
 
     @property
     def debug_channel(self) -> Optional[TextChannel]:
-        ch = self.bot.get_channel(configToml.get("debugChannelId", -1))
+        ch = self.bot.get_channel(configToml.get("debug_channel_id", -1))
         return ch if isinstance(ch, TextChannel) else None
 
     async def cleanup(self):

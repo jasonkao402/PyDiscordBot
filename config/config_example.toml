@@ -1,18 +1,31 @@
-debugChannelId = -1
+[discord_bot]
+debug_channel_id = -1
 debug_guild_id = -1
+activity = "正在殺蟲...(debugging...)"
+directory = "./cog"
+preload = [
+    "cog.askAI",
+    "cog.mainbot",
+    "cog.latex_render",
+]
+
+[webui]
+host = "localhost"
+port = 8080
+
+[llm_model]
 provider = "deepseek"
+model_main = "deepseek/deepseek-v4.1-flash-1017"
+model_debug = "deepseek/deepseek-v4.1-flash-1017"
+model_embed = "shaw/dmeta-embedding-zh"
+detail_memory_range = 14
+summary_memory_range = 14
+retrieval_memory_range = 3
+round_robin_quota = 50
 
-[Webhook]
-webhook_url = "EXAMPLE_WEBHOOK_URL"
-
-[llmModel]
-ModelMain = "deepseek-v4.1-flash-free"
-ModelDebug = "deepseek-v4.1-flash-free"
-ModelEmbed = "shaw/dmeta-embedding-zh"
-
-[PromptTemplate]
-MemoryRequest = "可以幫忙依照時間順序整理一下剛剛在聊什麼嗎？保留大綱即可，省略不重要的零碎小事。"
-MemoryFormat = """
+[prompt_template]
+memory_request = "可以幫忙依照時間順序整理一下剛剛在聊什麼嗎？保留大綱即可，省略不重要的零碎小事。"
+memory_format = """
 <記憶格式>
 使用json格式，每則記錄一定要記錄到下列 key & value，並且嚴格遵守格式。
 "event_id": 從1遞增的整數(int)
@@ -22,7 +35,7 @@ MemoryFormat = """
 備註:"when"已幫你記住，記得遵守上述json格式。
 </記憶格式>
 """
-ReplyFormat = """
+reply_format = """
 <回答格式> 使用json格式，每次回覆使用者一定要記錄到下列 key & value，並且嚴格遵守格式。
 "what_to_reply" : 要回答的實際內容(string)
 "delta_affection" : 對使用者的好感度變化，範圍從 -3 到 +3(int)
@@ -35,32 +48,30 @@ promptNeg = "(lowres:1.2), EasyNegative, badhandv4, negative_hand-neg, (worst qu
 [auth]
 adminList = [
 ]
-roleList = [
+role_list = [
 ]
 ban_list = [
 ]
 
-[apiToken]
+[api_token]
 discord = "EXAMPLE_DISCORD_TOKEN"
-[apiToken.deepseek]
+[api_token.deepseek]
 api = "https://api.deepseek.com"
 keys = [
     "EXAMPLE_DEEPSEEK_API_KEY",
 ]
-[apiToken.openrouter]
+[api_token.openrouter]
 api = "https://openrouter.ai/api/v1"
 keys = [
     "EXAMPLE_OPENROUTER_API_KEY",
 ]
-[apiToken.jev]
+[api_token.jev]
 api = "https://api.typesafe.ai/v1/systemone"
 keys = [
     "EXAMPLE_JEV_API_KEY",
 ]
-[apiToken.jev_local]
+[api_token.jev_local]
 api = "http://localhost/v1/systemone"
 keys = [
     "EXAMPLE_JEV_LOCAL_API_KEY",
 ]
-[directory]
-cogs = "./cogs"

@@ -5,9 +5,9 @@ from discord.app_commands import Choice
 from discord.ext import commands
 from discord.abc import Messageable
 from typing import Optional
-from cog.llmAgentAPI import LLMAPI
-from cog.utilFunc import sepLines, wcformat, long_message_splitter, UserDict, is_admin_check
-from cog.ui_modal import CreatePersonaModal, EditPersonaModal_Full, EditPersonaModal_Basic, TestSelect
+from helper_func.llmAgentAPI import LLMAPI
+from helper_func.utilFunc import sepLines, wcformat, long_message_splitter, UserDict, is_admin_check
+from helper_func.ui_modal import CreatePersonaModal, EditPersonaModal_Full, EditPersonaModal_Basic, TestSelect
 from config_loader import configToml
 from persona_db.PersonaDatabase import PersonaDatabase, Persona
 from persona_db.helper_func import _join_uid_list, _split_uid_list
@@ -24,7 +24,7 @@ class askAI(commands.Cog):
         self.selection_cache: dict[int, int] = {}  # Cache for user selected persona IDs
         self.discord_user_cache: dict[int, UserDict] = {}  # Cache for user preferred names
         
-        debug_channel = bot.get_channel(configToml.get("debugChannelId", -1))
+        debug_channel = bot.get_channel(configToml.get("debug_channel_id", -1))
         # get_channel may return various channel types (TextChannel, DMChannel, Thread, etc.).
         # Use the more general TextChannel type for the attribute to avoid
         # type errors when assigning different channel kinds.
@@ -373,7 +373,7 @@ class askAI(commands.Cog):
         # Use mentions to trigger bot LLM chat
         if self.bot.user.mentioned_in(message) and not message.mention_everyone:
             # Check if the user has the required role or is the owner
-            role_whitelist = configToml.get("auth", {}).get("roleList", [])
+            role_whitelist = configToml.get("auth", {}).get("role_list", [])
             id_whitelist = configToml.get("auth", {}).get("adminList", [])
             role_check = any(role.id in role_whitelist for role in _user_roles)
             id_check = _user_id in id_whitelist
@@ -454,7 +454,7 @@ class askAI(commands.Cog):
             return
 
         # Update your config
-        configToml.get("llmChat", {})["ModelMain"] = model
+        configToml.get("llmChat", {})["model_main"] = model
         
         # Send the confirmation
         await interaction.response.send_message(

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands, tasks
 from discord import Client as DC_Client, Embed, Color
-from cog.utilFunc import utctimeFormat, TWTZ
+from helper_func.utilFunc import utctimeFormat, TWTZ
 
 timet = datetime.now(timezone.utc) + timedelta(seconds=-10)
 timet = timet.time()
