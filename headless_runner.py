@@ -28,8 +28,8 @@ class FakeChatCog:
 async def fake_cog_chatbot():
     # print(http_options)
     db = PersonaDatabase("llm_character_cards.db")
-    api = FakeChatCog()
-    models = await api.get_available_models()
+    cog_api = FakeChatCog()
+    models = await cog_api.get_available_models()
     print(f"Available models:")
     print("\n".join([f"- {m}" for m in sorted(models)]))
 
@@ -52,10 +52,10 @@ async def fake_cog_chatbot():
 
         try:
             if userPrompt.lower() in ["memo"]:
-                source_msg_uids = api.llm_api.get_msg_uids_from_memory(
+                source_msg_uids = cog_api.llm_api.get_msg_uids_from_memory(
                     debug_persona_id, skip_memorized=True
                 )
-                tResponse = await api.llm_api.persona_memory_summarize(
+                tResponse = await cog_api.llm_api.persona_memory_summarize(
                     _persona=_persona,
                     _user_dict=user_dict,
                 )
@@ -70,7 +70,7 @@ async def fake_cog_chatbot():
                     source_msg_uids=source_msg_uids,
                 )
             else:
-                tResponse = await api.llm_api.persona_chat_oneshot(
+                tResponse = await cog_api.llm_api.persona_chat_oneshot(
                     prompt_str=userPrompt,
                     _persona=_persona,
                     _user_dict=user_dict,
@@ -93,7 +93,7 @@ async def fake_cog_chatbot():
         except Exception as e:
             print(f"Error during chat: {e}")
 
-    await api.close()
+    await cog_api.close()
 
 
 async def main():

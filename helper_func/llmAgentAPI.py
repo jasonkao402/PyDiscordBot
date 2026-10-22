@@ -1,3 +1,4 @@
+# helper_func/llmAgentAPI.py
 from collections import deque, defaultdict
 from helper_func.utilFunc import UserDict, PlaceholderReplacer
 from cog_dev.responseParsing import parse_response
@@ -20,11 +21,11 @@ from helper_func.utilFunc import wcformat
 model_config: dict[str, str] = configToml.get("llm_model", "")
 prompt_config: dict[str, str] = configToml.get("prompt_template", "")
 
-PROVIDER = configToml["llm_model"].get("provider", "NOT_FOUND")
-detail_memory_range = 14
-summary_memory_range = 14
-retrieval_memory_range = 3
-round_robin_quota = 50  # Number of requests before switching to the next API key
+api_provider = configToml["llm_model"].get("provider", "NOT_FOUND")
+detail_memory_range = configToml["llm_model"].get("detail_memory_range", 14)
+summary_memory_range = configToml["llm_model"].get("summary_memory_range", 14)
+retrieval_memory_range = configToml["llm_model"].get("retrieval_memory_range", 3)
+round_robin_quota = configToml["llm_model"].get("round_robin_quota", 50)
 extra_body = {
     # "provider": {
     #     "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
@@ -42,8 +43,8 @@ class LLMAPI:
         )
         self.available_models: List[str] = []  # Cache for available models
 
-        _api_key_pool = configToml["api_token"][PROVIDER].get("keys", [])
-        _api_base_url = configToml["api_token"][PROVIDER].get("api", "")
+        _api_key_pool = configToml["api_token"][api_provider].get("keys", [])
+        _api_base_url = configToml["api_token"][api_provider].get("url", "")
         # Initialize round-robin usage counter and quota
         self.round_robin_usage = 0
         self.round_robin_quota = round_robin_quota

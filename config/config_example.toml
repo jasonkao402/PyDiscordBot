@@ -56,22 +56,22 @@ ban_list = [
 [api_token]
 discord = "EXAMPLE_DISCORD_TOKEN"
 [api_token.deepseek]
-api = "https://api.deepseek.com"
+url = "https://api.deepseek.com"
 keys = [
     "EXAMPLE_DEEPSEEK_API_KEY",
 ]
 [api_token.openrouter]
-api = "https://openrouter.ai/api/v1"
+url = "https://openrouter.ai/api/v1"
 keys = [
     "EXAMPLE_OPENROUTER_API_KEY",
 ]
 [api_token.jev]
-api = "https://api.typesafe.ai/v1/systemone"
+url = "https://api.typesafe.ai/v1/systemone"
 keys = [
     "EXAMPLE_JEV_API_KEY",
 ]
 [api_token.jev_local]
-api = "http://localhost/v1/systemone"
+url = "http://localhost/v1/systemone"
 keys = [
     "EXAMPLE_JEV_LOCAL_API_KEY",
 ]

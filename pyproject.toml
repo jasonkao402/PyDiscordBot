@@ -8,3 +8,8 @@ reportUnnecessaryContains = true
 reportUnnecessaryIsInstance = true
 reportUnnecessaryTypeIgnoreComment = true
 typeCheckingMode = "standard"
+
+[dependency-groups]
+dev = [
+    "typesafe-sdk>=0.7.5",
+]
