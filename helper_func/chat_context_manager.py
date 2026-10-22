@@ -13,25 +13,9 @@ class ChatContextManager:
         self.ban_list: list[int] = configToml.get("auth", {}).get("ban_list", [])
         
         # Shared caches (mutating these in one Cog updates them everywhere)
-        self.debug_channel_cache: Optional[TextChannel] = None
         self.persona_cache: dict[int, Persona] = {}
         self.selection_cache: dict[int, int] = {}
         self.discord_user_cache: dict[int, UserDict] = {}
-
-    @property
-    def debug_channel(self) -> Optional[TextChannel]:
-        if self.debug_channel_cache is not None:
-            return self.debug_channel_cache
-        
-        _ch = Object(configToml.get("discord_bot", {}).get("debug_channel_id", -1))
-        # get_channel may return various channel types (TextChannel, DMChannel, Thread, etc.).
-        # Use the more general TextChannel type for the attribute to avoid
-        # type errors when assigning different channel kinds.
-        if not isinstance(_ch, TextChannel):
-            return None
-        
-        self.debug_channel_cache = _ch
-        return _ch
     
     async def clear_cache(self):
         """Clear the persona and selection caches."""

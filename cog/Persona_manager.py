@@ -19,7 +19,8 @@ class PersonaManagerCog(commands.Cog):
         self.persona_cache = self.state.persona_cache
         self.selection_cache = self.state.selection_cache
         self.discord_user_cache = self.state.discord_user_cache
-        self.debug_channel = self.state.debug_channel
+        # self.debug_guild = self.bot.debug_guild
+        self.debug_channel = self.bot.debug_channel
 
     @app_commands.command(name="createpersona", description="Create a new LLM persona")
     async def create_persona(self, interaction: Interaction):

@@ -37,19 +37,32 @@ class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="%", intents=discord.Intents.all())
         self.chat_state: ChatContextManager
+        self.debug_guild_cache: Optional[discord.Guild] = None
+        self.debug_channel_cache: Optional[discord.PartialMessageable] = None
 
     @property
     def bot_config(self) -> dict:
         return configToml.get("discord_bot", {})
 
-    async def sync_tree(self, guild: Optional[discord.abc.Snowflake] = None):
+    @property
+    def debug_guild_id(self) -> Optional[discord.Guild]:
+        if self.debug_guild_cache is not None:
+            return self.debug_guild_cache
         gid = self.bot_config.get("debug_guild_id", -1)
-        print(f"Syncing slash commands to guild {guild or gid}...")
-        target = guild or (discord.Object(id=gid) if isinstance(gid, int) and gid > 0 else None)
+        return self.get_guild(gid) if isinstance(gid, int) and gid > 0 else None
 
-        if target:
-            self.tree.copy_global_to(guild=target)
-            cmds = await self.tree.sync(guild=target)
+    @property
+    def debug_channel(self) -> Optional[discord.PartialMessageable]:
+        if self.debug_channel_cache is not None:
+            return self.debug_channel_cache
+        cid = self.bot_config.get("debug_channel_id", -1)
+        return self.get_partial_messageable(cid) if isinstance(cid, int) and cid > 0 else None
+
+    async def sync_tree(self, target_guild: Optional[discord.abc.Snowflake] = None):
+        """Sync the command tree to a specific guild or globally."""
+        if target_guild:
+            self.tree.copy_global_to(guild=target_guild)
+            cmds = await self.tree.sync(guild=target_guild)
         else:
             cmds = await self.tree.sync()
 
@@ -64,8 +77,12 @@ class MyBot(commands.Bot):
             await self.load_extension(ext_name(cog))
         logger.info(f"Preloaded cogs: {list(self.extensions.keys())}")
 
-        # 3. Sync slash commands
-        await self.sync_tree()
+        # 3. Sync slash commands to debug guild for faster iteration during development
+        gid = self.bot_config.get("debug_guild_id", -1)
+        if isinstance(gid, int) and gid > 0:
+            await self.sync_tree(target_guild=self.get_guild(gid))
+        else:
+            await self.sync_tree()  # Sync globally if no debug guild is specified
 
     async def on_ready(self):
         activity = self.bot_config.get("activity", "正在殺蟲...(debugging...)")
@@ -95,6 +112,13 @@ def register_admin_commands(client: MyBot):
 
         await client.sync_tree()
         await ctx.send(f"Reloaded `{len(loaded)}` cogs and synced commands.")
+
+    @client.hybrid_command(name="sync", description="Sync slash commands to a specific guild or globally.")
+    @commands.is_owner()
+    async def _sync(ctx: commands.Context, guild_id: Optional[int] = None):
+        target_guild = client.get_guild(guild_id) if guild_id else None
+        await client.sync_tree(target_guild)
+        await ctx.send(f"Synced commands to {target_guild.name if guild_id else 'global scope'}.")
 
     @client.command(name="load")
     @commands.is_owner()

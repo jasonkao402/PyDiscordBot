@@ -50,6 +50,8 @@ class LLMAdminCog(commands.Cog):
 
     @is_admin_check()
     @app_commands.command(name="chathistory", description="Inspect the current memory usage of the bot")
+    @app_commands.describe(persona_id="The ID of the persona to inspect")  # Add a description for the option
+    @app_commands.autocomplete(persona_id=autocomplete_persona_id)  # Link the autocomplete function
     async def inspect_memory(self, interaction: Interaction, persona_id: Optional[int] = None):
         """Inspect the persona's chat history"""
         if persona_id is not None:

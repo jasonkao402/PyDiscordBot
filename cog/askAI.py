@@ -22,11 +22,11 @@ class askAI(commands.Cog):
         self.persona_cache = self.state.persona_cache
         self.selection_cache = self.state.selection_cache
         self.discord_user_cache = self.state.discord_user_cache
-        self.debug_channel = self.state.debug_channel
+        self.debug_channel = self.bot.debug_channel
 
         if self.debug_channel:
             ch_name = getattr(self.debug_channel, 'name', 'Unknown')
-            print(f"Debug channel found: {ch_name} (ID: {getattr(self.debug_channel, 'id', 'N/A')})")
+            print(f"Debug channel found: {ch_name} (ID: {getattr(self.debug_channel, 'id', 'N/A')}, Type: {type(self.debug_channel)})")
         else:
             print("Debug channel not found or invalid. Debug messages will be printed to console.")
     
