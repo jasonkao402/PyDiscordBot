@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from cog_dev import web_api
 from cog_dev.moderation import PendingMessageManager
-from config_loader import configToml, loadToml
+from config_loader import config_toml, load_toml
 from helper_func.chat_context_manager import ChatContextManager
 
 logging.basicConfig(level=logging.INFO)
@@ -24,14 +24,14 @@ os.chdir(BASE_DIR)
 
 def get_available_cogs() -> set[str]:
     """Return all .py files in the configured cog directory as 'cog.filename'."""
-    cog_dir = Path(configToml.get("discord_bot", {}).get("cog_directory", "./cog"))
+    cog_dir = Path(config_toml.get("discord_bot", {}).get("cog_directory", "./cog"))
     if not cog_dir.exists():
         return set()
     return {f"{cog_dir.name}.{f.stem}" for f in cog_dir.glob("*.py") if not f.name.startswith("_")}
 
 def ext_name(name: str) -> str:
     """Normalize 'askAI' -> 'cog.askAI'."""
-    cog_pkg = Path(configToml.get("discord_bot", {}).get("cog_directory", "./cog")).name
+    cog_pkg = Path(config_toml.get("discord_bot", {}).get("cog_directory", "./cog")).name
     return name if "." in name else f"{cog_pkg}.{name}"
 
 class MyBot(commands.Bot):
@@ -43,7 +43,7 @@ class MyBot(commands.Bot):
 
     @property
     def bot_config(self) -> dict:
-        return configToml.get("discord_bot", {})
+        return config_toml.get("discord_bot", {})
 
     @property
     def debug_guild_id(self) -> discord.Guild | None:
@@ -163,8 +163,8 @@ def register_admin_commands(client: MyBot):
     @client.hybrid_command(name="toml", description="Reload config.toml in-place.")
     @commands.is_owner()
     async def reload_toml(ctx: commands.Context) -> None:
-        loadToml()
-        llm_cfg = json.dumps(configToml.get("llm_model", {}), indent=2, ensure_ascii=False)
+        load_toml()
+        llm_cfg = json.dumps(config_toml.get("llm_model", {}), indent=2, ensure_ascii=False)
         await ctx.send(f"`config.toml` reloaded.\n```json\n{llm_cfg}```")
 
     @client.command(name="close")
@@ -177,7 +177,7 @@ async def run_discord():
     client = MyBot()
     register_admin_commands(client)
 
-    token = configToml.get("api_token", {}).get("discord")
+    token = config_toml.get("api_token", {}).get("discord")
     if not token:
         msg = "Missing [api_token].discord in config.toml"
         raise RuntimeError(msg)
@@ -188,8 +188,8 @@ async def run_discord():
     bot_task = asyncio.create_task(client.start(token))
 
     # Run web API in background
-    host = configToml.get("webui", {}).get("host", "localhost")
-    port = configToml.get("webui", {}).get("port", 8080)
+    host = config_toml.get("webui", {}).get("host", "localhost")
+    port = config_toml.get("webui", {}).get("port", 8070)
     uvicorn_config = uvicorn.Config("cog_dev.web_api:app", host=host, port=port, log_level="info")
     server = uvicorn.Server(uvicorn_config)
     api_task = asyncio.create_task(server.serve())

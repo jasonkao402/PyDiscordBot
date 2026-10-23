@@ -1,12 +1,18 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from discord import Interaction, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from helper_func.chat_context_manager import ChatContextManager
-from helper_func.llm_agent_API import LLMAPI
 from helper_func.ui_modal import TestSelect
 from helper_func.utilFunc import is_admin_check
-from setup_bot import MyBot
+
+if TYPE_CHECKING:
+    from helper_func.chat_context_manager import ChatContextManager
+    from helper_func.llm_agent_API import LLMAPI
+    from setup_bot import MyBot
 
 
 class LLMAdminCog(commands.Cog):
@@ -25,7 +31,7 @@ class LLMAdminCog(commands.Cog):
 
     @is_admin_check()
     @app_commands.command(name="debugmode", description="Toggle debug mode for the user (for testing purposes)")
-    async def _debug_mode(self, interaction: Interaction):
+    async def toggle_debug_mode(self, interaction: Interaction):
         self.llm_api.debug_mode = not self.llm_api.debug_mode
         await interaction.response.send_message(f"Debug mode is now {'enabled' if self.llm_api.debug_mode else 'disabled'} for you.")
 
@@ -37,14 +43,14 @@ class LLMAdminCog(commands.Cog):
         await interaction.response.send_message(result)
 
     async def autocomplete_persona_id(
-        self, 
-        interaction: Interaction, 
+        self,
+        interaction: Interaction,
         current: str
     ) -> list[Choice[str]]:
         """Autocomplete function for persona_id parameter in editpersona command."""
         user_id = interaction.user.id
         user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
+        user_role_ids = {role.id for role in user_roles}
 
         result = await self.state.autocomplete_persona_id(user_id, user_role_ids, current)
         return [Choice(name=f"{p.persona_name} (#{p.uid})", value=str(p.uid)) for p in result[:25]]
@@ -58,7 +64,7 @@ class LLMAdminCog(commands.Cog):
         if persona_id is not None:
             persona = self.db.get_persona_no_check(persona_id)
             history = self.llm_api.inspect_memory(persona_id)
-            history_str = "\n".join([f"{i+1}. {entry}" for i, entry in enumerate(history)]) if history else "No chat history found."
+            history_str = "\n".join([f"{i + 1}. {entry}" for i, entry in enumerate(history)]) if history else "No chat history found."
             await interaction.response.send_message(f"Chat history for {persona.persona_name}:\n{history_str}")
         else:
             await interaction.response.send_message("Please provide a persona ID to inspect its chat history.", ephemeral=True)
@@ -68,23 +74,23 @@ class LLMAdminCog(commands.Cog):
         interaction: Interaction,
         current: str
     ) -> list[Choice[str]]:
-        
+
         # Get your list of models
         api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
         # Filter models based on what the user is typing
         filtered_models = [model for model in api_models if current.lower() in model.lower()]
-        
+
         # Return the choices (max 25)
         return [
             Choice(name=model, value=model)
             for model in filtered_models[:25]
         ]
-    
+
     @is_admin_check()
     @app_commands.command(name="selectmodel", description="選擇要使用的模型")
     @app_commands.describe(model="請從列表中選擇一個模型")  # Add a description for the option
     @app_commands.autocomplete(model=model_autocomplete)   # Link the autocomplete function
-    async def _selectModel(self, interaction: Interaction, model: str):
+    async def select_model(self, interaction: Interaction, model: str):
         # 'model' is now the string the user selected from the autocomplete list
 
         # A quick check to make sure the model is valid
@@ -96,7 +102,7 @@ class LLMAdminCog(commands.Cog):
             return
 
         # Update your config
-        # configToml.get("llmChat", {})["model_main"] = model
+        # config_tomllllll.get("llmChat", {})["model_main"] = model
 
         # Send the confirmation
         await interaction.response.send_message(
@@ -104,13 +110,13 @@ class LLMAdminCog(commands.Cog):
         )
 
     @app_commands.command(name="testmodal", description="Test the select modal")
-    async def _test_modal(self, interaction: Interaction):
+    async def test_modal(self, interaction: Interaction):
         modal = TestSelect(member=interaction.user)
         # await interaction.response.defer(thinking=True)  # Defer the response to allow time for the modal to be filled out
         # await interaction.guild..send("Opening test modal...")
         print(f"Opening test modal for {interaction.user.display_name} ({interaction.user.id})")
         await interaction.response.send_modal(modal)
 
-async def setup(bot:MyBot):
+async def setup(bot: MyBot):
     cog_instance = LLMAdminCog(bot)
     await bot.add_cog(cog_instance)

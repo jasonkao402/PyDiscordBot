@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from cog_dev import web_api
 from cog_dev.moderation import PendingMessage, TrimedResponse
-from config_loader import configToml
+from config_loader import config_toml
 from helper_func.utilFunc import PlaceholderReplacer, UserDict, wcformat
 from persona_db.DatabaseModels import ChatInteraction
 from persona_db.helper_func import iso_timestamp
@@ -19,14 +19,14 @@ from persona_db.helper_func import iso_timestamp
 if TYPE_CHECKING:
     from persona_db.PersonaDatabase import Persona
 
-model_config: dict[str, str] = configToml.get("llm_model", "")
-prompt_config: dict[str, str] = configToml.get("prompt_template", "")
+model_config: dict[str, str] = config_toml.get("llm_model", "")
+prompt_config: dict[str, str] = config_toml.get("prompt_template", "")
 
-api_provider = configToml["llm_model"].get("provider", "NOT_FOUND")
-detail_memory_range = configToml["llm_model"].get("detail_memory_range", 14)
-summary_memory_range = configToml["llm_model"].get("summary_memory_range", 14)
-retrieval_memory_range = configToml["llm_model"].get("retrieval_memory_range", 3)
-round_robin_quota = configToml["llm_model"].get("round_robin_quota", 50)
+api_provider = config_toml["llm_model"].get("provider", "NOT_FOUND")
+detail_memory_range = config_toml["llm_model"].get("detail_memory_range", 14)
+summary_memory_range = config_toml["llm_model"].get("summary_memory_range", 14)
+retrieval_memory_range = config_toml["llm_model"].get("retrieval_memory_range", 3)
+round_robin_quota = config_toml["llm_model"].get("round_robin_quota", 50)
 extra_body = {
     # "provider": {
     #     "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
@@ -45,9 +45,9 @@ class LLMAPI:
         )
         self.available_models: list[str] = []  # Cache for available models
 
-        _api_key_pool = configToml["api_token"][api_provider].get("keys", [])
-        _api_base_url = configToml["api_token"][api_provider].get("url", "")
-        self.max_tokens = configToml["llm_model"].get("max_tokens", 5120)
+        _api_key_pool = config_toml["api_token"][api_provider].get("keys", [])
+        _api_base_url = config_toml["api_token"][api_provider].get("url", "")
+        self.max_tokens = config_toml["llm_model"].get("max_tokens", 5120)
         # Initialize round-robin usage counter and quota
         self.round_robin_usage = 0
         self.round_robin_quota = round_robin_quota

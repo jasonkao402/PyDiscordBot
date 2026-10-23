@@ -1,13 +1,19 @@
 # web_api.py
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from __future__ import annotations
+
 import json
 import time
-from cog_dev.moderation import PendingMessageManager
+from typing import TYPE_CHECKING
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from cog_dev.moderation import PendingMessageManager
 
 app = FastAPI()
-pending_manager: PendingMessageManager # to be set by askAI cog when initialized
+pending_manager: PendingMessageManager  # to be set by askAI cog when initialized
 
 # WebSocket endpoint to push updates to admin page
 class ConnectionManager:
@@ -25,6 +31,7 @@ class ConnectionManager:
         for connection in self.active_connections:
             await connection.send_text(data)
 
+
 ws_manager = ConnectionManager()
 
 @app.websocket("/ws")
@@ -39,7 +46,6 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
 
-import time
 
 async def push_update():
     now_mono = time.monotonic()
@@ -54,8 +60,6 @@ async def push_update():
         data.append(d)
     await ws_manager.broadcast(json.dumps(data))
 
-# REST actions
-from pydantic import BaseModel
 
 class EditSubmit(BaseModel):
     msg_id: str
@@ -67,11 +71,13 @@ async def action_send(msg_id: str):
     await push_update()
     return {"ok": True}
 
+
 @app.post("/action/reject")
 async def action_reject(msg_id: str):
     await pending_manager.reject(msg_id)
     await push_update()
     return {"ok": True}
+
 
 @app.post("/action/hold")
 async def action_hold(msg_id: str):
@@ -79,11 +85,13 @@ async def action_hold(msg_id: str):
     await push_update()
     return {"ok": True}
 
+
 @app.post("/action/submit_edit")
 async def action_submit_edit(edit: EditSubmit):
     await pending_manager.submit_edited(edit.msg_id, edit.new_content)
     await push_update()
     return {"ok": True}
+
 
 # Serve the admin page (minimal HTML)
 @app.get("/", response_class=FileResponse)

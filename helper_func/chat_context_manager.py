@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from config_loader import configToml
+from config_loader import config_toml
 from helper_func.llm_agent_API import LLMAPI
 from persona_db.PersonaDatabase import Persona, PersonaDatabase
 
@@ -15,7 +15,7 @@ class ChatContextManager:
     def __init__(self):
         self.db = PersonaDatabase("llm_character_cards.db")
         self.llm_api = LLMAPI()
-        self.ban_list: list[int] = configToml.get("auth", {}).get("ban_list", [])
+        self.ban_list: list[int] = config_toml.get("auth", {}).get("ban_list", [])
 
         # Shared caches (mutating these in one Cog updates them everywhere)
         self.persona_cache: dict[int, Persona] = {}

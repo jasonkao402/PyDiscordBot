@@ -5,7 +5,7 @@ from numpy import argsort, array, dot, ndarray
 from numpy.linalg import norm
 from typing import List, Optional
 from wcwidth import wcswidth
-from config_loader import configToml
+from config_loader import config_toml
 from dataclasses import dataclass
 import re
 
@@ -16,14 +16,14 @@ def clamp(n: float, minn: float = 0, maxn: float = 100) -> float:
     return max(min(maxn, n), minn)
 
 def is_admin_check():
-    ''' Check if the user is in the admin list from configToml. Use as a decorator for commands.'''
+    ''' Check if the user is in the admin list from config_toml. Use as a decorator for commands.'''
     def predicate(interaction: Interaction) -> bool:
-        return int(interaction.user.id) in configToml.get('auth', {}).get('admin_list', [])
+        return int(interaction.user.id) in config_toml.get('auth', {}).get('admin_list', [])
     return app_commands.check(predicate)
 
 def devChk(id:int) -> bool:
     # admin = 
-    return int(id) in configToml.get('auth', {}).get('admin_list', [])
+    return int(id) in config_toml.get('auth', {}).get('admin_list', [])
 
 def sepLines(itr, sep='\n'):
     return sep.join(itr)

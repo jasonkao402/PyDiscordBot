@@ -7,17 +7,17 @@ import uvicorn
 
 from cog_dev import web_api
 from cog_dev.moderation import PendingMessageManager
-from config_loader import configToml
+from config_loader import config_toml
 from helper_func.llm_agent_API import LLMAPI
 from helper_func.utilFunc import UserDict
 from persona_db.PersonaDatabase import DiscordUser, Persona, PersonaDatabase
 
 logging.basicConfig(level=logging.INFO)
 
-chat_config: dict[str, str] = configToml.get("llm_model", "")
+chat_config: dict[str, str] = config_toml.get("llm_model", "")
 debug_model = chat_config["model_main"]
 debug_persona_id = 26
-debug_user_id = configToml.get("auth", {}).get("admin_list", [])[0]
+debug_user_id = config_toml.get("auth", {}).get("admin_list", [])[0]
 
 class FakeChatCog:
     def __init__(self):

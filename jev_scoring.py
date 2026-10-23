@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from typesafe_sdk import AsyncTypeSafeClient, Noul, Score
 
-from config_loader import configToml
+from config_loader import config_toml
 from helper_func.chat_context_manager import ChatContextManager
 
 if TYPE_CHECKING:
@@ -43,9 +43,9 @@ class JevAPI:
         self.state = ChatContextManager()
         self.db = self.state.db
         # self.llm_api: LLMAPI = self.state.llm_api
-        jev_url = configToml["api_token"].get("url", "")
-        jev_model = configToml["llm_model"].get("model_jev", "")
-        jev_key = configToml["api_token"].get("key", "")
+        jev_url = config_toml["api_token"].get("url", "")
+        jev_model = config_toml["llm_model"].get("model_jev", "")
+        jev_key = config_toml["api_token"].get("key", "")
         self.client = AsyncTypeSafeClient(api_key=jev_key, model=jev_model, base_url=jev_url)
 
     def get_user_chat(self, user_id: int) -> list[ChatInteraction]:
@@ -93,7 +93,7 @@ class JevAPI:
 
 if __name__ == "__main__":
     cog = JevAPI()
-    user_id = configToml["auth"]["admin_list"][0]
+    user_id = config_toml["auth"]["admin_list"][0]
     chat_history = cog.get_user_chat(user_id)  # Get the last 10 chat interactions
     print("length of chat history:", len(chat_history))
 

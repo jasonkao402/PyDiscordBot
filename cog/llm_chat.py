@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from discord import Color, Embed, Interaction, Message, app_commands
 from discord.ext import commands
 
-from config_loader import configToml
+from config_loader import config_toml
 from helper_func.utilFunc import UserDict, long_message_splitter
 
 if TYPE_CHECKING:
@@ -215,8 +215,8 @@ class LLMChatCog(commands.Cog):
         # Use mentions to trigger bot LLM chat
         if self.bot.user.mentioned_in(message) and not message.mention_everyone:
             # Check if the user has the required role or is the owner
-            role_whitelist = configToml.get("auth", {}).get("role_list", [])
-            id_whitelist = configToml.get("auth", {}).get("admin_list", [])
+            role_whitelist = config_toml.get("auth", {}).get("role_list", [])
+            id_whitelist = config_toml.get("auth", {}).get("admin_list", [])
             role_check = any(role.id in role_whitelist for role in _user_roles)
             id_check = _user_id in id_whitelist
             if not (role_check or id_check):
