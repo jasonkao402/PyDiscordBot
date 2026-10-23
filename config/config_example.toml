@@ -14,7 +14,7 @@ host = "localhost"
 port = 8080
 
 [llm_model]
-provider = "deepseek"
+provider_llm = "deepseek"
 model_main = "deepseek/deepseek-v4.1-flash-1017"
 model_debug = "deepseek/deepseek-v4.1-flash-1017"
 model_embed = "shaw/dmeta-embedding-zh"

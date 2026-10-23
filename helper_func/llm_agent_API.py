@@ -22,13 +22,13 @@ if TYPE_CHECKING:
 model_config: dict[str, str] = config_toml.get("llm_model", "")
 prompt_config: dict[str, str] = config_toml.get("prompt_template", "")
 
-api_provider = config_toml["llm_model"].get("provider", "NOT_FOUND")
+provider_llm = config_toml["llm_model"].get("provider_llm", "NOT_FOUND")
 detail_memory_range = config_toml["llm_model"].get("detail_memory_range", 14)
 summary_memory_range = config_toml["llm_model"].get("summary_memory_range", 14)
 retrieval_memory_range = config_toml["llm_model"].get("retrieval_memory_range", 3)
 round_robin_quota = config_toml["llm_model"].get("round_robin_quota", 50)
 extra_body = {
-    # "provider": {
+    # "provider_llm": {
     #     "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
     #     "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
     #     "sort": "throughput",
@@ -45,8 +45,8 @@ class LLMAPI:
         )
         self.available_models: list[str] = []  # Cache for available models
 
-        _api_key_pool = config_toml["api_token"][api_provider].get("keys", [])
-        _api_base_url = config_toml["api_token"][api_provider].get("url", "")
+        _api_key_pool = config_toml["api_token"][provider_llm].get("keys", [])
+        _api_base_url = config_toml["api_token"][provider_llm].get("url", "")
         self.max_tokens = config_toml["llm_model"].get("max_tokens", 5120)
         # Initialize round-robin usage counter and quota
         self.round_robin_usage = 0
