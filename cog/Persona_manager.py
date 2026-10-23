@@ -7,7 +7,7 @@ from discord.app_commands import Choice
 from discord.ext import commands
 
 from helper_func.ui_modal import CreatePersonaModal, EditPersonaModalBasic, EditPersonaModalFull
-from helper_func.utilFunc import UserDict, sepLines, wcformat
+from helper_func.utilFunc import UserDict, wcformat
 from persona_db.helper_func import split_uid_list
 
 if TYPE_CHECKING:
@@ -168,7 +168,7 @@ class PersonaManagerCog(commands.Cog):
             await ctx.send("No personas available.")
             return
         personas = sorted(personas, key=lambda p: p.uid)  # Sort by persona ID
-        persona_list = sepLines([f"ID: {p.uid:03d}, [{['私人', '公開'][int(p.is_public)]}] Name: {wcformat(p.persona_name)}" for p in personas])
+        persona_list = "\n".join([f"ID: {p.uid:03d}, [{['私人', '公開'][int(p.is_public)]}] Name: {wcformat(p.persona_name)}" for p in personas])
         await ctx.send(f"Available Personas:\n```{persona_list}```")
 
     @app_commands.command(name="setname", description="Update the preferred name and description for the user")
@@ -199,7 +199,7 @@ class PersonaManagerCog(commands.Cog):
         self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=_new_name, descr=_new_description)
 
     @commands.hybrid_command(name='scoreboard')
-    async def _scoreboard(self, ctx: commands.Context):
+    async def display_leaderboard(self, ctx: commands.Context):
         """Display interaction statistics and leaderboard."""
         user = ctx.author
         uid, user_name = user.id, user.name
@@ -216,7 +216,7 @@ class PersonaManagerCog(commands.Cog):
 
         # Retrieve top 5 users with the most interactions
         top_users = self.db.get_top_users(limit=5)
-        top_users_list = sepLines(
+        top_users_list = "\n".join(
             f'{username.name if (username := self.bot.get_user(user_id)) else "ERROR"}: {count}'
             for user_id, count in top_users
         )

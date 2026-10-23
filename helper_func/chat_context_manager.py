@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING
 
 from config_loader import config_toml
 from helper_func.llm_agent_API import LLMAPI
-from persona_db.PersonaDatabase import Persona, PersonaDatabase
+from persona_db.PersonaDatabase import PersonaDatabase
 
 if TYPE_CHECKING:
     from helper_func.utilFunc import UserDict
-
+    from persona_db.PersonaDatabase import Persona
 
 class ChatContextManager:
     """Holds shared database, API, and cache references across multiple Cogs."""

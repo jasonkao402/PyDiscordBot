@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands, tasks
 from discord import Client as DC_Client, Embed, Color
-from helper_func.utilFunc import utctimeFormat, TWTZ
+from helper_func.utilFunc import utc_format, TWTZ
 
 timet = datetime.now(timezone.utc) + timedelta(seconds=-10)
 timet = timet.time()
@@ -27,14 +27,14 @@ class botSchedule(commands.Cog):
         tsk.restart()
         
         embed = Embed(title = "您的AI貓娘伊莉亞", description = "伊莉亞來找主人了！", color = Color.random())
-        embed.add_field(name = "時間", value = utctimeFormat(tsk.next_iteration))
+        embed.add_field(name = "時間", value = utc_format(tsk.next_iteration))
         await ctx.send(embed = embed)
         
     @commands.hybrid_command(name = 'isrun')
     async def _isRun(self, ctx):
         if self.channel:
             embed = Embed(title = "您的AI貓娘伊莉亞", description = "伊莉亞來找主人了！", color = Color.random())
-            embed.add_field(name = "時間", value = utctimeFormat(self.my_task.next_iteration))
+            embed.add_field(name = "時間", value = utc_format(self.my_task.next_iteration))
             embed.add_field(name = "狀態", value = self.my_task.is_running())
             await ctx.send(embed=embed)
         

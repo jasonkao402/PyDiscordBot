@@ -5,7 +5,7 @@ import random
 from discord import DMChannel, GroupChannel, PartialMessageable
 from discord.ext import commands
 
-from helper_func.utilFunc import devChk
+from helper_func.utilFunc import dev_check
 
 POSINT = '正整數!'
 BADARGUMENT = '參數 Bad!'
@@ -26,7 +26,7 @@ class MainbotCog(commands.Cog):
     @commands.hybrid_command(name='hello')
     async def hello(self, ctx: commands.Context):
         user = ctx.author
-        if devChk(user.id):
+        if dev_check(user.id):
             await ctx.send(f'{user.mention}主人我來了 ฅ(>ω<)ฅ\n我是只屬於主人的呦~\nSource code here: https://github.com/jasonkao402/PyDiscordBot')
         else:
             await ctx.send(f'{user.mention}主人您好，很榮幸能為您服務 <(✿◡‿◡)>\n我是 LoliSagiri 所開發的互動式機器人\nSource code here: https://github.com/jasonkao402/PyDiscordBot')

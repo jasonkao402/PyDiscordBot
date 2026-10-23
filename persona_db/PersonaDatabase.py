@@ -281,10 +281,6 @@ class PersonaDatabase:
         user = self.get_discord_user(user_uid)
         return user.preferred_name if user else None
 
-    def get_discord_user_chat_history(self, user_uid: int) -> list[ChatInteraction]:
-        """Get a Discord user's chat history."""
-        return self.list_chat_interactions_for_user(user_uid)
-
 def main_test():
     manager = PersonaDatabase(":memory:")
     user1_uid = 1000

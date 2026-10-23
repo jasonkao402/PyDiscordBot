@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
+TWTZ = timezone(timedelta(hours=8))
 
 def split_uid_list(value: str) -> list[int]:
     _res = []
@@ -26,7 +27,7 @@ def join_uid_list(values: list[int] | set[int]) -> str:
 
 def iso_timestamp() -> str:
     """Get the current time in ISO format with milliseconds precision."""
-    return datetime.now(tz=UTC).isoformat(timespec="milliseconds")
+    return datetime.now(tz=TWTZ).isoformat(timespec="milliseconds")
 
 
 class SQLiteRepository:
