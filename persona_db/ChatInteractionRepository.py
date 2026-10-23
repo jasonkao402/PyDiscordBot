@@ -1,7 +1,10 @@
+from __future__ import annotations
+
+from typing import Any
 
 from persona_db.DatabaseModels import ChatInteraction
-from persona_db.helper_func import SQLiteRepository, _now_iso
-from typing import List, Optional, Any, Dict
+from persona_db.helper_func import SQLiteRepository, iso_timestamp
+
 
 def _chat_interaction_from_row(row: tuple) -> ChatInteraction:
     return ChatInteraction(
@@ -40,10 +43,10 @@ class ChatInteractionRepository(SQLiteRepository):
         user_uid: int,
         persona_uid: int,
         main_content: str,
-        summary: Optional[str] = None,
-        user_prompt: Optional[str] = None,
+        summary: str | None = None,
+        user_prompt: str | None = None,
     ) -> bool:
-        _now = _now_iso()
+        _now = iso_timestamp()
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -65,7 +68,7 @@ class ChatInteractionRepository(SQLiteRepository):
             )
             return cursor.rowcount > 0
 
-    def fetch_by_msg_uid(self, msg_uid: int) -> Optional[ChatInteraction]:
+    def fetch_by_msg_uid(self, msg_uid: int) -> ChatInteraction | None:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -78,14 +81,14 @@ class ChatInteractionRepository(SQLiteRepository):
             row = cursor.fetchone()
             return _chat_interaction_from_row(row) if row else None
 
-    def list_by_persona_uid(self, persona_uid: int, limit: Optional[int] = None) -> List[ChatInteraction]:
+    def list_by_persona_uid(self, persona_uid: int, limit: int | None = None) -> list[ChatInteraction]:
         query = """
             SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary, user_prompt
             FROM chat_interactions
             WHERE persona_uid = ?
             ORDER BY created_at DESC
         """
-        params: List[Any] = [persona_uid]
+        params: list[Any] = [persona_uid]
         if limit is not None:
             query += " LIMIT ?"
             params.append(limit)
@@ -94,14 +97,14 @@ class ChatInteractionRepository(SQLiteRepository):
             cursor = conn.execute(query, params)
             return [_chat_interaction_from_row(row) for row in cursor.fetchall()]
 
-    def list_by_user_uid(self, user_uid: int, limit: Optional[int] = None) -> List[ChatInteraction]:
+    def list_by_user_uid(self, user_uid: int, limit: int | None = None) -> list[ChatInteraction]:
         query = """
             SELECT msg_uid, user_uid, persona_uid, created_at, is_memorized, main_content, summary, user_prompt
             FROM chat_interactions
             WHERE user_uid = ?
             ORDER BY created_at DESC
         """
-        params: List[Any] = [user_uid]
+        params: list[Any] = [user_uid]
         if limit is not None:
             query += " LIMIT ?"
             params.append(limit)
@@ -117,13 +120,14 @@ class ChatInteractionRepository(SQLiteRepository):
         allowed_fields = {"user_uid", "persona_uid", "created_at", "is_memorized", "main_content", "summary", "user_prompt"}
         invalid_fields = set(updates) - allowed_fields
         if invalid_fields:
-            raise ValueError(f"Unsupported chat interaction update fields: {sorted(invalid_fields)}")
+            msg = f"Unsupported chat interaction update fields: {sorted(invalid_fields)}"
+            raise ValueError(msg)
 
         normalized_updates = {
             key: int(value) if key == "is_memorized" and isinstance(value, bool) else value
             for key, value in updates.items()
         }
-        set_clause = ", ".join([f"{key} = ?" for key in normalized_updates.keys()])
+        set_clause = ", ".join([f"{key} = ?" for key in normalized_updates])
         query = f"""
             UPDATE chat_interactions
             SET {set_clause}
@@ -131,11 +135,11 @@ class ChatInteractionRepository(SQLiteRepository):
         """
 
         with self.connection() as conn:
-            cursor = conn.execute(query, list(normalized_updates.values()) + [msg_uid])
+            cursor = conn.execute(query, [*list(normalized_updates.values()), msg_uid])
             return cursor.rowcount > 0
 
-    def mark_memorized(self, msg_uid: int, summary: Optional[str] = None) -> bool:
-        updates: Dict[str, Any] = {"is_memorized": 1}
+    def mark_memorized(self, msg_uid: int, summary: str | None = None) -> bool:
+        updates: dict[str, Any] = {"is_memorized": 1}
         if summary is not None:
             updates["summary"] = summary
         return self.update(msg_uid, **updates)

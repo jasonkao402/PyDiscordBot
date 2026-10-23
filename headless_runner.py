@@ -1,23 +1,28 @@
-import uvicorn
-from helper_func.llmAgentAPI import LLMAPI
-from helper_func.utilFunc import UserDict
-from cog_dev.moderation import PendingMessage, PendingMessageManager, TrimedResponse
-from persona_db.PersonaDatabase import PersonaDatabase, Persona, DiscordUser
-import cog_dev.web_api as web_api
+from __future__ import annotations
+
 import asyncio
-from config_loader import configToml
 import logging
+
+import uvicorn
+
+from cog_dev import web_api
+from cog_dev.moderation import PendingMessageManager
+from config_loader import configToml
+from helper_func.llm_agent_API import LLMAPI
+from helper_func.utilFunc import UserDict
+from persona_db.PersonaDatabase import DiscordUser, Persona, PersonaDatabase
+
 logging.basicConfig(level=logging.INFO)
 
 chat_config: dict[str, str] = configToml.get("llm_model", "")
-debugModel = chat_config["model_main"]
+debug_model = chat_config["model_main"]
 debug_persona_id = 26
 debug_user_id = configToml.get("auth", {}).get("admin_list", [])[0]
 
 class FakeChatCog:
     def __init__(self):
-        self.llm_api = LLMAPI(_main_model=debugModel, _debug_mode=False)
-        
+        self.llm_api = LLMAPI(_main_model=debug_model, _debug_mode=False)
+
     async def close(self):
         await self.llm_api.cleanup()
 
@@ -30,13 +35,13 @@ async def fake_cog_chatbot():
     db = PersonaDatabase("llm_character_cards.db")
     cog_api = FakeChatCog()
     models = await cog_api.get_available_models()
-    print(f"Available models:")
+    print("Available models:")
     print("\n".join([f"- {m}" for m in sorted(models)]))
 
     _persona = db.get_persona_no_check(debug_persona_id)
     assert isinstance(_persona, Persona)
     print(f"Using persona: {_persona.persona_name}")
-    
+
     _user = db.get_discord_user(debug_user_id)
     assert isinstance(_user, DiscordUser)
     user_dict = UserDict(uid=_user.user_uid, name=_user.preferred_name or "User", preferred_name=_user.preferred_name, descr=_user.descr)
@@ -45,13 +50,13 @@ async def fake_cog_chatbot():
     while True:
         # example message: 哈基亞，你今天的日程計劃如何?
         userPrompt = await asyncio.to_thread(input, f"{user_dict.effective_name}: ")
-        if userPrompt.lower() in ["exit", "quit"]:
+        if userPrompt.lower() in {"exit", "quit"}:
             break
 
         print("Processing...")
 
         try:
-            if userPrompt.lower() in ["memo"]:
+            if userPrompt.lower() == "memo":
                 source_msg_uids = cog_api.llm_api.get_msg_uids_from_memory(
                     debug_persona_id, skip_memorized=True
                 )

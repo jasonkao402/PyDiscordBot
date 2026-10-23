@@ -1,12 +1,17 @@
-from sqlite3 import Connection
-from contextlib import contextmanager
-from typing import List, Optional, Set
-from datetime import datetime
+from __future__ import annotations
 
-def _split_uid_list(value: str) -> List[int]:
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlite3 import Connection
+
+
+def split_uid_list(value: str) -> list[int]:
     _res = []
     if not value:
-        return _res 
+        return _res
     try:
         _res = [int(item) for item in value.split(",") if item.strip()]
     except ValueError:
@@ -14,12 +19,15 @@ def _split_uid_list(value: str) -> List[int]:
         print(f"Warning: Failed to parse allowed_role_ids from value '{value}'. Returning empty set.")
     return _res
 
-def _join_uid_list(values: List[int] | Set[int])  -> str:
+
+def join_uid_list(values: list[int] | set[int]) -> str:
     return ",".join(str(value) for value in values)
 
-def _now_iso() -> str:
-    '''Get the current time in ISO format with milliseconds precision.'''
-    return datetime.now().isoformat(timespec="milliseconds")
+
+def iso_timestamp() -> str:
+    """Get the current time in ISO format with milliseconds precision."""
+    return datetime.now(tz=UTC).isoformat(timespec="milliseconds")
+
 
 class SQLiteRepository:
     def __init__(self, conn: Connection):

@@ -1,12 +1,13 @@
-from discord.ext import commands
-from typing import Optional, List, Set
-from discord import app_commands, Interaction
+from discord import Interaction, app_commands
 from discord.app_commands import Choice
-from helper_func.llmAgentAPI import LLMAPI
+from discord.ext import commands
+
 from helper_func.chat_context_manager import ChatContextManager
-from helper_func.utilFunc import is_admin_check
+from helper_func.llm_agent_API import LLMAPI
 from helper_func.ui_modal import TestSelect
+from helper_func.utilFunc import is_admin_check
 from setup_bot import MyBot
+
 
 class LLMAdminCog(commands.Cog):
     def __init__(self, bot: MyBot):
@@ -39,7 +40,7 @@ class LLMAdminCog(commands.Cog):
         self, 
         interaction: Interaction, 
         current: str
-    ) -> List[Choice[str]]:
+    ) -> list[Choice[str]]:
         """Autocomplete function for persona_id parameter in editpersona command."""
         user_id = interaction.user.id
         user_roles = getattr(interaction.user, 'roles', [])
@@ -52,7 +53,7 @@ class LLMAdminCog(commands.Cog):
     @app_commands.command(name="chathistory", description="Inspect the current memory usage of the bot")
     @app_commands.describe(persona_id="The ID of the persona to inspect")  # Add a description for the option
     @app_commands.autocomplete(persona_id=autocomplete_persona_id)  # Link the autocomplete function
-    async def inspect_memory(self, interaction: Interaction, persona_id: Optional[int] = None):
+    async def inspect_memory(self, interaction: Interaction, persona_id: int | None = None):
         """Inspect the persona's chat history"""
         if persona_id is not None:
             persona = self.db.get_persona_no_check(persona_id)
@@ -63,10 +64,10 @@ class LLMAdminCog(commands.Cog):
             await interaction.response.send_message("Please provide a persona ID to inspect its chat history.", ephemeral=True)
 
     async def model_autocomplete(
-        self, 
-        interaction: Interaction, 
+        self,
+        interaction: Interaction,
         current: str
-    ) -> List[Choice[str]]:
+    ) -> list[Choice[str]]:
         
         # Get your list of models
         api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
@@ -85,18 +86,18 @@ class LLMAdminCog(commands.Cog):
     @app_commands.autocomplete(model=model_autocomplete)   # Link the autocomplete function
     async def _selectModel(self, interaction: Interaction, model: str):
         # 'model' is now the string the user selected from the autocomplete list
-        
+
         # A quick check to make sure the model is valid
         if model not in self.llm_api.available_models:
             await interaction.response.send_message(
-                f"錯誤：無效的模型 `{model}`", 
+                f"錯誤：無效的模型 `{model}`",
                 ephemeral=True
             )
             return
 
         # Update your config
         # configToml.get("llmChat", {})["model_main"] = model
-        
+
         # Send the confirmation
         await interaction.response.send_message(
             f"成功，已切換模型至 `{model}`",

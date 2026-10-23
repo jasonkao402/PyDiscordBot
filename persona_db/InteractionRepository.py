@@ -1,5 +1,9 @@
-from typing import List, Optional, Dict, Any
-from persona_db.helper_func import _now_iso, SQLiteRepository
+from __future__ import annotations
+
+from typing import Any
+
+from persona_db.helper_func import SQLiteRepository, iso_timestamp
+
 
 class InteractionRepository(SQLiteRepository):
     def create_tables(self, conn) -> None:
@@ -18,7 +22,7 @@ class InteractionRepository(SQLiteRepository):
         )
 
     def increment_interaction_count(self, persona_uid: int, user_uid: int) -> None:
-        now = _now_iso()
+        now = iso_timestamp()
         with self.connection() as conn:
             conn.execute(
                 """
@@ -52,7 +56,7 @@ class InteractionRepository(SQLiteRepository):
                 (user_uid, persona_uid, now),
             )
 
-    def get_user_interaction_stats(self, user_uid: int) -> Optional[Dict[str, Any]]:
+    def get_user_interaction_stats(self, user_uid: int) -> dict[str, Any] | None:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -97,7 +101,7 @@ class InteractionRepository(SQLiteRepository):
                 "most_interacted_count": 0,
             }
 
-    def get_top_users(self, limit: int = 5) -> List[tuple]:
+    def get_top_users(self, limit: int = 5) -> list[tuple]:
         with self.connection() as conn:
             cursor = conn.execute(
                 """

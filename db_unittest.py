@@ -1,47 +1,46 @@
+from __future__ import annotations
+
 import time
 import unittest
 
 # Import the module under test.
 # Assumes the original code is saved as persona_db.py.
-from persona_db.helper_func import _split_uid_list, _join_uid_list
-from persona_db.PersonaDatabase import (
-    Persona, DiscordUser, ChatInteraction, PersonaMemories,
-    PersonaDatabase,
-    main_test, message_test
-)
+from persona_db.helper_func import join_uid_list, split_uid_list
+from persona_db.PersonaDatabase import DiscordUser, Persona, PersonaDatabase
+
 
 class TestHelperFunctions(unittest.TestCase):
     def test_split_uid_list_empty(self):
-        self.assertEqual(_split_uid_list(""), [])
-        self.assertEqual(_split_uid_list(" "), [])
+        self.assertEqual(split_uid_list(""), [])
+        self.assertEqual(split_uid_list(" "), [])
 
     def test_split_uid_list_single(self):
-        self.assertEqual(_split_uid_list("1"), [1])
-        self.assertEqual(_split_uid_list(" 42 "), [42])
+        self.assertEqual(split_uid_list("1"), [1])
+        self.assertEqual(split_uid_list(" 42 "), [42])
 
     def test_split_uid_list_multiple(self):
-        self.assertEqual(_split_uid_list("1,2,3"), [1, 2, 3])
-        self.assertEqual(_split_uid_list("10, 20,30"), [10, 20, 30])
+        self.assertEqual(split_uid_list("1,2,3"), [1, 2, 3])
+        self.assertEqual(split_uid_list("10, 20,30"), [10, 20, 30])
 
     def test_join_uid_list(self):
-        self.assertEqual(_join_uid_list([1, 2, 3]), "1,2,3")
-        self.assertEqual(_join_uid_list([]), "")
-        self.assertEqual(_join_uid_list([42]), "42")
+        self.assertEqual(join_uid_list([1, 2, 3]), "1,2,3")
+        self.assertEqual(join_uid_list([]), "")
+        self.assertEqual(join_uid_list([42]), "42")
 
 
 class TestDataModels(unittest.TestCase):
     def test_persona_permission_check_private_owner(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
                     is_public=False, allowed_role_ids=set(), created_at="", updated_at="")
-        self.assertTrue(p.permission_full(100, set()))
-        self.assertFalse(p.permission_full(200, set()))
+        self.assertTrue(p.check_perm_full(100, set()))
+        self.assertFalse(p.check_perm_full(200, set()))
 
     def test_persona_permission_check_public(self):
         p = Persona(uid=1, persona_name="Test", content="", owner_uid=100,
                     is_public=True, allowed_role_ids=set(), created_at="", updated_at="")
-        self.assertTrue(p.permission_full(100, set()))
-        self.assertFalse(p.permission_full(200, set()))
-        self.assertTrue(p.permission_basic(200, set()))
+        self.assertTrue(p.check_perm_full(100, set()))
+        self.assertFalse(p.check_perm_full(200, set()))
+        self.assertTrue(p.check_perm_basic(200, set()))
         
     def test_discord_user_balance(self):
         u = DiscordUser(user_uid=1, selected_persona_uid=0)

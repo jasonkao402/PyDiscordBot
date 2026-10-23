@@ -1,9 +1,9 @@
+from __future__ import annotations
 
 from enum import Enum
-import json
-from persona_db.DatabaseModels import Persona, PersonaVisibility
-from persona_db.helper_func import _now_iso, SQLiteRepository, _join_uid_list, _split_uid_list
-from typing import List, Optional, Set
+
+from persona_db.DatabaseModels import Persona
+from persona_db.helper_func import SQLiteRepository, iso_timestamp, join_uid_list, split_uid_list
 
 _allowed_fields = {"persona_name", "content", "is_public", "allowed_role_ids"}
 
@@ -14,7 +14,7 @@ def _persona_from_row(row: tuple) -> Persona:
         content=row[2],
         owner_uid=row[3],
         is_public=bool(row[4]),
-        allowed_role_ids=set(_split_uid_list(row[5])) if row[5] else set(),
+        allowed_role_ids=set(split_uid_list(row[5])) if row[5] else set(),
         created_at=row[6],
         updated_at=row[7],
         last_interaction_recv_at=row[8],
@@ -22,7 +22,7 @@ def _persona_from_row(row: tuple) -> Persona:
     )
 
 class PersonaRepository(SQLiteRepository):
-    
+
     def create_tables(self, conn) -> None:
         conn.execute(
             """
@@ -59,12 +59,11 @@ class PersonaRepository(SQLiteRepository):
             # conn.execute("ALTER TABLE personas ADD COLUMN is_public INTEGER NOT NULL CHECK(visibility IN (0, 1)) DEFAULT 0")
             # conn.execute("ALTER TABLE personas ADD COLUMN allowed_role_ids TEXT DEFAULT ''")
             # conn.execute("UPDATE personas SET is_public = 1 WHERE visibility = 1")
-            
+
             cursor = conn.execute("PRAGMA table_info(personas)")
             columns = {row[1] for row in cursor.fetchall()}
             print(f"Existing columns in personas table after migration: {columns}")
-            
-        
+
     def count_by_owner(self, owner_uid: int) -> int:
         with self.connection() as conn:
             cursor = conn.execute(
@@ -78,22 +77,25 @@ class PersonaRepository(SQLiteRepository):
             row = cursor.fetchone()
             return row[0] if row else 0
 
-    def create(self, persona_name: str, content: str, owner_uid: int, is_public: bool, allowed_role_ids: Set[int] = set()) -> int:
-        now = _now_iso()
+    def create(self, persona_name: str, content: str, owner_uid: int, is_public: bool, allowed_role_ids: set[int] | None = None) -> int:
+        now = iso_timestamp()
+        if allowed_role_ids is None:
+            allowed_role_ids = set()
         with self.connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO personas (persona_name, content, owner_uid, is_public, allowed_role_ids, created_at, updated_at, last_interaction_recv_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (persona_name, content, owner_uid, is_public, _join_uid_list(allowed_role_ids), now, now, now),
+                (persona_name, content, owner_uid, is_public, join_uid_list(allowed_role_ids), now, now, now),
             )
             persona_uid = cursor.lastrowid
             if not persona_uid:
-                raise ValueError("Failed to retrieve the persona uid after insertion.")
+                msg = "Failed to retrieve the persona uid after insertion."
+                raise ValueError(msg)
         return persona_uid
 
-    def fetch_by_uid(self, persona_uid: int) -> Optional[Persona]:
+    def fetch_by_uid(self, persona_uid: int) -> Persona | None:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -106,7 +108,9 @@ class PersonaRepository(SQLiteRepository):
             row = cursor.fetchone()
             return _persona_from_row(row) if row else None
 
-    def list_visible_for_user(self, user_uid: int, user_role_ids: Set[int]) -> List[Persona]:
+    def list_visible_for_user(self, user_uid: int, user_role_ids: set[int] | None = None) -> list[Persona]:
+        if user_role_ids is None:
+            user_role_ids = set()
         with self.connection() as conn:
             cursor = conn.execute("""
                 SELECT uid, persona_name, content, owner_uid, is_public, allowed_role_ids,
@@ -121,31 +125,28 @@ class PersonaRepository(SQLiteRepository):
             # Unpack row (adapt to your _persona_from_row)
             is_public = row[4]
             owner = row[3]
-            allowed_roles = set(_split_uid_list(row[5])) if row[5] else set()
+            allowed_roles = set(split_uid_list(row[5])) if row[5] else set()
 
-            if is_public:
-                visible.append(_persona_from_row(row))
-            elif owner == user_uid:
-                visible.append(_persona_from_row(row))
-            elif allowed_roles & user_role_ids:
+            if is_public or owner == user_uid or allowed_roles & user_role_ids:
                 visible.append(_persona_from_row(row))
         return visible
-    
+
     def update(self, persona_uid: int, **updates) -> bool:
         if not updates:
             return False
 
         invalid_fields = set(updates) - _allowed_fields
         if invalid_fields:
-            raise ValueError(f"Unsupported persona update fields: {sorted(invalid_fields)}")
+            msg = f"Unsupported persona update fields: {sorted(invalid_fields)}"
+            raise ValueError(msg)
 
         normalized_updates = {
             key: value.value if isinstance(value, Enum) else value
             for key, value in updates.items()
         }
-        normalized_updates["updated_at"] = _now_iso()
+        normalized_updates["updated_at"] = iso_timestamp()
 
-        set_clause = ", ".join([f"{key} = ?" for key in normalized_updates.keys()])
+        set_clause = ", ".join([f"{key} = ?" for key in normalized_updates])
         query = f"""
             UPDATE personas
             SET {set_clause}
@@ -153,7 +154,7 @@ class PersonaRepository(SQLiteRepository):
         """
 
         with self.connection() as conn:
-            cursor = conn.execute(query, list(normalized_updates.values()) + [persona_uid])
+            cursor = conn.execute(query, [*list(normalized_updates.values()), persona_uid])
             return cursor.rowcount > 0
 
     def delete(self, persona_uid: int, owner_uid: int) -> bool:

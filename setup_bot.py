@@ -1,16 +1,17 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import os
 import traceback
 from pathlib import Path
-from typing import Optional
 
 import discord
 import uvicorn
 from discord.ext import commands
 
-import cog_dev.web_api as web_api
+from cog_dev import web_api
 from cog_dev.moderation import PendingMessageManager
 from config_loader import configToml, loadToml
 from helper_func.chat_context_manager import ChatContextManager
@@ -37,28 +38,28 @@ class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="%", intents=discord.Intents.all())
         self.chat_state: ChatContextManager
-        self.debug_guild_cache: Optional[discord.Guild] = None
-        self.debug_channel_cache: Optional[discord.PartialMessageable] = None
+        self.debug_guild_cache: discord.Guild | None = None
+        self.debug_channel_cache: discord.PartialMessageable | None = None
 
     @property
     def bot_config(self) -> dict:
         return configToml.get("discord_bot", {})
 
     @property
-    def debug_guild_id(self) -> Optional[discord.Guild]:
+    def debug_guild_id(self) -> discord.Guild | None:
         if self.debug_guild_cache is not None:
             return self.debug_guild_cache
         gid = self.bot_config.get("debug_guild_id", -1)
         return self.get_guild(gid) if isinstance(gid, int) and gid > 0 else None
 
     @property
-    def debug_channel(self) -> Optional[discord.PartialMessageable]:
+    def debug_channel(self) -> discord.PartialMessageable | None:
         if self.debug_channel_cache is not None:
             return self.debug_channel_cache
         cid = self.bot_config.get("debug_channel_id", -1)
         return self.get_partial_messageable(cid) if isinstance(cid, int) and cid > 0 else None
 
-    async def sync_tree(self, target_guild: Optional[discord.abc.Snowflake] = None):
+    async def sync_tree(self, target_guild: discord.abc.Snowflake | None = None):
         """Sync the command tree to a specific guild or globally."""
         if target_guild:
             self.tree.copy_global_to(guild=target_guild)
@@ -66,7 +67,7 @@ class MyBot(commands.Bot):
         else:
             cmds = await self.tree.sync()
 
-        logger.info(f"Synced {len(cmds)} commands: {[c.name for c in cmds]}")
+        print(f"Synced {len(cmds)} commands: {[c.name for c in cmds]}")
 
     async def setup_hook(self):
         # 1. Attach shared state singleton
@@ -75,7 +76,7 @@ class MyBot(commands.Bot):
         # 2. Load preload cogs from config.toml
         for cog in self.bot_config.get("preload", []):
             await self.load_extension(ext_name(cog))
-        logger.info(f"Preloaded cogs: {list(self.extensions.keys())}")
+        print(f"Preloaded cogs: {list(self.extensions.keys())}")
 
         # 3. Sync slash commands to debug guild for faster iteration during development
         gid = self.bot_config.get("debug_guild_id", -1)
@@ -87,12 +88,13 @@ class MyBot(commands.Bot):
     async def on_ready(self):
         activity = self.bot_config.get("activity", "正在殺蟲...(debugging...)")
         await self.change_presence(activity=discord.Game(activity))
-        logger.info(f"Bot is online as {self.user}")
+        print(f"Bot is online as {self.user}")
 
     async def on_connect(self):
-        logger.info(f"Connected! Latency: {round(self.latency * 1000)} ms")
+        print(f"Connected! Latency: {round(self.latency * 1000)} ms")
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
+        print(f"Command error in {ctx.command}")
         traceback.print_exception(type(error), error, error.__traceback__)
 
     async def close(self):
@@ -104,7 +106,7 @@ class MyBot(commands.Bot):
 def register_admin_commands(client: MyBot):
     @client.hybrid_command(name="reload", description="Reload all loaded cogs and sync slash commands.")
     @commands.is_owner()
-    async def _reload(ctx: commands.Context):
+    async def reload(ctx: commands.Context) -> None:
         await ctx.defer()
         loaded = list(client.extensions.keys())
         for ext in loaded:
@@ -115,14 +117,14 @@ def register_admin_commands(client: MyBot):
 
     @client.hybrid_command(name="sync", description="Sync slash commands to a specific guild or globally.")
     @commands.is_owner()
-    async def _sync(ctx: commands.Context, guild_id: Optional[int] = None):
+    async def sync(ctx: commands.Context, guild_id: int | None = None) -> None:
         target_guild = client.get_guild(guild_id) if guild_id else None
         await client.sync_tree(target_guild)
         await ctx.send(f"Synced commands to {target_guild.name if guild_id else 'global scope'}.")
 
     @client.command(name="load")
     @commands.is_owner()
-    async def _load(ctx: commands.Context, *args: str):
+    async def load(ctx: commands.Context, *args: str) -> None:
         available = get_available_cogs()
         loaded = set(client.extensions.keys())
 
@@ -142,7 +144,7 @@ def register_admin_commands(client: MyBot):
 
     @client.command(name="unload")
     @commands.is_owner()
-    async def _unload(ctx: commands.Context, *args: str):
+    async def unload(ctx: commands.Context, *args: str) -> None:
         loaded = list(client.extensions.keys())
         if not args or "-l" in args:
             await ctx.send(f"**Loaded:** `{', '.join(loaded)}`")
@@ -160,37 +162,38 @@ def register_admin_commands(client: MyBot):
 
     @client.hybrid_command(name="toml", description="Reload config.toml in-place.")
     @commands.is_owner()
-    async def _toml(ctx: commands.Context):
+    async def reload_toml(ctx: commands.Context) -> None:
         loadToml()
         llm_cfg = json.dumps(configToml.get("llm_model", {}), indent=2, ensure_ascii=False)
         await ctx.send(f"`config.toml` reloaded.\n```json\n{llm_cfg}```")
 
     @client.command(name="close")
     @commands.is_owner()
-    async def _close(ctx: commands.Context):
+    async def shutdown_bot(ctx: commands.Context) -> None:
         await ctx.send(f"cya {ctx.author.mention}")
         await client.close()
-        
+
 async def run_discord():
     client = MyBot()
     register_admin_commands(client)
 
     token = configToml.get("api_token", {}).get("discord")
     if not token:
-        raise RuntimeError("Missing [api_token].discord in config.toml")
+        msg = "Missing [api_token].discord in config.toml"
+        raise RuntimeError(msg)
     # Start!
     pending_manager = PendingMessageManager(update_callback=web_api.push_update)
-    web_api.pending_manager = pending_manager # Export to web_api so that UI can get it
-    
+    web_api.pending_manager = pending_manager  # Export to web_api so that UI can get it
+
     bot_task = asyncio.create_task(client.start(token))
-    
+
     # Run web API in background
     host = configToml.get("webui", {}).get("host", "localhost")
     port = configToml.get("webui", {}).get("port", 8080)
     uvicorn_config = uvicorn.Config("cog_dev.web_api:app", host=host, port=port, log_level="info")
     server = uvicorn.Server(uvicorn_config)
     api_task = asyncio.create_task(server.serve())
-    
+
     try:
         # Wait until the user quits the chatbot
         await bot_task
@@ -201,6 +204,7 @@ async def run_discord():
         print("\nShutting down web server...")
         server.should_exit = True
         await api_task
+
 
 if __name__ == "__main__":
     try:

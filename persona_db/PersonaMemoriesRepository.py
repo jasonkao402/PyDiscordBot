@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 from persona_db.DatabaseModels import PersonaMemories
-from typing import List, Optional
-from persona_db.helper_func import SQLiteRepository, _now_iso, _join_uid_list, _split_uid_list
+from persona_db.helper_func import SQLiteRepository, iso_timestamp, join_uid_list, split_uid_list
+
 
 def _persona_memory_from_row(row: tuple) -> PersonaMemories:
     return PersonaMemories(
         memory_uid=row[0],
         memory_content=row[1],
         persona_uid=row[2],
-        source_msg_uids=_split_uid_list(row[3]),
+        source_msg_uids=split_uid_list(row[3]),
         created_at=row[4],
         updated_at=row[5],
     )
@@ -32,9 +34,9 @@ class PersonaMemoriesRepository(SQLiteRepository):
         self,
         memory_content: str,
         persona_uid: int,
-        source_msg_uids: List[int],
+        source_msg_uids: list[int],
     ) -> int:
-        _now = _now_iso()
+        _now = iso_timestamp()
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -43,14 +45,15 @@ class PersonaMemoriesRepository(SQLiteRepository):
                 )
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (memory_content, persona_uid, _join_uid_list(source_msg_uids), _now, _now),
+                (memory_content, persona_uid, join_uid_list(source_msg_uids), _now, _now),
             )
             memory_uid = cursor.lastrowid
             if not memory_uid:
-                raise ValueError("Failed to retrieve the memory uid after insertion.")
+                msg = "Failed to retrieve the memory uid after insertion."
+                raise ValueError(msg)
             return memory_uid
 
-    def fetch_by_uid(self, memory_uid: int) -> Optional[PersonaMemories]:
+    def fetch_by_uid(self, memory_uid: int) -> PersonaMemories | None:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -63,7 +66,7 @@ class PersonaMemoriesRepository(SQLiteRepository):
             row = cursor.fetchone()
             return _persona_memory_from_row(row) if row else None
 
-    def list_by_persona_uid(self, persona_uid: int) -> List[PersonaMemories]:
+    def list_by_persona_uid(self, persona_uid: int) -> list[PersonaMemories]:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -83,12 +86,13 @@ class PersonaMemoriesRepository(SQLiteRepository):
         allowed_fields = {"memory_content", "persona_uid", "source_msg_uids"}
         invalid_fields = set(updates) - allowed_fields
         if invalid_fields:
-            raise ValueError(f"Unsupported persona memory update fields: {sorted(invalid_fields)}")
+            msg = f"Unsupported persona memory update fields: {sorted(invalid_fields)}"
+            raise ValueError(msg)
 
         normalized_updates = dict(updates)
-        normalized_updates["updated_at"] = _now_iso()
+        normalized_updates["updated_at"] = iso_timestamp()
 
-        set_clause = ", ".join([f"{key} = ?" for key in normalized_updates.keys()])
+        set_clause = ", ".join([f"{key} = ?" for key in normalized_updates])
         query = f"""
             UPDATE persona_memories
             SET {set_clause}
@@ -96,7 +100,7 @@ class PersonaMemoriesRepository(SQLiteRepository):
         """
 
         with self.connection() as conn:
-            cursor = conn.execute(query, list(normalized_updates.values()) + [memory_uid])
+            cursor = conn.execute(query, [*list(normalized_updates.values()), memory_uid])
             return cursor.rowcount > 0
 
     def delete(self, memory_uid: int) -> bool:

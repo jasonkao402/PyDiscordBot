@@ -1,12 +1,18 @@
-from discord.ui import Modal, TextInput, Select, Label
-from discord import Interaction, Message, TextStyle, SelectOption, Member, User
-from typing import Optional
+from __future__ import annotations
 
-from persona_db.DatabaseModels import Persona
-from persona_db.helper_func import _join_uid_list
+from typing import TYPE_CHECKING
+
+from discord import Interaction, Member, SelectOption, TextStyle, User
+from discord.ui import Label, Modal, Select, TextInput
+
+from persona_db.helper_func import join_uid_list
+
+if TYPE_CHECKING:
+    from persona_db.DatabaseModels import Persona
+
 
 class BasePersonaModal(Modal):
-    def __init__(self, title: str, callback, is_owner: bool, _persona: Optional[Persona] = None):
+    def __init__(self, title: str, callback, is_owner: bool, _persona: Persona | None = None):
         super().__init__(title=title)
         self.callback = callback
         self.is_owner = is_owner
@@ -15,10 +21,10 @@ class BasePersonaModal(Modal):
             "persona_name": _persona.persona_name if _persona else "",
             "content": _persona.content if _persona else "",
             "is_public": _persona.is_public if _persona else False,
-            "allowed_role_ids_str": _join_uid_list(_persona.allowed_role_ids) if _persona else "",
+            "allowed_role_ids_str": join_uid_list(_persona.allowed_role_ids) if _persona else "",
             "allowed_role_ids_set": set(_persona.allowed_role_ids) if _persona else set(),
         }
-        
+
         # Add fields to the modal
         self._name = Label(
             text="Persona Name",
@@ -43,9 +49,8 @@ class BasePersonaModal(Modal):
         ]
         # allowed_role_ids_str = ",".join(str(role_id) for role_id in allowed_role_ids)
         self._is_public = Label(
-            text="Select visibility", 
-            component=
-            Select(
+            text="Select visibility",
+            component=Select(
                 placeholder="Select visibility", options=_options, min_values=1, max_values=1
             ))
         self._allowed_role_ids = Label(
@@ -68,13 +73,13 @@ class BasePersonaModal(Modal):
         assert isinstance(self._content.component, TextInput)
         assert isinstance(self._is_public.component, Select)
         assert isinstance(self._allowed_role_ids.component, TextInput)
-        
+
         # Extract values from the modal
         persona_name = self._name.component.value
         content = self._content.component.value
         is_public = self._is_public.component.values[0] == "1" if self.is_owner else self._default_values["is_public"]
         allowed_role_ids = self._allowed_role_ids.component.value if self.is_owner else self._default_values["allowed_role_ids_str"]
-        
+
         # Call the provided callback with the collected data
         await self.callback(interaction, self.persona_uid, persona_name, content, is_public, allowed_role_ids)
 
@@ -82,12 +87,12 @@ class BasePersonaModal(Modal):
         await interaction.response.send_message(
             f"An error occurred while processing the modal.\n{error}"
         )
-        
+
 class CreatePersonaModal(BasePersonaModal):
     def __init__(self, callback):
         super().__init__(title="Create Persona", callback=callback, is_owner=True)
-        
-class EditPersonaModal_Full(BasePersonaModal):
+
+class EditPersonaModalFull(BasePersonaModal):
     def __init__(
         self,
         _persona: Persona,
@@ -100,11 +105,11 @@ class EditPersonaModal_Full(BasePersonaModal):
             _persona=_persona
         )
 
-class EditPersonaModal_Basic(BasePersonaModal):
+class EditPersonaModalBasic(BasePersonaModal):
     # cannot edit is_public and allowed_role_ids
     def __init__(
-        self, 
-        _persona: Persona, 
+        self,
+        _persona: Persona,
         callback
     ):
         super().__init__(
@@ -115,32 +120,32 @@ class EditPersonaModal_Basic(BasePersonaModal):
         )
 
 class TestSelect(Modal, title="Test Select Modal"):
-    _options = [
-        SelectOption(label="Option 1", value="option_1"),
-        SelectOption(label="Option 2", value="option_2"),
-        SelectOption(label="Option 3", value="option_3"),
-    ]
-    label = Label(
-        text="Please select an option:",
-        component=Select(
-            placeholder="Choose an option...",
-            required=True,
-            options = _options,
-            min_values=1,
-            max_values=1,
-        ),
-    )
-    reason = Label(
-        text="for debugging, just input anything here",
-        component=TextInput(
-            placeholder="for debugging, just input anything here",
-            required=True,
-        )
-    )
     def __init__(self, member: Member | User):
         super().__init__()
         self.member = member
-    
+        self._options = [
+                SelectOption(label="Option 1", value="option_1"),
+                SelectOption(label="Option 2", value="option_2"),
+                SelectOption(label="Option 3", value="option_3"),
+        ]
+        self.label = Label(
+            text="Please select an option:",
+            component=Select(
+                placeholder="Choose an option...",
+                required=True,
+                options=self._options,
+                min_values=1,
+                max_values=1,
+            ),
+        )
+        self.reason = Label(
+            text="for debugging, just input anything here",
+            component=TextInput(
+                placeholder="for debugging, just input anything here",
+                required=True,
+            )
+        )
+
     async def on_submit(self, interaction: Interaction):
         assert isinstance(self.label.component, Select)
         _value = self.label.component.values[0]

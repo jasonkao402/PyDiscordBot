@@ -1,6 +1,10 @@
-from typing import List, Optional
+from __future__ import annotations
+
+from typing import ClassVar
+
 from persona_db.DatabaseModels import DiscordUser
 from persona_db.helper_func import SQLiteRepository
+
 
 def _discord_user_from_row(row: tuple) -> DiscordUser:
     return DiscordUser(
@@ -15,7 +19,7 @@ def _discord_user_from_row(row: tuple) -> DiscordUser:
     )
 
 class DiscordUserRepository(SQLiteRepository):
-    allowed_update_fields = {
+    allowed_update_fields: ClassVar = {
         "selected_persona_uid",
         "last_interaction_send_at",
         "interaction_count",
@@ -59,7 +63,7 @@ class DiscordUserRepository(SQLiteRepository):
                 (user_uid,),
             )
 
-    def fetch_by_uid(self, user_uid: int) -> Optional[DiscordUser]:
+    def fetch_by_uid(self, user_uid: int) -> DiscordUser | None:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
@@ -78,16 +82,17 @@ class DiscordUserRepository(SQLiteRepository):
 
         invalid_fields = set(updates) - self.allowed_update_fields
         if invalid_fields:
-            raise ValueError(f"Unsupported discord user update fields: {sorted(invalid_fields)}")
+            msg = f"Unsupported discord user update fields: {sorted(invalid_fields)}"
+            raise ValueError(msg)
 
-        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+        set_clause = ", ".join([f"{key} = ?" for key in updates])
         query = f"""
             UPDATE discord_users
             SET {set_clause}
             WHERE user_uid = ?
         """
         with self.connection() as conn:
-            cursor = conn.execute(query, list(updates.values()) + [user_uid])
+            cursor = conn.execute(query, [*list(updates.values()), user_uid])
             return cursor.rowcount > 0
 
     def upsert_selected_persona(self, user_uid: int, persona_uid: int) -> None:
@@ -102,7 +107,7 @@ class DiscordUserRepository(SQLiteRepository):
                 (user_uid, persona_uid),
             )
 
-    def get_selected_persona_uid(self, user_uid: int) -> Optional[int]:
+    def get_selected_persona_uid(self, user_uid: int) -> int | None:
         with self.connection() as conn:
             cursor = conn.execute(
                 """

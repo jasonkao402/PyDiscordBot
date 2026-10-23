@@ -1,22 +1,23 @@
 # helper_func/llmAgentAPI.py
-from collections import deque, defaultdict
-from helper_func.utilFunc import UserDict, PlaceholderReplacer
-from cog_dev.responseParsing import parse_response
-from cog_dev.moderation import PendingMessage, TrimedResponse
-from persona_db.PersonaDatabase import Persona
-from persona_db.DatabaseModels import ChatInteraction
-from persona_db.helper_func import _now_iso
-import cog_dev.web_api as web_api
-from config_loader import configToml
+from __future__ import annotations
 
+from collections import defaultdict, deque
+from time import time_ns
+from typing import TYPE_CHECKING
+from uuid import uuid4
+
+from google.genai import errors
 from openai import AsyncOpenAI
 
-# from google import genai
-from google.genai import types as gtypes, errors
-from typing import List, Optional
-from uuid import uuid4
-from time import strftime, time_ns
-from helper_func.utilFunc import wcformat
+from cog_dev import web_api
+from cog_dev.moderation import PendingMessage, TrimedResponse
+from config_loader import configToml
+from helper_func.utilFunc import PlaceholderReplacer, UserDict, wcformat
+from persona_db.DatabaseModels import ChatInteraction
+from persona_db.helper_func import iso_timestamp
+
+if TYPE_CHECKING:
+    from persona_db.PersonaDatabase import Persona
 
 model_config: dict[str, str] = configToml.get("llm_model", "")
 prompt_config: dict[str, str] = configToml.get("prompt_template", "")
@@ -36,21 +37,23 @@ extra_body = {
     # "reasoning": {"enabled": True},
 }
 
+
 class LLMAPI:
-    def __init__(self, _main_model: Optional[str] = None, _debug_mode: bool = False):
+    def __init__(self, _main_model: str | None = None, _debug_mode: bool = False) -> None:
         self.main_model = (
             _main_model if _main_model is not None else model_config["model_main"]
         )
-        self.available_models: List[str] = []  # Cache for available models
+        self.available_models: list[str] = []  # Cache for available models
 
         _api_key_pool = configToml["api_token"][api_provider].get("keys", [])
         _api_base_url = configToml["api_token"][api_provider].get("url", "")
+        self.max_tokens = configToml["llm_model"].get("max_tokens", 5120)
         # Initialize round-robin usage counter and quota
         self.round_robin_usage = 0
         self.round_robin_quota = round_robin_quota
         self.round_robin_api_index = 0
         self.round_robin_api_total = len(_api_key_pool)
-        
+
         self.debug_mode = _debug_mode
         # self.llm_apis = [genai.Client(
         #     api_key=api_key, http_options=http_options,
@@ -77,7 +80,16 @@ class LLMAPI:
     def reset_memory(self, persona_id: int):
         self.persona_session_memory.pop(persona_id, None)
 
-    def _expand_ChatInteraction_to_messages(
+    def rotate_api_index(self):
+        """Rotate the API index for round-robin usage."""
+        self.round_robin_usage += 1
+        if self.round_robin_usage >= self.round_robin_quota:
+            c, n = self.round_robin_api_index, (self.round_robin_api_index + 1) % self.round_robin_api_total
+            print(f"Switching API from index {c} to {n}.")
+            self.round_robin_api_index = n
+            self.round_robin_usage = 0  # Reset the counter after switching
+
+    def expand_chat_interaction_to_messages(
         self, chat_interactions: deque[ChatInteraction], skip_memorized: bool = False
     ) -> list[dict]:
         messages = []
@@ -87,11 +99,9 @@ class LLMAPI:
                 continue
 
             if interaction.user_prompt and interaction.main_content:
-                _user_role_name = interaction.__getattribute__("user_internal_name") or f"User{interaction.user_uid%10000}"
-                messages.append({"role": "user", "content": interaction.user_prompt, "name": _user_role_name})
-                messages.append(
-                    {"role": "assistant", "content": interaction.main_content}
-                )
+                _user_role_name = interaction.user_internal_name or f"User{interaction.user_uid % 10000}"
+                messages.extend(({"role": "user", "content": interaction.user_prompt, "name": _user_role_name},
+                                 {"role": "assistant", "content": interaction.main_content}))
 
         return messages
 
@@ -105,24 +115,23 @@ class LLMAPI:
             if not (skip_memorized and interaction.is_memorized)
         ]
 
-    def _debug_response(self,  timestamp: int, message: str="") -> TrimedResponse:
+    def _debug_response(self, timestamp: int, message: str = "") -> TrimedResponse:
         return TrimedResponse(
-            response_text=f"[Debug] {_now_iso()} {message}",
+            response_text=f"[Debug] {iso_timestamp()} {message}",
             timestamp=timestamp,
             _code=-1,
         )
 
     def _debug_system_instruction(self, _persona: Persona, _user_dict: UserDict) -> str:
         _pr = PlaceholderReplacer(_user_dict)
-        system_instruction = _pr.replace_placeholders(_persona.content)
-        return system_instruction
+        return _pr.replace_placeholders(_persona.content)
 
     async def llm_api_v6(
         self,
         messages: list[dict],
         system: str,
         user_dict: UserDict,
-        image: Optional[gtypes.Part | dict] = None,
+        image: str | dict | None = None,
     ) -> TrimedResponse:
         """
         messages: list of strings (assistant / user messages)
@@ -131,42 +140,31 @@ class LLMAPI:
         image: optional image part for the last user message
         """
         _timestamp = time_ns()
+        if self.debug_mode:
+            return self._debug_response(
+                _timestamp,
+                "Debug response."
+            )
+        message_list = [
+            {"role": "system", "content": system},
+            *messages,
+        ]
+        _temp = message_list[-1].get("content", "")
+        if image and isinstance(_temp, str):
+            message_list[-1]["content"] = [
+                image,
+                {"type": "text", "text": _temp},
+        ]
         try:
-            message_list = [
-                {"role": "system", "content": system},
-                *messages,
-            ]
-            _temp = message_list[-1].get("content", "")
-            if image and isinstance(_temp, str):
-                message_list[-1]["content"] = [
-                    image,
-                    {"type": "text", "text": _temp},
-                ]
-
-            if self.debug_mode:
-                return self._debug_response(
-                    _timestamp,
-                    "Debug response."
-                )
-
-            else:
-                response = await self.llm_apis[
-                    self.round_robin_api_index
-                ].chat.completions.create(
-                    model=self.main_model,
-                    messages=message_list,
-                    max_tokens=5120,
-                    extra_body=extra_body,
-                )
-                # round-robin API switching logic
-                self.round_robin_usage += 1
-                if self.round_robin_usage >= self.round_robin_quota:
-                    print(f"Switching API from index {self.round_robin_api_index} to {(self.round_robin_api_index + 1) % self.round_robin_api_total}.")
-                    self.round_robin_api_index = (
-                        self.round_robin_api_index + 1
-                    ) % self.round_robin_api_total
-                    self.round_robin_usage = 0  # Reset the counter after switching
-
+            response = await self.llm_apis[
+                self.round_robin_api_index
+            ].chat.completions.create(
+                model=self.main_model,
+                messages=message_list,
+                max_tokens=self.max_tokens,
+                extra_body=extra_body,
+            )
+            self.rotate_api_index()  # Rotate API index after a successful call
 
         except errors.APIError as e:
             api_error = f"[{e.code}]{e.message}"
@@ -175,7 +173,7 @@ class LLMAPI:
                 _timestamp,
                 f"API Error: {api_error}"
             )
-        print(f"{response.choices[0].message}\n"+"="*20)
+        print(f"{response.choices[0].message}\n" + "=" * 20)
         response_text = str(response.choices[0].message.content)
         thinking_content = str(
             getattr(response.choices[0].message, "reasoning", None) or
@@ -219,29 +217,29 @@ class LLMAPI:
         prompt_str: str,
         _persona: Persona,
         _user_dict: UserDict,
-        encoded_image: Optional[str],
+        encoded_image: str | None = None,
     ) -> TrimedResponse:
         """Get a response from the LLM for a given persona and user prompt (and message context from recent memory)"""
         persona_name = (
-            _persona.persona_name if _persona.persona_name else "UnknownPersona"
+            _persona.persona_name or "UnknownPersona"
         )
 
         _pr = PlaceholderReplacer(_user_dict)
         system_instruction = _pr.replace_placeholders(_persona.content)
         # f'\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}'
-        
+
         _debug_user_persona_pair = f"{wcformat(_user_dict.name)}@{persona_name}"
         print(f"{_debug_user_persona_pair}: {prompt_str}\n")
-            
+
         latest_prompt = {
             "role": "user",
             "content": f"{_user_dict.effective_name} said {prompt_str}",
         }
 
-        chatMem = self.persona_session_memory[_persona.uid]
+        chat_mem = self.persona_session_memory[_persona.uid]
         _timestamp = time_ns()
         try:
-            image_part = dict()
+            image_part = {}
             if encoded_image:
                 # OpenAI
                 image_part = {
@@ -251,8 +249,8 @@ class LLMAPI:
                         "detail": "low",
                     },
                 }
-            tResponse = await self.llm_api_v6(
-                [*self._expand_ChatInteraction_to_messages(chatMem), latest_prompt],
+            response = await self.llm_api_v6(
+                [*self.expand_chat_interaction_to_messages(chat_mem), latest_prompt],
                 system_instruction,
                 user_dict=_user_dict,
                 image=image_part,
@@ -276,12 +274,12 @@ class LLMAPI:
 
         else:
             # Only append to memory if no exception
-            chatMem.append(
+            chat_mem.append(
                 ChatInteraction(
                     msg_uid=_timestamp,
                     user_uid=_user_dict.uid,
                     persona_uid=_persona.uid,
-                    main_content=tResponse.response_text,
+                    main_content=response.response_text,
                     user_prompt=latest_prompt["content"],
                     user_internal_name=_user_dict.role_name,
                 )
@@ -289,30 +287,30 @@ class LLMAPI:
             # For debugging: print the current memory
             if self.debug_mode:
                 print(f"Current session memory for persona {persona_name}:")
-                for idx, mem in enumerate(chatMem):
+                for idx, mem in enumerate(chat_mem):
                     print(
-                        f"{idx+1:2d}. User Prompt: {mem.user_prompt} | Assistant Reply: {mem.main_content} | Memorized: {mem.is_memorized}"
+                        f"{idx + 1:2d}. User Prompt: {mem.user_prompt} | Assistant Reply: {mem.main_content} | Memorized: {mem.is_memorized}"
                     )
 
-            return tResponse
+            return response
 
     async def persona_memory_summarize(self, _persona: Persona, _user_dict: UserDict) -> TrimedResponse:
         """Summarize the recent memory for a given persona."""
-        chatMem = self.persona_session_memory[_persona.uid]
+        chat_mem = self.persona_session_memory[_persona.uid]
         _timestamp = time_ns()
-        if not chatMem:
+        if not chat_mem:
             return TrimedResponse(
                 response_text="No recent interactions to summarize.",
                 timestamp=_timestamp,
                 _code=-1,
             )
-        
+
         _pr = PlaceholderReplacer(_user_dict)
         system_instruction = _pr.replace_placeholders(_persona.content)
         system_instruction += prompt_config["memory_format"]
         # system_instruction = f'{_persona.content}\n最新對話發生在:{strftime("%Y/%m/%d %H:%M %a")}\n{prompt_config["memory_format"]}'
-        expand_messages = self._expand_ChatInteraction_to_messages(
-            chatMem, skip_memorized=True
+        expand_messages = self.expand_chat_interaction_to_messages(
+            chat_mem, skip_memorized=True
         )
         if not expand_messages:
             return TrimedResponse(
@@ -321,22 +319,22 @@ class LLMAPI:
                 _code=-1,
             )
         expand_messages.append(
-            {"role": "user", "content": prompt_config["memory_request"]+prompt_config["memory_format"]}
+            {"role": "user", "content": prompt_config["memory_request"] + prompt_config["memory_format"]}
         )
-        tResponse: TrimedResponse
+        response: TrimedResponse
         print(
             f"Summarizing memory with system instruction:\n...{system_instruction[-50:]}\nChatMem len() = {len(expand_messages)}:"
         )
         try:
             if self.debug_mode:
                 for idx, mem in enumerate(expand_messages):
-                    print(f"{idx+1:2d} {mem['role'][0]}: {mem['content']}")
-                tResponse = self._debug_response(
+                    print(f"{idx + 1:2d} {mem['role'][0]}: {mem['content']}")
+                response = self._debug_response(
                     _timestamp,
                     "Debug response for memory summarization."
                 )
             else:
-                tResponse = await self.llm_api_v6(
+                response = await self.llm_api_v6(
                     expand_messages,
                     system_instruction,
                     user_dict=UserDict(uid=0, name="System"),
@@ -350,31 +348,28 @@ class LLMAPI:
             )
         else:
             # only mark as memorized if summarization succeeded
-            for message in chatMem:
+            for message in chat_mem:
                 message.is_memorized = True
 
-        return tResponse
+        return response
 
     def revert_last_interaction(self, persona_id: int) -> bool:
         """Revert the last interaction for a given persona."""
-        chatMem = self.persona_session_memory[persona_id]
-        if chatMem:
-            removed_interaction = chatMem.pop()
+        chat_mem = self.persona_session_memory[persona_id]
+        if chat_mem:
+            removed_interaction = chat_mem.pop()
             print(f"Reverted last interaction for persona {persona_id}: {removed_interaction}")
             return True
-        else:
-            print(f"No interactions to revert for persona {persona_id}.")
-            return False
+        print(f"No interactions to revert for persona {persona_id}.")
+        return False
 
     async def get_available_models(self, force_refresh: bool = False) -> list[str]:
         """Return a list of available models from the current LLM API."""
         if self.available_models and not force_refresh:
             return self.available_models  # Return cached models if available
-        
+
         self.available_models = []  # Clear the cache
         _list = self.llm_apis[0].models.list()
-        result = []
-        async for model in _list:
-            result.append(model.id)
+        result = [model.id async for model in _list]
         self.available_models = result
         return result

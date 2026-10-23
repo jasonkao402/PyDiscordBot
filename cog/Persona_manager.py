@@ -1,13 +1,20 @@
-from discord.ext import commands
-from typing import Optional, List, Set
-from discord import Color, Embed, Interaction, Message, app_commands
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from discord import Color, Embed, Interaction, app_commands
 from discord.app_commands import Choice
-from helper_func.llmAgentAPI import LLMAPI
-from helper_func.chat_context_manager import ChatContextManager
-from helper_func.utilFunc import UserDict, sepLines, wcformat, is_admin_check
-from helper_func.ui_modal import CreatePersonaModal, EditPersonaModal_Full, EditPersonaModal_Basic
-from persona_db.helper_func import _split_uid_list
-from setup_bot import MyBot
+from discord.ext import commands
+
+from helper_func.ui_modal import CreatePersonaModal, EditPersonaModalBasic, EditPersonaModalFull
+from helper_func.utilFunc import UserDict, sepLines, wcformat
+from persona_db.helper_func import split_uid_list
+
+if TYPE_CHECKING:
+    from helper_func.chat_context_manager import ChatContextManager
+    from helper_func.llm_agent_API import LLMAPI
+    from setup_bot import MyBot
+
 
 class PersonaManagerCog(commands.Cog):
     def __init__(self, bot: MyBot):
@@ -40,7 +47,7 @@ class PersonaManagerCog(commands.Cog):
         user_id = interaction.user.id
 
         # Create the persona, the database will return the new persona's ID which we can use for confirmation
-        _persona_id = self.db.create_persona(persona_name, content, user_id, is_public, set(_split_uid_list(allowed_role_ids)))
+        _persona_id = self.db.create_persona(persona_name, content, user_id, is_public, set(split_uid_list(allowed_role_ids)))
 
         # Create an embed to confirm the creation
         embed = Embed(title=f"{persona_name} Created", color=Color.green())
@@ -49,42 +56,42 @@ class PersonaManagerCog(commands.Cog):
         embed.add_field(name="Content", value=content[:50], inline=False)  # Limit content to 1024 characters for embed
 
         await interaction.response.send_message(embed=embed)
-    
+
     @app_commands.command(name="editpersona", description="Edit an existing LLM persona")
     @app_commands.describe(persona_id="ID of the persona to edit")
     async def edit_persona(self, interaction: Interaction, persona_id: int):
         """Edit an existing LLM persona using a modal."""
         user_id = interaction.user.id
         user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
+        user_role_ids = {role.id for role in user_roles}
         # Fetch the persona from the database
         _persona = self.db.get_persona(persona_id, user_id, user_role_ids)
         if not _persona:
             await interaction.response.send_message(f"Persona #{persona_id} not found.")
             return
-        
+
         if _persona.owner_uid == user_id:
             # owner edit modal
-            modal = EditPersonaModal_Full(
+            modal = EditPersonaModalFull(
                 _persona=_persona,
                 callback=self.handle_edit_persona_submission
             )
             await interaction.response.send_modal(modal)
-        elif _persona.permission_full(user_id, user_role_ids):
+        elif _persona.check_perm_full(user_id, user_role_ids):
             # non-owner edit modal
-            modal = EditPersonaModal_Basic(
+            modal = EditPersonaModalBasic(
                 _persona=_persona,
                 callback=self.handle_edit_persona_submission
             )
             await interaction.response.send_modal(modal)
         else:
             await interaction.response.send_message("You do not have permission to edit this persona.", ephemeral=True)
-            
+
     async def handle_edit_persona_submission(self, interaction: Interaction, persona_id: int, persona_name: str, content: str, is_public: bool, allowed_role_ids: str):
         """Handle the submission of the edit persona modal."""
         user_id = interaction.user.id
         user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
+        user_role_ids = {role.id for role in user_roles}
         _allowed_fields = self.db._get_allowed_fields_for_user(persona_id, user_id, user_role_ids)  # This will check permissions and return allowed fields, but we can skip the returned value since the modal already restricts input based on ownership
         updates = {
             'persona_name': persona_name,
@@ -106,17 +113,17 @@ class PersonaManagerCog(commands.Cog):
                 self.persona_cache[persona_id] = _persona  # Refresh the cache with updated persona
         else:
             await interaction.response.send_message("Failed to update persona. Ensure you own the persona.", ephemeral=True)
-            
-    async def autocomplete_persona_id(self, interaction: Interaction, current: str) -> List[Choice[str]]:
+
+    async def autocomplete_persona_id(self, interaction: Interaction, current: str) -> list[Choice[str]]:
         """Autocomplete function for persona_id parameter in editpersona command."""
         user_id = interaction.user.id
         user_roles = getattr(interaction.user, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
+        user_role_ids = {role.id for role in user_roles}
 
         result = await self.state.autocomplete_persona_id(user_id, user_role_ids, current)
         return [Choice(name=f"{p.persona_name} (#{p.uid})", value=str(p.uid)) for p in result[:25]
         ]
-        
+
     @commands.hybrid_command(name="selectpersona", description="選擇一個角色進行互動")
     @app_commands.describe(persona_id="請輸入要選擇的角色ID")
     @app_commands.autocomplete(persona_id=autocomplete_persona_id)
@@ -124,7 +131,7 @@ class PersonaManagerCog(commands.Cog):
         """Select an LLM persona for interaction."""
         user_id = ctx.author.id
         user_roles = getattr(ctx.author, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
+        user_role_ids = {role.id for role in user_roles}
         # Check cache first
         if persona_id in self.persona_cache:
             _persona = self.persona_cache[persona_id]
@@ -137,12 +144,12 @@ class PersonaManagerCog(commands.Cog):
                 return
             # Build cache
             self.persona_cache[persona_id] = _persona
-        
-        if not _persona.permission_basic(user_id, user_role_ids):
+
+        if not _persona.check_perm_basic(user_id, user_role_ids):
             await ctx.send(f"You do not have permission to select persona ID {persona_id}.")
             return
         self.selection_cache[user_id] = persona_id
-        
+
         # Set selected persona in database
         success = self.db.set_selected_persona(persona_id, user_id, user_role_ids)
         if success:
@@ -155,7 +162,7 @@ class PersonaManagerCog(commands.Cog):
         """List all personas visible to the user."""
         user_id = ctx.author.id
         user_roles = getattr(ctx.author, 'roles', [])
-        user_role_ids = set(role.id for role in user_roles)
+        user_role_ids = {role.id for role in user_roles}
         personas = self.db.list_personas(user_id, user_role_ids)
         if not personas:
             await ctx.send("No personas available.")
@@ -165,32 +172,32 @@ class PersonaManagerCog(commands.Cog):
         await ctx.send(f"Available Personas:\n```{persona_list}```")
 
     @app_commands.command(name="setname", description="Update the preferred name and description for the user")
-    async def _set_name(self, interaction: Interaction, name: Optional[str], description: Optional[str]):
+    async def set_name(self, interaction: Interaction, name: str | None, description: str | None):
         user_id = interaction.user.id
-        # reset to default only if both name and description are empty, else keep the existing value if one of them is provided, 
+        # reset to default only if both name and description are empty, else keep the existing value if one of them is provided,
         # final fallback to display name for preferred name and "None" for description if both are empty and no existing value in database
         orig = self.db.get_discord_user(user_id)
         # Condition 1: Both are empty -> Reset to defaults
         if name is None and description is None:
             _new_name = interaction.user.display_name
             _new_description = "None"
-            
+
         # Condition 2: At least one is provided -> Update given, keep existing for the other
         else:
             # Fallbacks for existing data if the user only updates one field
             existing_name = orig.preferred_name if orig and orig.preferred_name else interaction.user.display_name
             existing_desc = orig.descr if orig and orig.descr else "None"
-            
+
             _new_name = name if name is not None else existing_name
             _new_description = description if description is not None else existing_desc
-            
+
         res = self.db.update_discord_user(user_id, preferred_name=_new_name, descr=_new_description)
         if res:
             await interaction.response.send_message(f"Your preferred name has been set to {_new_name} and description to {_new_description}.")
         else:
             await interaction.response.send_message("Failed to update preferred name.")
         self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=_new_name, descr=_new_description)
-    
+
     @commands.hybrid_command(name='scoreboard')
     async def _scoreboard(self, ctx: commands.Context):
         """Display interaction statistics and leaderboard."""
@@ -227,7 +234,7 @@ class PersonaManagerCog(commands.Cog):
                 f'```{top_users_list}```\n'
                 f'{user_name}共對話 {total_interactions} 次'
             )
-    
-async def setup(bot:MyBot):
+
+async def setup(bot: MyBot):
     cog_instance = PersonaManagerCog(bot)
     await bot.add_cog(cog_instance)
