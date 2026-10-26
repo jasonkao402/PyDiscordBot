@@ -20,8 +20,8 @@ def load_toml():
 
     config_toml.clear()
     config_toml.update(_new_config)
-    _sections = '\n  - '.join(config_toml.keys())
-    print(f'loaded from {TOML_PATH}, content:\n  - {_sections}')
+    # _sections = '\n  - '.join(config_toml.keys())
+    print(f'Config loaded from {TOML_PATH}')
     return config_toml
 
 

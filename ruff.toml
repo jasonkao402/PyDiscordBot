@@ -55,7 +55,9 @@ ignore = [
   "call-datetime-strptime-without-zone",  # Naive datetime constructed
   "ambiguous-unicode-character-string",  # Ambiguous characters (e.g. full-width parens)
   "ambiguous-unicode-character-docstring",  # Docstring contains ambiguous character
-
+  "whitespace-after-open-bracket",  # Whitespace after open bracket
+  "whitespace-before-close-bracket",  # Whitespace before close bracket
+  
   # Custom ignores for this project
   "line-too-long",  # Line too long
   "asyncio-dangling-task",  # Store a reference to the return value of asyncio.create_task
