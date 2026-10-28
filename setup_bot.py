@@ -46,7 +46,7 @@ class MyBot(commands.Bot):
         return config_toml.get("discord_bot", {})
 
     @property
-    def debug_guild_id(self) -> discord.Guild | None:
+    def debug_guild(self) -> discord.Guild | None:
         if self.debug_guild_cache is not None:
             return self.debug_guild_cache
         gid = self.bot_config.get("debug_guild_id", -1)
@@ -181,10 +181,10 @@ async def run_discord():
     if not token:
         msg = "Missing [api_token].discord in config.toml"
         raise RuntimeError(msg)
-    # Start!
+
     pending_manager = PendingMessageManager(update_callback=web_api.push_update)
     web_api.pending_manager = pending_manager  # Export to web_api so that UI can get it
-
+    # start bot
     bot_task = asyncio.create_task(client.start(token))
 
     # Run web API in background
@@ -192,6 +192,7 @@ async def run_discord():
     port = config_toml.get("webui", {}).get("port", 8070)
     uvicorn_config = uvicorn.Config("cog_dev.web_api:app", host=host, port=port, log_level="info")
     server = uvicorn.Server(uvicorn_config)
+    # start the web API
     api_task = asyncio.create_task(server.serve())
 
     try:

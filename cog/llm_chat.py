@@ -147,14 +147,13 @@ class LLMChatCog(commands.Cog):
             await _ch.send("No persona selected. Use /selectpersona to select one. (lvl 2)")
             return
 
+        encoded_image = None
+        if _msg.attachments:
+            attachment = _msg.attachments[0]
+            if attachment.content_type and attachment.content_type.startswith('image/'):
+                image_bytes = await attachment.read()
+                encoded_image = base64.b64encode(image_bytes).decode('utf-8')
         async with _ch.typing():
-            encoded_image = None
-            if _msg.attachments:
-                attachment = _msg.attachments[0]
-                if attachment.content_type and attachment.content_type.startswith('image/'):
-                    image_bytes = await attachment.read()
-                    encoded_image = base64.b64encode(image_bytes).decode('utf-8')
-
             # strip out the bot mention part from the message content
             if self.bot.user.mentioned_in(_msg):
                 _content = _msg.content.replace(self.bot.user.mention, '', 1).strip()
@@ -180,26 +179,27 @@ class LLMChatCog(commands.Cog):
             if not res:
                 print("Failed to create chat interaction in database")
 
-            # split both main and thinking content into multiple messages if too long for one message.
-            # send thinking content reference link in the original channel to reduce clutter.
-            msg_response_text = await long_message_splitter(_ch, tResponse.response_text, title=_persona.persona_name)
+        # split both main and thinking content into multiple messages if too long for one message.
+        # send thinking content reference link in the original channel to reduce clutter.
+        msg_response_text = await long_message_splitter(_ch, tResponse.response_text, title=_persona.persona_name)
 
-            if tResponse.thinking_content and self.debug_channel:
-                msg_thinking_text = await long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking")
-                usage_info = '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items())
-                await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:\n{usage_info}")
-                # Edit the last one of original response messages to include a reference to the thinking content in the debug channel
-                edit_content = f"{msg_response_text.content}\n\n-# Thinking {msg_thinking_text.jump_url}"
-                await msg_response_text.edit(content=edit_content)
-            else:
-                # No thinking content or debug channel available, just print response and token usage in debug channel or console
-                print(str(tResponse))
+        if tResponse.thinking_content and self.debug_channel:
+            msg_thinking_text = await long_message_splitter(self.debug_channel, tResponse.thinking_content, title=f"{_persona.persona_name} Thinking")
+            usage_info = '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items())
+            await self.debug_channel.send(f"-# Main content {msg_response_text.jump_url}\n-# Token usage:\n{usage_info}")
+            # Edit the last one of original response messages to include a reference to the thinking content in the debug channel
+            edit_content = f"{msg_response_text.content}\n\n-# Thinking {msg_thinking_text.jump_url}"
+            await msg_response_text.edit(content=edit_content)
+        else:
+            # No thinking content or debug channel available, just print response and token usage in debug channel or console
+            print(str(tResponse))
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
         user = message.author
+        channel = message.channel
         _user_id = user.id
-        _user_roles = getattr(user, 'roles', [])
+        ch_whitelist = config_toml.get("auth", {}).get("channel_list", [])
         userDict = UserDict(
             uid=_user_id,
             name=user.name,
@@ -211,22 +211,16 @@ class LLMChatCog(commands.Cog):
         if _user_id in self.ban_list:
             print(f'Ignored message from banned user {userDict.name} ({_user_id})')
             return
+        if channel.id not in ch_whitelist:
+            ch_name = getattr(channel, 'name', "Unknown(DM)")
+            print(f'Ignored message from {userDict.name} ({_user_id}) in channel {ch_name} ({channel.id})')
+            return
 
         # Use mentions to trigger bot LLM chat
-        if self.bot.user.mentioned_in(message) and not message.mention_everyone:
-            # Check if the user has the required role or is the owner
-            role_whitelist = config_toml.get("auth", {}).get("role_list", [])
-            id_whitelist = config_toml.get("auth", {}).get("admin_list", [])
-            role_check = any(role.id in role_whitelist for role in _user_roles)
-            id_check = _user_id in id_whitelist
-            if not (role_check or id_check):
-                extra_msg = 'You do not have the required permission to interact with the bot.'
-                print(f'Rejected message from {userDict.name} ({_user_id}): {extra_msg}')
-                await message.channel.send(f'# To {userDict.name}...\n{extra_msg}')
-                return
+        if self.bot.user.mentioned_in(message) and not message.mention_everyone and not message.role_mentions:
             await self.handle_llm_trigger(message.channel, message, userDict)
 
-    @app_commands.command(name="memo", description="Summarize the current persona memory into a new memory")
+    @app_commands.command(name="memo", description="Summarize the current persona's short term memory into a long term memory")
     async def memo(self, interaction: Interaction):
         user_id = interaction.user.id
         persona_id = self.selection_cache.get(user_id, -1)
@@ -250,16 +244,18 @@ class LLMChatCog(commands.Cog):
 
         try:
             source_msg_uids = self.llm_api.get_msg_uids_from_memory(persona_id, skip_memorized=True)
-            print(f"Source msg_uids for summarization: {source_msg_uids}")
-
             tResponse = await self.llm_api.persona_memory_summarize(_persona=_persona, _user_dict=_user_dict)
-            print(f"Summarization response: {tResponse}")
+            print(f"Summarization response, msg_uids: {source_msg_uids}\nresponse: {tResponse}")
 
             if tResponse._code == -1:
                 # Summarization failed
                 await interaction.followup.send("Failed to summarize persona memory.")
                 return
 
+        except Exception as e:
+            print(f"Unexpected error in memo command: {e}")
+            await interaction.followup.send(f"An unexpected error occurred: {e}")
+        else:
             # --- Success path ---
             # Send initial confirmation via followup
             await interaction.followup.send("Summarization successful. Saving summarized memory...")
@@ -290,13 +286,6 @@ class LLMChatCog(commands.Cog):
                 print("Failed to create persona memory in database")
                 await interaction.followup.send("Failed to create persona memory.")
                 return
-
-            # Optional: final success message
-            # (already sent a confirmation; you can skip or send another followup)
-
-        except Exception as e:
-            print(f"Unexpected error in memo command: {e}")
-            await interaction.followup.send(f"An unexpected error occurred: {e}")
 
 async def setup(bot: MyBot):
     cog_instance = LLMChatCog(bot)
