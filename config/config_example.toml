@@ -4,24 +4,29 @@ debug_guild_id = -1
 activity = "正在殺蟲...(debugging...)"
 directory = "./cog"
 preload = [
-    "cog.askAI",
-    "cog.mainbot",
-    "cog.latex_render",
+    "mainbot",
+    "latex_render",
+    "llm_admin",
+    "llm_chat",
+    "persona_manager",
 ]
 
 [webui]
 host = "localhost"
-port = 8080
+port = 8070
 
 [llm_model]
 provider_llm = "deepseek"
+provider_jev = "local_jev"
 model_main = "deepseek/deepseek-v4.1-flash-1017"
 model_debug = "deepseek/deepseek-v4.1-flash-1017"
+model_jev = "jev-latest"
 model_embed = "shaw/dmeta-embedding-zh"
+max_tokens = 5120
 detail_memory_range = 14
 summary_memory_range = 14
 retrieval_memory_range = 3
-round_robin_quota = 50
+round_robin_quota = 50 # Number of requests before switching to the next API key
 
 [prompt_template]
 memory_request = "可以幫忙依照時間順序整理一下剛剛在聊什麼嗎？保留大綱即可，省略不重要的零碎小事。"
@@ -48,7 +53,7 @@ promptNeg = "(lowres:1.2), EasyNegative, badhandv4, negative_hand-neg, (worst qu
 [auth]
 admin_list = [
 ]
-role_list = [
+channel_list = [
 ]
 ban_list = [
 ]
