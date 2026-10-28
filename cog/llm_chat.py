@@ -212,7 +212,7 @@ class LLMChatCog(commands.Cog):
         msg_response_text = await long_message_splitter(_ch, response.response_text, title=_persona.persona_name)
         token_usage_str = "\n".join(f"-# {k}: {v}" for k, v in response.token_usage.items())
         jev_str = "\n".join(f"-# {k}: {v}" for k, v in {**jev_intent, **jev_gate}.items())
-        await _ch.send(f"-# Token usage:\n{token_usage_str}\n-# Jev:\n{jev_str}")
+        await _ch.send(f"-# Token usage:\n{token_usage_str}\n-# Jev analysis:\n{jev_str}")
         # await _ch.send("-# Token usage:\n" + '\n'.join(f'-# {k}: {v}' for k, v in tResponse.token_usage.items()))
 
         if response.thinking_content:

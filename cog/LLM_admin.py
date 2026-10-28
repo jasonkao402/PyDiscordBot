@@ -6,7 +6,6 @@ from discord import Interaction, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from config_loader import config_toml
 from helper_func.ui_modal import TestSelect
 from helper_func.utilFunc import is_admin_check
 
@@ -40,8 +39,10 @@ class LLMAdminCog(commands.Cog):
     @app_commands.command(name="refreshmodels", description="Refresh the available models in the LLM API")
     async def refresh_models(self, interaction: Interaction):
         """Refresh the available models in the LLM API."""
-        result = await self.state.refresh_models()
-        await interaction.response.send_message(result)
+        await self.state.refresh_models()
+        models = self.llm_api.available_models
+        models_str = "\n- ".join(models) if models else "No models available."
+        await interaction.response.send_message(f"Current main model: `{self.llm_api.main_model}`\nAvailable models:\n- {models_str}")
 
     async def autocomplete_persona_id(
         self,
@@ -103,11 +104,11 @@ class LLMAdminCog(commands.Cog):
             return
 
         # Update config
-        config_toml["llm_model"]["model_main"] = model
+        self.llm_api.main_model = model
 
         # Send the confirmation
         await interaction.response.send_message(
-            f"成功，已切換模型至 `{config_toml["llm_model"]["model_main"]}`",
+            f"成功，已切換模型至 `{self.llm_api.main_model}`",
         )
 
     @app_commands.command(name="testmodal", description="Test the select modal")
