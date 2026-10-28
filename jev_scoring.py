@@ -48,7 +48,7 @@ async def main_jev_scoring(start_index: int = 0, end_index: int = 300) -> tuple[
 
         i += 1
         display_str = f"{i:03d}. [{interaction.created_at}]\n{formatted}\nScoring result: {jev_result}\n{'-' * 40}\n"
-        archive_str = f"{i:03d}. {jev_result | formatted}\n"
+        archive_str = f"{i:03d}. {jev_result | formatted}"
         print(display_str)
         logging_full.append(display_str)
         logging_jev.append(archive_str)

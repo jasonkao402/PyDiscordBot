@@ -12,8 +12,6 @@ from helper_func.utilFunc import UserDict, long_message_splitter
 if TYPE_CHECKING:
     from discord.abc import Messageable
 
-    from helper_func.chat_context_manager import ChatContextManager
-    from helper_func.llm_agent_API import LLMAPI
     from setup_bot import MyBot
 
 
@@ -21,9 +19,9 @@ class LLMChatCog(commands.Cog):
 
     def __init__(self, bot: MyBot):
         self.bot = bot
-        self.state: ChatContextManager = bot.chat_state
+        self.state = bot.chat_state
         self.db = self.state.db
-        self.llm_api: LLMAPI = self.state.llm_api
+        self.llm_api = self.state.llm_api
         self.ban_list = self.state.ban_list
 
         self.persona_cache = self.state.persona_cache
@@ -208,16 +206,16 @@ class LLMChatCog(commands.Cog):
         # Ignore self messages
         if _user_id == self.bot.user.id:
             return
-        if _user_id in self.ban_list:
-            print(f'Ignored message from banned user {userDict.name} ({_user_id})')
-            return
-        if channel.id not in ch_whitelist:
-            ch_name = getattr(channel, 'name', "Unknown(DM)")
-            print(f'Ignored message from {userDict.name} ({_user_id}) in channel {ch_name} ({channel.id})')
-            return
 
         # Use mentions to trigger bot LLM chat
         if self.bot.user.mentioned_in(message) and not message.mention_everyone and not message.role_mentions:
+            if _user_id in self.ban_list:
+                print(f'Ignored message from banned user {userDict.name} ({_user_id})')
+                return
+            if channel.id not in ch_whitelist:
+                ch_name = getattr(channel, 'name', "Unknown(DM)")
+                print(f'Ignored message from {userDict.name} ({_user_id}) in channel {ch_name} ({channel.id})')
+                return
             await self.handle_llm_trigger(message.channel, message, userDict)
 
     @app_commands.command(name="memo", description="Summarize the current persona's short term memory into a long term memory")
