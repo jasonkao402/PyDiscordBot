@@ -39,10 +39,8 @@ extra_body = {
 
 
 class LLMAPI:
-    def __init__(self, _main_model: str | None = None, _debug_mode: bool = False) -> None:
-        self.main_model = (
-            _main_model if _main_model is not None else model_config["model_main"]
-        )
+    def __init__(self, _debug_mode: bool = False) -> None:
+        self.main_model: str = config_toml["llm_model"].get("model_main", "NOT_FOUND")
         self.available_models: list[str] = []  # Cache for available models
 
         _api_key_pool = config_toml["api_token"][provider_llm].get("keys", [])
@@ -73,6 +71,11 @@ class LLMAPI:
         for llm_api in self.llm_apis:
             await llm_api.close()
         print(f"Closed {len(self.llm_apis)} LLM API clients.")
+
+    def update_main_model(self, new_model: str):
+        """Update the main model used for LLM interactions."""
+        self.main_model = new_model
+        print(f"Main model updated to: {self.main_model}")
 
     def inspect_memory(self, persona_id: int) -> list[ChatInteraction]:
         return list(self.persona_session_memory[persona_id])

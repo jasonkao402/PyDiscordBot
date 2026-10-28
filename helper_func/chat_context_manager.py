@@ -35,8 +35,8 @@ class ChatContextManager:
     async def refresh_models(self):
         """Refresh the available models in the LLM API."""
         models = await self.llm_api.get_available_models(force_refresh=True)  # Refresh the model list in the LLM API
-        models_str = "\n  - ".join(models) if models else "No models available."
-        return f"Available models:\n  - {models_str}"
+        models_str = "\n- ".join(models) if models else "No models available."
+        return f"Available models:\n- {models_str}"
 
     async def cleanup(self):
         await self.llm_api.cleanup()

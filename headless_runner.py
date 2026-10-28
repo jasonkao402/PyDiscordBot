@@ -22,7 +22,7 @@ debug_user_id = config_toml.get("auth", {}).get("admin_list", [])[0]
 
 class FakeChatCog:
     def __init__(self):
-        self.llm_api = LLMAPI(_main_model=debug_model, _debug_mode=False)
+        self.llm_api = LLMAPI()
 
     async def close(self):
         await self.llm_api.cleanup()

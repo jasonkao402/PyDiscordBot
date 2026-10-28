@@ -6,6 +6,7 @@ from discord import Interaction, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
+from config_loader import config_toml
 from helper_func.ui_modal import TestSelect
 from helper_func.utilFunc import is_admin_check
 
@@ -76,7 +77,7 @@ class LLMAdminCog(commands.Cog):
     ) -> list[Choice[str]]:
 
         # Get your list of models
-        api_models = await self.llm_api.get_available_models()  # Fetch available models from the API, filter to "假流式" only
+        api_models = await self.llm_api.get_available_models()  # Fetch available models from the API
         # Filter models based on what the user is typing
         filtered_models = [model for model in api_models if current.lower() in model.lower()]
 
@@ -93,7 +94,7 @@ class LLMAdminCog(commands.Cog):
     async def select_model(self, interaction: Interaction, model: str):
         # 'model' is now the string the user selected from the autocomplete list
 
-        # A quick check to make sure the model is valid
+        # make sure the model is valid
         if model not in self.llm_api.available_models:
             await interaction.response.send_message(
                 f"錯誤：無效的模型 `{model}`",
@@ -101,12 +102,12 @@ class LLMAdminCog(commands.Cog):
             )
             return
 
-        # Update your config
-        # config_tomllllll.get("llmChat", {})["model_main"] = model
+        # Update config
+        config_toml["llm_model"]["model_main"] = model
 
         # Send the confirmation
         await interaction.response.send_message(
-            f"成功，已切換模型至 `{model}`",
+            f"成功，已切換模型至 `{config_toml["llm_model"]["model_main"]}`",
         )
 
     @app_commands.command(name="testmodal", description="Test the select modal")
