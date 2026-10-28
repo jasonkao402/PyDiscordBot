@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from config_loader import config_toml
+from helper_func.jev_API import JevAPI
 from helper_func.llm_agent_API import LLMAPI
 from persona_db.PersonaDatabase import PersonaDatabase
 
@@ -15,6 +16,7 @@ class ChatContextManager:
     def __init__(self):
         self.db = PersonaDatabase("llm_character_cards.db")
         self.llm_api = LLMAPI()
+        self.jev_api = JevAPI()
         self.ban_list: list[int] = config_toml.get("auth", {}).get("ban_list", [])
 
         # Shared caches (mutating these in one Cog updates them everywhere)

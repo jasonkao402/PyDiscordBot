@@ -6,7 +6,7 @@ import logging
 import uvicorn
 
 from cog_dev import web_api
-from cog_dev.moderation import PendingMessageManager
+from cog_dev.moderation import PendingMessageManager, TrimedResponse
 from config_loader import config_toml
 from helper_func.llm_agent_API import LLMAPI
 from helper_func.utilFunc import UserDict
@@ -19,6 +19,7 @@ debug_model = chat_config["model_main"]
 debug_persona_id = 26
 debug_user_id = config_toml.get("auth", {}).get("admin_list", [])[0]
 
+
 class FakeChatCog:
     def __init__(self):
         self.llm_api = LLMAPI(_main_model=debug_model, _debug_mode=False)
@@ -28,6 +29,22 @@ class FakeChatCog:
 
     async def get_available_models(self) -> list[str]:
         return await self.llm_api.get_available_models()
+
+    async def handle_chat(self, prompt: str, persona: Persona, user_dict: UserDict) -> TrimedResponse:
+        response = await self.llm_api.persona_chat_oneshot(
+            prompt_str=prompt, _persona=persona, _user_dict=user_dict, encoded_image=None
+        )
+        if response._code == -1:
+            msg = f"Chat failed: {response.response_text}"
+            raise RuntimeError(msg)
+        return response
+
+    async def handle_memory(self, persona: Persona, user_dict: UserDict) -> TrimedResponse:
+        response = await self.llm_api.persona_memory_summarize(_persona=persona, _user_dict=user_dict)
+        if response._code == -1:
+            msg = f"Summarization failed: {response.response_text}"
+            raise RuntimeError(msg)
+        return response
 
 
 async def fake_cog_chatbot():
@@ -44,7 +61,9 @@ async def fake_cog_chatbot():
 
     _user = db.get_discord_user(debug_user_id)
     assert isinstance(_user, DiscordUser)
-    user_dict = UserDict(uid=_user.user_uid, name=_user.preferred_name or "User", preferred_name=_user.preferred_name, descr=_user.descr)
+    user_dict = UserDict(
+        uid=_user.user_uid, name=_user.preferred_name or "User", preferred_name=_user.preferred_name, descr=_user.descr
+    )
     print(f"Using user: {user_dict.effective_name}\nFull info:\n{user_dict}")
 
     while True:
@@ -55,36 +74,27 @@ async def fake_cog_chatbot():
 
         print("Processing...")
 
-        try:
-            if userPrompt.lower() == "memo":
-                source_msg_uids = cog_api.llm_api.get_msg_uids_from_memory(
-                    debug_persona_id, skip_memorized=True
-                )
-                tResponse = await cog_api.llm_api.persona_memory_summarize(
-                    _persona=_persona,
-                    _user_dict=user_dict,
-                )
-                if tResponse._code == -1:
-                    print(f"Summarization failed: {tResponse.response_text}")
-                    # continue
-                db.increment_interaction_count(debug_persona_id, user_dict.uid)
-                print(f"Memorized msg_uids: {source_msg_uids}")
+        if userPrompt.lower() == "memo":
+            source_msg_uids = cog_api.llm_api.get_msg_uids_from_memory(debug_persona_id, skip_memorized=True)
+            print(f"Memorized msg_uids: {source_msg_uids}")
+            try:
+                tResponse = await cog_api.handle_memory(_persona, user_dict)
+            except Exception as e:
+                print(f"Error during memory summarization: {e}")
+                continue
+            else:
                 db.create_persona_memory(
                     memory_content=tResponse.response_text,
                     persona_uid=debug_persona_id,
                     source_msg_uids=source_msg_uids,
                 )
+        else:
+            try:
+                tResponse = await cog_api.handle_chat(userPrompt, _persona, user_dict)
+            except Exception as e:
+                print(f"Error during chat: {e}")
+                continue
             else:
-                tResponse = await cog_api.llm_api.persona_chat_oneshot(
-                    prompt_str=userPrompt,
-                    _persona=_persona,
-                    _user_dict=user_dict,
-                    encoded_image=None,
-                )
-                db.increment_interaction_count(debug_persona_id, user_dict.uid)
-                if tResponse._code == -1:
-                    print(f"Chat failed: {tResponse.response_text}")
-                    # continue
                 res = db.create_chat_interaction(
                     msg_uid=tResponse.timestamp,
                     user_uid=user_dict.uid,
@@ -93,10 +103,9 @@ async def fake_cog_chatbot():
                     user_prompt=userPrompt,
                 )
                 assert res, "Failed to create chat interaction in database"
-            print(str(tResponse))
 
-        except Exception as e:
-            print(f"Error during chat: {e}")
+        db.increment_interaction_count(debug_persona_id, user_dict.uid)
+        print(str(tResponse))
 
     await cog_api.close()
 
@@ -108,9 +117,7 @@ async def main():
     bot_task = asyncio.create_task(fake_cog_chatbot())
 
     # Run web API in background
-    uvicorn_config = uvicorn.Config(
-        "cog_dev.web_api:app", host="localhost", port=8070, log_level="info"
-    )
+    uvicorn_config = uvicorn.Config("cog_dev.web_api:app", host="localhost", port=8070, log_level="info")
     server = uvicorn.Server(uvicorn_config)
     api_task = asyncio.create_task(server.serve())
 

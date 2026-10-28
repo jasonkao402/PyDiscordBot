@@ -173,7 +173,7 @@ class LLMAPI:
                 _timestamp,
                 f"API Error: {api_error}"
             )
-        print(f"{response.choices[0].message}\n" + "=" * 20)
+
         response_text = str(response.choices[0].message.content)
         thinking_content = str(
             getattr(response.choices[0].message, "reasoning", None) or
