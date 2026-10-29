@@ -7,7 +7,7 @@ from discord.app_commands import Choice
 from discord.ext import commands
 
 from helper_func.ui_modal import TestSelect
-from helper_func.utilFunc import is_admin_check
+from helper_func.utilFunc import is_admin_check, long_message_splitter
 
 if TYPE_CHECKING:
     from helper_func.chat_context_manager import ChatContextManager
@@ -58,18 +58,20 @@ class LLMAdminCog(commands.Cog):
         return [Choice(name=f"{p.persona_name} (#{p.uid})", value=str(p.uid)) for p in result[:25]]
 
     @is_admin_check()
-    @app_commands.command(name="chathistory", description="Inspect the current memory usage of the bot")
+    @app_commands.command(name="chathistory", description="Inspect the current short term memory of the bot")
     @app_commands.describe(persona_id="The ID of the persona to inspect")  # Add a description for the option
     @app_commands.autocomplete(persona_id=autocomplete_persona_id)  # Link the autocomplete function
-    async def inspect_memory(self, interaction: Interaction, persona_id: int | None = None):
+    async def inspect_memory(self, interaction: Interaction, persona_id: int):
         """Inspect the persona's chat history"""
-        if persona_id is not None:
-            persona = self.db.get_persona_no_check(persona_id)
-            history = self.llm_api.inspect_memory(persona_id)
-            history_str = "\n".join([f"{i + 1}. {entry}" for i, entry in enumerate(history)]) if history else "No chat history found."
-            await interaction.response.send_message(f"Chat history for {persona.persona_name}:\n{history_str}")
-        else:
-            await interaction.response.send_message("Please provide a persona ID to inspect its chat history.", ephemeral=True)
+        persona = self.db.get_persona_no_check(persona_id)
+        if persona is None:
+            await interaction.response.send_message("Please provide a valid persona ID to inspect its chat history.", ephemeral=True)
+            return
+
+        history = self.llm_api.inspect_memory(persona_id)
+        history_str = "\n".join([f"{i + 1}. {txt[:50]}..." if len(txt := entry.chat_text) > 50 else f"{i + 1}. {txt}" for i, entry in enumerate(history)]) if history else "No chat history found."
+        # await interaction.response.send_message(f"Chat history for {persona.persona_name}:\n{history_str}")
+        await long_message_splitter(interaction.followup, history_str, title=f"Chat history for {persona.persona_name}", chunk_size=1900)
 
     async def model_autocomplete(
         self,

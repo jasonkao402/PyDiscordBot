@@ -89,6 +89,10 @@ class ChatInteraction:
     user_prompt: str = ""
     user_internal_name: str | None = None
 
+    @property
+    def chat_text(self):
+        return f"User Prompt: {self.user_prompt}\nMain Content: {self.main_content}"
+
 @dataclass
 class PersonaMemories:
     memory_uid: int  # PK
