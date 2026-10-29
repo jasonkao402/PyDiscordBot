@@ -71,7 +71,7 @@ class LLMAdminCog(commands.Cog):
         history = self.llm_api.inspect_memory(persona_id)
         history_str = "\n".join([f"{i + 1}. {txt[:50]}..." if len(txt := entry.chat_text) > 50 else f"{i + 1}. {txt}" for i, entry in enumerate(history)]) if history else "No chat history found."
         # await interaction.response.send_message(f"Chat history for {persona.persona_name}:\n{history_str}")
-        await long_message_splitter(interaction.followup, history_str, title=f"Chat history for {persona.persona_name}", chunk_size=1900)
+        await long_message_splitter(interaction.message.channel, history_str, title=f"Chat history for {persona.persona_name}", chunk_size=1900)
 
     async def model_autocomplete(
         self,
