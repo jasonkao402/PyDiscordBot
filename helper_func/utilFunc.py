@@ -52,7 +52,7 @@ def wcformat(s: str, w: int = 12, align_left: bool = True):
 #     idx = argsort(sim)[:-K - 1:-1]
 #     return idx, sim[idx]
 
-async def long_message_splitter(_ch: Messageable | Webhook, text: str, title: str = "", chunk_size: int = 1900) -> Message:
+async def long_message_splitter(_ch: Messageable | InteractionChannel | Webhook, text: str, title: str = "", chunk_size: int = 1900) -> Message:
     """Split a long message into chunks that fit within Discord's message limits and send them sequentially."""
 
     last_message: Message | None = None

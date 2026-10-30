@@ -64,14 +64,18 @@ class LLMAdminCog(commands.Cog):
     async def inspect_memory(self, interaction: Interaction, persona_id: int):
         """Inspect the persona's chat history"""
         persona = self.db.get_persona_no_check(persona_id)
+        await interaction.response.edit_message(content=f"Inspecting chat history for persona ID: {persona_id}...")
         if persona is None:
-            await interaction.response.send_message("Please provide a valid persona ID to inspect its chat history.", ephemeral=True)
+            await interaction.response.edit_message(content="Please provide a valid persona ID to inspect its chat history.")
             return
 
         history = self.llm_api.inspect_memory(persona_id)
         history_str = "\n".join([f"{i + 1}. {txt[:50]}..." if len(txt := entry.chat_text) > 50 else f"{i + 1}. {txt}" for i, entry in enumerate(history)]) if history else "No chat history found."
         # await interaction.response.send_message(f"Chat history for {persona.persona_name}:\n{history_str}")
-        await long_message_splitter(interaction.message.channel, history_str, title=f"Chat history for {persona.persona_name}", chunk_size=1900)
+        _ch = interaction.channel
+        # _ch = self.bot.get_partial_messageable(interaction.channel_id)
+        if _ch is not None:
+            await long_message_splitter(_ch, history_str, title=f"Chat history for {persona.persona_name}", chunk_size=1900)
 
     async def model_autocomplete(
         self,

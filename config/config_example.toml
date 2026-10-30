@@ -6,7 +6,7 @@ directory = "./cog"
 preload = [
     "mainbot",
     "latex_render",
-    "llm_admin",
+    "llm_debug",
     "llm_chat",
     "persona_manager",
 ]
