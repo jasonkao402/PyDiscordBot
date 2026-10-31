@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from discord import Interaction, Message, Webhook, app_commands
+from discord import Interaction, Message, Webhook, app_commands, WebhookMessage
 from wcwidth import wcswidth
 
 from config_loader import config_toml
@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from discord.abc import Messageable
 
 TWTZ = timezone(timedelta(hours=8))
+DISCORD_LIMIT = 2000
+TITLE_LIMIT = 50
 
 def clamp(n: float, minn: float = 0, maxn: float = 100) -> float:
     '''clamp n in set range'''
@@ -52,24 +54,70 @@ def wcformat(s: str, w: int = 12, align_left: bool = True):
 #     idx = argsort(sim)[:-K - 1:-1]
 #     return idx, sim[idx]
 
-async def long_message_splitter(_ch: Messageable | InteractionChannel | Webhook, text: str, title: str = "", chunk_size: int = 1900) -> Message:
-    """Split a long message into chunks that fit within Discord's message limits and send them sequentially."""
-
-    last_message: Message | None = None
-
-    if len(text) > chunk_size:
-        parts = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
-        len_parts = len(parts)
-        for i, part in enumerate(parts):
-            last_message = await _ch.send(f"# {title} part {i + 1}/{len_parts}\n{part}")
-    else:
-        last_message = await _ch.send(f"# {title}\n{text}")
-
-    if last_message is None:
+ 
+ 
+def _chunks(text: str, limit: int) -> list[str]:
+    """Split on line boundaries; hard-wrap only lines that are longer than `limit`."""
+    chunks: list[str] = []
+    buf = ""
+    for line in text.splitlines(keepends=True):
+        while len(line) > limit:  # a single oversized line
+            if buf:
+                chunks.append(buf)
+                buf = ""
+            chunks.append(line[:limit])
+            line = line[limit:]
+        if len(buf) + len(line) > limit:
+            chunks.append(buf)
+            buf = ""
+        buf += line
+    if buf:
+        chunks.append(buf)
+    return chunks or [""]
+ 
+ 
+async def long_message_splitter(
+    target: Interaction | Messageable | Webhook,
+    text: str,
+    title: str = "",
+    chunk_size: int = 1900,
+    *,
+    ephemeral: bool = False,
+) -> Message | WebhookMessage:
+    """Send `text` in several messages, each within Discord's 2000-character limit.
+ 
+    `target` can be:
+      * an Interaction  -> first chunk uses response.send_message (or followup if you
+                           already deferred/responded); the rest use followup.send
+      * a Messageable   -> channel.send
+      * a Webhook       -> webhook.send(wait=True)
+    `ephemeral` only applies to Interactions.
+    """
+    title = title[:TITLE_LIMIT]
+    header_room = len(f"# {title} part 99/99\n")  # keep header + chunk under 2000
+    limit = max(100, min(chunk_size, DISCORD_LIMIT - header_room))
+    parts = _chunks(text, limit)
+    total = len(parts)
+ 
+    async def _send(content: str) -> Message | WebhookMessage:
+        if isinstance(target, Interaction):
+            if not target.response.is_done():
+                await target.response.send_message(content, ephemeral=ephemeral)
+                return await target.original_response()
+            return await target.followup.send(content, ephemeral=ephemeral, wait=True)
+        if isinstance(target, Webhook):
+            return await target.send(content, wait=True)
+        return await target.send(content)
+ 
+    last: Message | WebhookMessage | None = None
+    for i, part in enumerate(parts, start=1):
+        header = f"# {title} part {i}/{total}\n" if total > 1 else f"# {title}\n"
+        last = await _send(header + part)
+ 
+    if last is None:  # unreachable: _chunks always returns at least one element
         msg = "Failed to send message chunk"
         raise RuntimeError(msg)
-
-    return last_message
+    return last
 
 @dataclass
 class UserDict:
