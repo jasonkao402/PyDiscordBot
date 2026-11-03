@@ -62,22 +62,22 @@ class LLMAdminCog(commands.Cog):
     @app_commands.describe(persona_id="The ID of the persona to inspect")  # Add a description for the option
     @app_commands.autocomplete(persona_id=autocomplete_persona_id)  # Link the autocomplete function
     async def inspect_memory(self, interaction: Interaction, persona_id: int):
-            persona = self.db.get_persona_no_check(persona_id)
-            if persona is None:
-                await interaction.response.send_message("Please provide a valid persona ID.", ephemeral=True)
-                return
-    
-            history = self.llm_api.inspect_memory(persona_id)
-            history_str = "\n".join(
-                f"{i}. {e.chat_text[:100]}{'...' if len(e.chat_text) > 100 else ''}"
-                for i, e in enumerate(history, start=1)
-            ) if history else "No chat history found."
-    
-            await long_message_splitter(
-                interaction, history_str,
-                title=f"Chat history for {persona.persona_name}",
-            )
-    
+        persona = self.db.get_persona_no_check(persona_id)
+        if persona is None:
+            await interaction.response.send_message("Please provide a valid persona ID.", ephemeral=True)
+            return
+
+        history = self.llm_api.inspect_memory(persona_id)
+        history_str = "\n".join(
+            f"{i}. {e.chat_text[:100]}{'...' if len(e.chat_text) > 100 else ''}"
+            for i, e in enumerate(history, start=1)
+        ) if history else "No chat history found."
+
+        await long_message_splitter(
+            interaction, history_str,
+            title=f"Chat history for {persona.persona_name}",
+        )
+
     async def model_autocomplete(
         self,
         interaction: Interaction,
