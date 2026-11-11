@@ -11,11 +11,11 @@ import uvicorn
 from fastapi import FastAPI, Response
 
 # Configuration
-OBS_CAM_INDEX = 2      # Index of OBS Virtual Camera (adjust if multiple cameras exist)
-TARGET_HEIGHT = 480    # 480p standard height
-TARGET_WIDTH = 854     # 16:9 480p width
-BUFFER_CAPACITY = 6    # Ring buffer size (6 to 8 frames)
-CAPTURE_FPS = 1.0      # 1 frame per second
+PORT = 8900
+OBS_CAM_INDEX = 2
+TARGET_HEIGHT = 480
+TARGET_WIDTH = 854
+BUFFER_CAPACITY = 6
 
 MIN_FPS = 0.1       # Idle: 1 frame every 10 seconds (near 0% CPU)
 MAX_FPS = 1.0       # Active cap: 1 frame per second
@@ -178,5 +178,4 @@ def status():
 
 
 if __name__ == "__main__":
-    # Runs the background API service on http://127.0.0.1:8000
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")

@@ -68,16 +68,8 @@ def _chunks(text: str, limit: int) -> list[str]:
         break_long_words=True,     # Hard-wrap words longer than `limit`
         break_on_hyphens=True
     )
-
-    # Wrap each line independently to preserve explicit line breaks
-    chunks = []
-    for line in text.splitlines(keepends=True):
-        if not line:
-            continue
-        wrapped_sublines = wrapper.wrap(line)
-        chunks.extend(wrapped_sublines)
-
-    return chunks or [""]
+    wrapped_lines = wrapper.wrap(text)
+    return wrapped_lines or ["empty_wrapped_lines"]  # Ensure at least one line is returned
 
 async def long_message_splitter(
     target: Interaction | Messageable | Webhook,
