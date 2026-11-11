@@ -6,7 +6,7 @@ from discord import Color, Embed, Interaction, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from helper_func.ui_modal import CreatePersonaModal, EditPersonaModalBasic, EditPersonaModalFull
+from helper_func.ui_modal import CreatePersonaModal, EditPersonaModalBasic, EditPersonaModalFull, SetNameModal
 from helper_func.utilFunc import UserDict, wcformat
 from persona_db.helper_func import split_uid_list
 
@@ -172,31 +172,38 @@ class PersonaManagerCog(commands.Cog):
         await ctx.send(f"Available Personas:\n```{persona_list}```")
 
     @app_commands.command(name="setname", description="Update the preferred name and description for the user")
-    async def set_name(self, interaction: Interaction, name: str | None, description: str | None):
+    async def set_name(self, interaction: Interaction):
+        orig = self.db.get_discord_user(interaction.user.id)
+
+        current_name = orig.preferred_name if orig and orig.preferred_name else ""
+        current_desc = orig.descr if orig and orig.descr and orig.descr != "None" else ""
+
+        await interaction.response.send_modal(
+            SetNameModal(self._on_setname_submit, current_name, current_desc)
+        )
+
+    async def _on_setname_submit(self, interaction: Interaction, name: str, description: str):
         user_id = interaction.user.id
-        # reset to default only if both name and description are empty, else keep the existing value if one of them is provided,
-        # final fallback to display name for preferred name and "None" for description if both are empty and no existing value in database
-        orig = self.db.get_discord_user(user_id)
-        # Condition 1: Both are empty -> Reset to defaults
-        if name is None and description is None:
-            _new_name = interaction.user.display_name
-            _new_description = "None"
 
-        # Condition 2: At least one is provided -> Update given, keep existing for the other
-        else:
-            # Fallbacks for existing data if the user only updates one field
-            existing_name = orig.preferred_name if orig and orig.preferred_name else interaction.user.display_name
-            existing_desc = orig.descr if orig and orig.descr else "None"
+        # Empty field -> reset that field to its default
+        new_name = name or interaction.user.display_name
+        new_desc = description or "None"
 
-            _new_name = name if name is not None else existing_name
-            _new_description = description if description is not None else existing_desc
+        res = self.db.update_discord_user(user_id, preferred_name=new_name, descr=new_desc)
+        if not res:
+            await interaction.response.send_message("Failed to update preferred name.", ephemeral=True)
+            return
 
-        res = self.db.update_discord_user(user_id, preferred_name=_new_name, descr=_new_description)
-        if res:
-            await interaction.response.send_message(f"Your preferred name has been set to {_new_name} and description to {_new_description}.")
-        else:
-            await interaction.response.send_message("Failed to update preferred name.")
-        self.discord_user_cache[user_id] = UserDict(uid=user_id, name=interaction.user.name, preferred_name=_new_name, descr=_new_description)
+        self.discord_user_cache[user_id] = UserDict(
+            uid=user_id,
+            name=interaction.user.name,
+            preferred_name=new_name,
+            descr=new_desc,
+        )
+        await interaction.response.send_message(
+            f"Your preferred name has been set to **{new_name}** and description to **{new_desc}**.",
+            ephemeral=True,
+        )
 
     @commands.hybrid_command(name='scoreboard')
     async def display_leaderboard(self, ctx: commands.Context):

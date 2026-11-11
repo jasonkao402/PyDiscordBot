@@ -28,12 +28,12 @@ summary_memory_range = config_toml["llm_model"].get("summary_memory_range", 14)
 retrieval_memory_range = config_toml["llm_model"].get("retrieval_memory_range", 3)
 round_robin_quota = config_toml["llm_model"].get("round_robin_quota", 50)
 extra_body = {
-    # "provider_llm": {
-    #     "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
-    #     "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
-    #     "sort": "throughput",
-    # },
-    "reasoning_effort": "low",
+    "provider_llm": {
+        "order": ["coreweave/fp8", "relace", "digitalocean", "deepinfra/fp8"],
+        "ignore": ["fireworks", "streamlake", "phala", "venice", "moonshotai/int4", "novita", "parasail/int4"],
+        "sort": "throughput",
+    },
+    "reasoning_effort": "medium",
     # "reasoning": {"enabled": True},
 }
 
@@ -176,7 +176,15 @@ class LLMAPI:
                 _timestamp,
                 f"API Error: {api_error}"
             )
-
+            
+        getattr(response, "choices", None)  # Ensure choices attribute exists
+        if not getattr(response, "choices", None):
+            print(f"API response has no choices: {response}")
+            return self._debug_response(
+                _timestamp,
+                f"API response has no choices: {response}"
+            )
+            
         response_text = str(response.choices[0].message.content)
         thinking_content = str(
             getattr(response.choices[0].message, "reasoning", None) or

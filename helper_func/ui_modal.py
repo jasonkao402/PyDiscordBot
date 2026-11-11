@@ -158,3 +158,46 @@ class TestSelect(Modal, title="Test Select Modal"):
     async def on_error(self, interaction: Interaction, error: Exception):
         print(f"Error in TestSelect modal: {error}")
         await interaction.response.send_message(f"An error occurred: {error}")
+
+class SetNameModal(Modal):
+    def __init__(self, callback, current_name: str = "", current_desc: str = ""):
+        super().__init__(title="Set Preferred Name")
+        self.callback = callback
+
+        self._name = Label(
+            text="Preferred Name",
+            description="Leave empty to reset to your Discord display name.",
+            component=TextInput(
+                default=current_name,
+                placeholder="How should I call you?",
+                max_length=32,
+                required=False,
+            ),
+        )
+        self._desc = Label(
+            text="Description",
+            description="Leave empty to clear.",
+            component=TextInput(
+                default=current_desc,
+                placeholder="Tell me something about yourself",
+                style=TextStyle.paragraph,
+                max_length=500,
+                required=False,
+            ),
+        )
+        self.add_item(self._name)
+        self.add_item(self._desc)
+
+    async def on_submit(self, interaction: Interaction):
+        assert isinstance(self._name.component, TextInput)
+        assert isinstance(self._desc.component, TextInput)
+
+        name = self._name.component.value.strip()
+        description = self._desc.component.value.strip()
+        await self.callback(interaction, name, description)
+
+    async def on_error(self, interaction: Interaction, error: Exception):
+        if interaction.response.is_done():
+            await interaction.followup.send(f"An error occurred.\n{error}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"An error occurred.\n{error}", ephemeral=True)
